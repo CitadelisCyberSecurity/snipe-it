@@ -7,11 +7,13 @@ use App\Presenters\Presentable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class AccessReviewCampaign extends SnipeModel
 {
     use HasFactory;
     use Presentable;
+    use SoftDeletes;
 
     protected $presenter = AccessReviewCampaignPresenter::class;
 
@@ -31,6 +33,7 @@ class AccessReviewCampaign extends SnipeModel
     ];
 
     protected $casts = [
+        'deleted_at' => 'datetime',
         'launched_at' => 'datetime',
         'closed_at' => 'datetime',
         'created_by' => 'integer',
