@@ -144,7 +144,7 @@ class AdminCampaignCrudTest extends TestCase
             ->delete(route('access-review.campaigns.destroy', $campaign))
             ->assertRedirect(route('access-review.campaigns.index'));
 
-        $this->assertDatabaseMissing('access_review_campaigns', ['id' => $campaign->id]);
+        $this->assertSoftDeleted('access_review_campaigns', ['id' => $campaign->id]);
     }
 
     public function test_delete_is_blocked_when_campaign_is_not_draft(): void

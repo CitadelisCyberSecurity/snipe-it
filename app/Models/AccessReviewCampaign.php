@@ -23,6 +23,10 @@ class AccessReviewCampaign extends SnipeModel
 
     protected $table = 'access_review_campaigns';
 
+    public $rules = [
+        'name' => 'required|string|max:191',
+    ];
+
     protected $fillable = [
         'name',
         'description',

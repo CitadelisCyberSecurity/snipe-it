@@ -8,7 +8,13 @@
 
 @section('inputFields')
 
-    @include ('partials.forms.edit.name', ['translated_name' => trans('admin/access-review/general.name')])
+    <div class="form-group {{ $errors->has('name') ? ' has-error' : '' }}">
+        <label for="name" class="col-md-3 control-label">{{ trans('admin/access-review/general.name') }}</label>
+        <div class="col-md-8 col-sm-12">
+            <input class="form-control" style="width:100%;" type="text" name="name" aria-label="name" id="name" value="{{ old('name', $item->name) }}" required maxlength="191" />
+            {!! $errors->first('name', '<span class="alert-msg" aria-hidden="true"><i class="fas fa-times" aria-hidden="true"></i> :message</span>') !!}
+        </div>
+    </div>
 
     <div class="form-group {{ $errors->has('description') ? 'has-error' : '' }}">
         <label for="description" class="col-md-3 control-label">
