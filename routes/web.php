@@ -119,6 +119,15 @@ Route::group(['middleware' => 'auth'], function () {
             ->name('campaigns.close');
         Route::resource('campaigns', App\Http\Controllers\AccessReview\CampaignsController::class)
             ->except(['show']);
+
+        Route::prefix('my-reviews')->name('my-reviews.')->group(function () {
+            Route::get('/', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'index'])->name('index');
+            Route::get('{campaign}', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'show'])->name('show');
+            Route::post('{campaign}/complete', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'complete'])->name('complete');
+        });
+
+        Route::patch('items/{item}', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'saveItem'])
+            ->name('items.save');
     });
 });
 
