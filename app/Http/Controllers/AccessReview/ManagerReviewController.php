@@ -9,6 +9,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class ManagerReviewController extends Controller
@@ -95,21 +96,28 @@ class ManagerReviewController extends Controller
             abort(403);
         }
 
-        $hasUnreviewed = AccessReviewItem::where('campaign_id', $campaign->id)
-            ->where('manager_id', auth()->id())
-            ->whereNull('manager_status')
-            ->exists();
+        $hasUnreviewed = false;
+
+        DB::transaction(function () use ($campaign, &$hasUnreviewed) {
+            $hasUnreviewed = AccessReviewItem::where('campaign_id', $campaign->id)
+                ->where('manager_id', auth()->id())
+                ->whereNull('manager_status')
+                ->lockForUpdate()
+                ->exists();
+
+            if (! $hasUnreviewed) {
+                AccessReviewItem::where('campaign_id', $campaign->id)
+                    ->where('manager_id', auth()->id())
+                    ->whereNull('manager_completed_at')
+                    ->update(['manager_completed_at' => now()]);
+            }
+        });
 
         if ($hasUnreviewed) {
             return redirect()
                 ->back()
                 ->with('error', trans('admin/access-review/general.cannot_complete_unreviewed'));
         }
-
-        AccessReviewItem::where('campaign_id', $campaign->id)
-            ->where('manager_id', auth()->id())
-            ->whereNull('manager_completed_at')
-            ->update(['manager_completed_at' => now()]);
 
         return redirect()
             ->route('access-review.my-reviews.index')
