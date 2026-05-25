@@ -57,7 +57,7 @@
                                     @if(! $isComplete)
                                         <a href="{{ route('access-review.my-reviews.show', $campaign) }}"
                                            class="btn btn-sm btn-primary">
-                                            Review
+                                            {{ trans('admin/access-review/general.review') }}
                                         </a>
                                     @endif
                                 </td>

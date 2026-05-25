@@ -34,6 +34,7 @@ use App\Http\Controllers\UploadedFilesController;
 use App\Http\Controllers\ViewAssetsController;
 use App\Livewire\Importer;
 use App\Mail\CheckoutComponentMail;
+use App\Models\AccessReviewCampaign;
 use App\Models\ReportTemplate;
 use Illuminate\Support\Facades\Route;
 use Tabuna\Breadcrumbs\Trail;
@@ -121,8 +122,16 @@ Route::group(['middleware' => 'auth'], function () {
             ->except(['show']);
 
         Route::prefix('my-reviews')->name('my-reviews.')->group(function () {
-            Route::get('/', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'index'])->name('index');
-            Route::get('{campaign}', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'show'])->name('show');
+            Route::get('/', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'index'])
+                ->name('index')
+                ->breadcrumbs(fn (Trail $trail) => $trail
+                    ->parent('home')
+                    ->push(trans('admin/access-review/general.my_reviews'), route('access-review.my-reviews.index')));
+            Route::get('{campaign}', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'show'])
+                ->name('show')
+                ->breadcrumbs(fn (Trail $trail, AccessReviewCampaign $campaign) => $trail
+                    ->parent('access-review.my-reviews.index')
+                    ->push($campaign->name));
             Route::post('{campaign}/complete', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'complete'])->name('complete');
         });
 

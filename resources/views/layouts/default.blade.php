@@ -1909,6 +1909,13 @@
                                     <span>{{ trans('admin/access-review/general.title') }}</span>
                                 </a>
                             </li>
+                        @else
+                            <li{!! (request()->is('access-review/my-reviews*') ? ' class="active"' : '') !!}>
+                                <a href="{{ route('access-review.my-reviews.index') }}">
+                                    <i class="fa-solid fa-clipboard-check fa-fw" aria-hidden="true"></i>
+                                    <span>{{ trans('admin/access-review/general.my_reviews') }}</span>
+                                </a>
+                            </li>
                         @endcan
 
                         @can('viewRequestable', \App\Models\Asset::class)

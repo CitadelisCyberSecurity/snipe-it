@@ -57,4 +57,5 @@ return [
     'cannot_complete_unreviewed' => 'All items must have a decision before submitting.',
     'review_status_complete'   => 'Submitted',
     'review_status_in_progress' => 'In Progress',
+    'review' => 'Review',
 ];
