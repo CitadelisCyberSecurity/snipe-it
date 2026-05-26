@@ -125,18 +125,18 @@
                                             };
                                         @endphp
                                         <tr id="item-row-{{ $item->id }}">
-                                            <td>{{ $item->user ? trim($item->user->first_name.' '.$item->user->last_name) : '&mdash;' }}</td>
-                                            <td>{{ $item->manager ? trim($item->manager->first_name.' '.$item->manager->last_name) : '&mdash;' }}</td>
+                                            <td>{{ $item->user ? trim($item->user->first_name.' '.$item->user->last_name) : '—' }}</td>
+                                            <td>{{ $item->manager ? trim($item->manager->first_name.' '.$item->manager->last_name) : '—' }}</td>
                                             <td>{{ $item->license_name_snapshot }}</td>
                                             <td>
                                                 {{ $item->cost_per_seat_snapshot !== null
                                                     ? '$'.number_format($item->cost_per_seat_snapshot, 2)
-                                                    : '&mdash;' }}
+                                                    : '—' }}
                                             </td>
                                             <td>
                                                 <span class="label label-{{ $decisionClass }}">{{ $decisionLabel }}</span>
                                             </td>
-                                            <td>{{ $item->manager_comment ?: '&mdash;' }}</td>
+                                            <td>{{ $item->manager_comment ?: '—' }}</td>
                                             <td>
                                                 @if($item->isExecuted())
                                                     <i class="fa fa-check text-success"
