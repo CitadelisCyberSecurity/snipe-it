@@ -133,10 +133,8 @@ Route::group(['middleware' => 'auth'], function () {
                     ->parent('access-review.my-reviews.index')
                     ->push($campaign->name));
             Route::post('{campaign}/complete', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'complete'])->name('complete');
+            Route::patch('{campaign}/items/{item}', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'saveItem'])->name('items.save');
         });
-
-        Route::patch('items/{item}', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'saveItem'])
-            ->name('items.save');
     });
 });
 

@@ -23,7 +23,7 @@
                     <tbody>
                         @foreach($campaigns as $campaign)
                             @php
-                                $isComplete = $campaign->my_completed_count === $campaign->my_items_count;
+                                $isComplete = $campaign->my_completed_count == $campaign->my_items_count;
                                 $pct = $campaign->my_items_count > 0
                                     ? round($campaign->my_reviewed_count / $campaign->my_items_count * 100)
                                     : 0;

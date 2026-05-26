@@ -14,7 +14,7 @@ class CampaignsController extends Controller
     {
         $this->authorize('admin');
 
-        $allowed_columns = ['id', 'name', 'status', 'launched_at', 'closed_at', 'created_at'];
+        $allowed_columns = ['id', 'name', 'status', 'status_label', 'launched_at', 'closed_at', 'created_at'];
 
         $campaigns = AccessReviewCampaign::with('creator')->withCount('items');
 
@@ -22,19 +22,26 @@ class CampaignsController extends Controller
             $campaigns->where('name', 'LIKE', '%'.$request->input('search').'%');
         }
 
-        if ($request->filled('status')) {
+        $validStatuses = [
+            AccessReviewCampaign::STATUS_DRAFT,
+            AccessReviewCampaign::STATUS_ACTIVE,
+            AccessReviewCampaign::STATUS_CLOSED,
+        ];
+
+        if ($request->filled('status') && in_array($request->input('status'), $validStatuses, true)) {
             $campaigns->where('status', $request->input('status'));
         }
 
-        $offset = ($request->input('offset') > $campaigns->count()) ? $campaigns->count() : app('api_offset_value');
+        $total = $campaigns->count();
+        $offset = ($request->input('offset') > $total) ? $total : app('api_offset_value');
         $limit = app('api_limit_value');
 
         $order = $request->input('order') === 'asc' ? 'asc' : 'desc';
         $sort = in_array($request->input('sort'), $allowed_columns) ? $request->input('sort') : 'created_at';
+        $sortColumn = $sort === 'status_label' ? 'status' : $sort;
 
-        $campaigns->orderBy($sort, $order);
+        $campaigns->orderBy($sortColumn, $order);
 
-        $total = $campaigns->count();
         $campaigns = $campaigns->skip($offset)->take($limit)->get();
 
         return (new AccessReviewCampaignsTransformer)->transformCampaigns($campaigns, $total);

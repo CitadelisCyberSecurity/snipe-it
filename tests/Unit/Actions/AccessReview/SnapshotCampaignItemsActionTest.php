@@ -71,7 +71,8 @@ class SnapshotCampaignItemsActionTest extends TestCase
 
         $count = SnapshotCampaignItemsAction::run($campaign);
 
-        $this->assertDatabaseCount('access_review_items', $count);
+        $this->assertSame(0, $count);
+        $this->assertDatabaseCount('access_review_items', 0);
     }
 
     public function test_it_freezes_license_name_at_snapshot_time(): void

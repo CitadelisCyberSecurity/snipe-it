@@ -43,8 +43,7 @@
             </div>
 
             {{-- Review table --}}
-            <table class="table table-striped" id="review-table"
-                   data-save-url="{{ url('access-review/items') }}">
+            <table class="table table-striped" id="review-table">
                 <thead>
                     <tr>
                         <th>{{ trans('admin/access-review/general.user') }}</th>
@@ -58,7 +57,8 @@
                 <tbody>
                     @foreach($items as $item)
                         <tr data-item-id="{{ $item->id }}"
-                            data-reviewed="{{ $item->manager_status ? '1' : '0' }}">
+                            data-reviewed="{{ $item->manager_status ? '1' : '0' }}"
+                            data-save-url="{{ route('access-review.my-reviews.items.save', [$campaign, $item]) }}">
                             <td>{{ $item->user->first_name }} {{ $item->user->last_name }}</td>
                             <td>{{ $item->license_name_snapshot }}</td>
                             <td>
@@ -131,7 +131,6 @@
 @section('moar_scripts')
 <script>
 $(function () {
-    var saveUrl   = $('#review-table').data('save-url');
     var csrfToken = '{{ csrf_token() }}';
     var timers    = {};
 
@@ -178,7 +177,7 @@ $(function () {
         $ind.html('<i class="fa fa-spinner fa-spin"></i>');
 
         $.ajax({
-            url:         saveUrl + '/' + itemId,
+            url:         $row.data('save-url'),
             method:      'PATCH',
             data:        { _token: csrfToken, manager_status: status, manager_comment: comment || '' },
             success:     function () { $ind.html('<i class="fa fa-check text-success"></i>'); },

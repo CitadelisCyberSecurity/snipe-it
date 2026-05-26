@@ -56,13 +56,13 @@ class ManagerReviewController extends Controller
         return view('access-review.my-reviews.show', compact('campaign', 'items'));
     }
 
-    public function saveItem(Request $request, AccessReviewItem $item): JsonResponse
+    public function saveItem(Request $request, AccessReviewCampaign $campaign, AccessReviewItem $item): JsonResponse
     {
-        if ($item->manager_id !== auth()->id()) {
+        if ($item->manager_id !== auth()->id() || $item->campaign_id !== $campaign->id) {
             abort(403);
         }
 
-        if (! $item->campaign->isActive()) {
+        if (! $campaign->isActive()) {
             return response()->json(['error' => trans('admin/access-review/general.campaign_not_active')], 422);
         }
 

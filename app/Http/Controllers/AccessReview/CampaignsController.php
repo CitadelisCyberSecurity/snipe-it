@@ -42,7 +42,7 @@ class CampaignsController extends Controller
 
         $data = $request->validate([
             'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string|max:65535',
         ]);
 
         $campaign = new AccessReviewCampaign($data);
@@ -80,7 +80,7 @@ class CampaignsController extends Controller
 
         $data = $request->validate([
             'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string|max:65535',
         ]);
 
         $campaign->update($data);
@@ -100,7 +100,10 @@ class CampaignsController extends Controller
                 ->with('error', trans('admin/access-review/general.not_deletable_unless_draft'));
         }
 
-        $campaign->delete();
+        DB::transaction(function () use ($campaign) {
+            $campaign->items()->delete();
+            $campaign->delete();
+        });
 
         return redirect()
             ->route('access-review.campaigns.index')
