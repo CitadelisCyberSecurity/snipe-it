@@ -58,4 +58,26 @@ return [
     'review_status_complete'   => 'Submitted',
     'review_status_in_progress' => 'In Progress',
     'review' => 'Review',
+
+    // Admin results page
+    'results'                   => 'Results',
+    'view_results'              => 'View Results',
+    'manager'                   => 'Manager',
+    'all'                       => 'All',
+    'pending'                   => 'Pending',
+    'manager_progress'          => 'Manager Progress',
+    'no_decision_yet'           => 'No decision yet',
+    'no_items'                  => 'No items.',
+
+    // Execute actions
+    'execute'                   => 'Execute',
+    'execute_delete_confirm'    => 'This will permanently check in this license seat. This cannot be undone. Continue?',
+    'execute_modify_confirm'    => 'Mark this item as manually handled?',
+    'execute_keep_confirm'      => 'Mark this item as kept (no action)?',
+    'item_already_executed'     => 'This item has already been executed.',
+    'item_no_decision'          => 'This item has no manager decision yet.',
+    'campaign_must_be_launched' => 'Campaign must be launched before actions can be executed.',
+    'executed'                  => 'Executed',
+    'execute_success'           => 'Action executed.',
+    'execute_error'             => 'Failed to execute action.',
 ];

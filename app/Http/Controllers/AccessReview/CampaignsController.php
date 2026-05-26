@@ -3,9 +3,14 @@
 namespace App\Http\Controllers\AccessReview;
 
 use App\Actions\AccessReview\SnapshotCampaignItemsAction;
+use App\Events\CheckoutableCheckedIn;
 use App\Http\Controllers\Controller;
 use App\Models\AccessReviewCampaign;
+use App\Models\AccessReviewItem;
+use App\Models\Asset;
+use App\Models\User;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -180,5 +185,97 @@ class CampaignsController extends Controller
         return redirect()
             ->route('access-review.campaigns.index')
             ->with('success', trans('admin/access-review/general.closed'));
+    }
+
+    public function results(AccessReviewCampaign $campaign): View
+    {
+        $this->authorize('admin');
+
+        $items = $campaign->items()
+            ->with(['user', 'manager', 'license', 'executedBy'])
+            ->orderBy('manager_id')
+            ->orderBy('manager_status')
+            ->get();
+
+        $summary = [
+            'total'    => $items->count(),
+            'keep'     => $items->where('manager_status', AccessReviewItem::STATUS_KEEP)->count(),
+            'modify'   => $items->where('manager_status', AccessReviewItem::STATUS_MODIFY)->count(),
+            'delete'   => $items->where('manager_status', AccessReviewItem::STATUS_DELETE)->count(),
+            'pending'  => $items->whereNull('manager_status')->count(),
+            'executed' => $items->filter(fn ($i) => $i->isExecuted())->count(),
+        ];
+
+        $managers = $items->groupBy('manager_id')->map(function ($managerItems) {
+            $first = $managerItems->first();
+            return [
+                'name'  => $first->manager
+                    ? trim($first->manager->first_name.' '.$first->manager->last_name)
+                    : '—',
+                'total' => $managerItems->count(),
+                'done'  => $managerItems->every(fn ($i) => $i->manager_completed_at !== null),
+            ];
+        })->values();
+
+        return view('access-review.campaigns.results', compact('campaign', 'items', 'summary', 'managers'));
+    }
+
+    public function executeItem(Request $request, AccessReviewCampaign $campaign, AccessReviewItem $item): JsonResponse
+    {
+        $this->authorize('admin');
+
+        if ($campaign->isDraft()) {
+            return response()->json(['error' => trans('admin/access-review/general.campaign_must_be_launched')], 422);
+        }
+
+        if ($item->campaign_id !== $campaign->id) {
+            abort(404);
+        }
+
+        if ($item->isExecuted()) {
+            return response()->json(['error' => trans('admin/access-review/general.item_already_executed')], 422);
+        }
+
+        if ($item->manager_status === null) {
+            return response()->json(['error' => trans('admin/access-review/general.item_no_decision')], 422);
+        }
+
+        DB::transaction(function () use ($item, $campaign) {
+            $lockedItem = AccessReviewItem::lockForUpdate()->find($item->id);
+
+            if ($lockedItem->isExecuted()) {
+                return;
+            }
+
+            if ($lockedItem->manager_status === AccessReviewItem::STATUS_DELETE) {
+                $licenseSeat = $lockedItem->licenseSeat;
+
+                if ($licenseSeat && ($licenseSeat->assigned_to || $licenseSeat->asset_id)) {
+                    $checkedOutTo = $licenseSeat->assigned_to
+                        ? User::withTrashed()->find($licenseSeat->assigned_to)
+                        : Asset::find($licenseSeat->asset_id);
+
+                    $notes = 'Checked in via Access Review: '.$campaign->name;
+
+                    $licenseSeat->assigned_to = null;
+                    $licenseSeat->asset_id = null;
+                    $licenseSeat->notes = $notes;
+
+                    if ($licenseSeat->license && ! $licenseSeat->license->reassignable) {
+                        $licenseSeat->unreassignable_seat = true;
+                    }
+
+                    $licenseSeat->save();
+
+                    event(new CheckoutableCheckedIn($licenseSeat, $checkedOutTo, auth()->user(), $notes));
+                }
+            }
+
+            $lockedItem->admin_executed_at = now();
+            $lockedItem->admin_executed_by = auth()->id();
+            $lockedItem->save();
+        });
+
+        return response()->json(['success' => true]);
     }
 }

@@ -85,8 +85,13 @@ class AccessReviewCampaignsTransformer
                 .'<i class="fa-solid fa-trash fa-fw" aria-hidden="true"></i>'
                 .'<span class="sr-only">'.e(trans('general.delete')).'</span></button></form>';
         } elseif ($campaign->isActive()) {
+            $resultsUrl = route('access-review.campaigns.results', $campaign);
             $closeUrl = route('access-review.campaigns.close', $campaign);
             $closeConfirm = e(json_encode(trans('admin/access-review/general.close_confirm')));
+
+            $html .= '<a href="'.$resultsUrl.'" class="btn btn-sm btn-info hidden-print" data-tooltip="true" title="'.e(trans('admin/access-review/general.view_results')).'">'
+                .'<i class="fa-solid fa-chart-bar fa-fw" aria-hidden="true"></i>'
+                .'<span class="sr-only">'.e(trans('admin/access-review/general.view_results')).'</span></a>&nbsp;';
 
             $html .= '<form method="POST" action="'.$closeUrl.'" style="display:inline">'
                 .'<input type="hidden" name="_token" value="'.$csrf.'">'
@@ -94,6 +99,12 @@ class AccessReviewCampaignsTransformer
                 .'onclick="return confirm('.$closeConfirm.')">'
                 .'<i class="fa-solid fa-lock fa-fw" aria-hidden="true"></i>'
                 .'<span class="sr-only">'.e(trans('admin/access-review/general.close')).'</span></button></form>';
+        } elseif ($campaign->isClosed()) {
+            $resultsUrl = route('access-review.campaigns.results', $campaign);
+
+            $html .= '<a href="'.$resultsUrl.'" class="btn btn-sm btn-info hidden-print" data-tooltip="true" title="'.e(trans('admin/access-review/general.view_results')).'">'
+                .'<i class="fa-solid fa-chart-bar fa-fw" aria-hidden="true"></i>'
+                .'<span class="sr-only">'.e(trans('admin/access-review/general.view_results')).'</span></a>';
         }
 
         $html .= '</nobr>';

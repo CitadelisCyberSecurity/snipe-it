@@ -118,6 +118,14 @@ Route::group(['middleware' => 'auth'], function () {
             ->name('campaigns.launch');
         Route::post('campaigns/{campaign}/close', [App\Http\Controllers\AccessReview\CampaignsController::class, 'close'])
             ->name('campaigns.close');
+        Route::get('campaigns/{campaign}/results', [App\Http\Controllers\AccessReview\CampaignsController::class, 'results'])
+            ->name('campaigns.results')
+            ->breadcrumbs(fn (Trail $trail, AccessReviewCampaign $campaign) => $trail
+                ->parent('home')
+                ->push(trans('admin/access-review/general.campaigns'), route('access-review.campaigns.index'))
+                ->push($campaign->name));
+        Route::post('campaigns/{campaign}/items/{item}/execute', [App\Http\Controllers\AccessReview\CampaignsController::class, 'executeItem'])
+            ->name('campaigns.items.execute');
         Route::resource('campaigns', App\Http\Controllers\AccessReview\CampaignsController::class)
             ->except(['show']);
 
