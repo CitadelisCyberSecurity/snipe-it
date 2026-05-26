@@ -96,7 +96,7 @@ class ManagerReviewTest extends TestCase
         $item     = AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
 
         $this->actingAs($manager)
-            ->patch(route('access-review.items.save', $item), [
+            ->patch(route('access-review.my-reviews.items.save', [$campaign, $item]), [
                 'manager_status'  => AccessReviewItem::STATUS_KEEP,
                 'manager_comment' => '',
             ])
@@ -116,7 +116,7 @@ class ManagerReviewTest extends TestCase
         $item     = AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
 
         $this->actingAs($manager)
-            ->patch(route('access-review.items.save', $item), [
+            ->patch(route('access-review.my-reviews.items.save', [$campaign, $item]), [
                 'manager_status'  => AccessReviewItem::STATUS_DELETE,
                 'manager_comment' => 'No longer needed.',
             ])
@@ -137,7 +137,7 @@ class ManagerReviewTest extends TestCase
         $item         = AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_id' => $otherManager->id]);
 
         $this->actingAs($manager)
-            ->patch(route('access-review.items.save', $item), [
+            ->patch(route('access-review.my-reviews.items.save', [$campaign, $item]), [
                 'manager_status' => AccessReviewItem::STATUS_KEEP,
             ])
             ->assertForbidden();
@@ -150,7 +150,7 @@ class ManagerReviewTest extends TestCase
         $item     = AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
 
         $this->actingAs($manager)
-            ->patch(route('access-review.items.save', $item), [
+            ->patch(route('access-review.my-reviews.items.save', [$campaign, $item]), [
                 'manager_status' => 'approve',
             ])
             ->assertSessionHasErrors('manager_status');
@@ -163,7 +163,7 @@ class ManagerReviewTest extends TestCase
         $item     = AccessReviewItem::factory()->completed()->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
 
         $this->actingAs($manager)
-            ->patch(route('access-review.items.save', $item), [
+            ->patch(route('access-review.my-reviews.items.save', [$campaign, $item]), [
                 'manager_status' => AccessReviewItem::STATUS_DELETE,
             ])
             ->assertStatus(422);
@@ -176,7 +176,7 @@ class ManagerReviewTest extends TestCase
         $item     = AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
 
         $this->actingAs($manager)
-            ->patch(route('access-review.items.save', $item), [
+            ->patch(route('access-review.my-reviews.items.save', [$campaign, $item]), [
                 'manager_status' => AccessReviewItem::STATUS_KEEP,
             ])
             ->assertStatus(422);
