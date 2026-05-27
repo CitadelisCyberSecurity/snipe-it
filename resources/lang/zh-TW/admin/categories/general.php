@@ -19,6 +19,7 @@ return [
     'required_acceptance' => '使用者會收到包含確認接收連結的郵件',
     'global_signature_required_notice' => 'User signatures are currently required globally via the admin settings, so signatures will still be required regardless of this category setting if the item is checked out to a user (versus a location, etc).',
     'required_eula' => '使用者將收到EULA（最終使用者許可協議）的郵件',
+    'required_signature' => 'This user will be required to sign to confirm acceptance of this item.',
     'no_default_eula' => '沒有找到預設EULA（最終使用者許可協議）。請在設定中增加一個。',
     'update' => '更新類別',
     'use_default_eula' => '用<a href="#" data-toggle="modal" data-target="#eulaModal">預設EULA（最終使用者許可協議）</a> 進行替換。',

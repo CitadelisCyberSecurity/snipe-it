@@ -130,8 +130,13 @@
 
                   <div class="col-md-6">
                         @if ($user->ldap_import!='1' || str_contains(Route::currentRouteName(), 'clone') )
-                          <input type="password" name="password" class="form-control{{ (!Gate::allows('canEditAuthFields', $user)) || ((!Gate::allows('editableOnDemo') && ($user->id))) ? ' form-control--disabled' : '' }}" id="password" value="" maxlength="500" autocomplete="off" onfocus="this.removeAttribute('readonly');" readonly {{  ((Helper::checkIfRequired($user, 'password')) && (!$user->id)) ? ' required' : '' }}{!! (!Gate::allows('canEditAuthFields', $user)) || ((!Gate::allows('editableOnDemo')) && ($user->id)) ? ' style="cursor: not-allowed" disabled ' : '' !!}>
-                              <span id="generated-password"></span>
+                          <div class="input-group">
+                            <input type="password" name="password" class="form-control{{ (!Gate::allows('canEditAuthFields', $user)) || ((!Gate::allows('editableOnDemo') && ($user->id))) ? ' form-control--disabled' : '' }}" id="password" value="" maxlength="500" autocomplete="off" onfocus="this.removeAttribute('readonly');" readonly {{  ((Helper::checkIfRequired($user, 'password')) && (!$user->id)) ? ' required' : '' }}{!! (!Gate::allows('canEditAuthFields', $user)) || ((!Gate::allows('editableOnDemo')) && ($user->id)) ? ' style="cursor: not-allowed" disabled ' : '' !!}>
+                            <span class="input-group-addon">
+                              <i data-toggle="#password" class="fa fa-fw fa-eye toggle-password" aria-hidden="true"></i>
+                              <span class="sr-only">{{ trans('general.toggle_password_visibility') }}</span>
+                            </span>
+                          </div>
                               {!! $errors->first('password', '<span class="alert-msg" aria-hidden="true">:message</span>') !!}
                         @else
                               <p class="form-control-static">
@@ -172,7 +177,13 @@
                         {{ trans('admin/users/table.password_confirm') }}
                       </label>
                       <div class="col-md-6">
-                        <input type="password" name="password_confirmation" id="password_confirm" class="form-control" value="" maxlength="500" autocomplete="off" aria-label="password_confirmation" {{  (!$user->id) ? ' required' : '' }} onfocus="this.removeAttribute('readonly');" readonly {!! (!Gate::allows('canEditAuthFields', $user)) || ((!Gate::allows('editableOnDemo')) && ($user->id)) ? ' style="cursor: not-allowed" disabled ' : '' !!}>
+                        <div class="input-group">
+                          <input type="password" name="password_confirmation" id="password_confirm" class="form-control" value="" maxlength="500" autocomplete="off" aria-label="password_confirmation" {{  (!$user->id) ? ' required' : '' }} onfocus="this.removeAttribute('readonly');" readonly {!! (!Gate::allows('canEditAuthFields', $user)) || ((!Gate::allows('editableOnDemo')) && ($user->id)) ? ' style="cursor: not-allowed" disabled ' : '' !!}>
+                          <span class="input-group-addon">
+                            <i data-toggle="#password_confirm" class="fa fa-fw fa-eye toggle-password" aria-hidden="true"></i>
+                            <span class="sr-only">{{ trans('general.toggle_password_visibility') }}</span>
+                          </span>
+                        </div>
 
                       @cannot('canEditAuthFields', $user)
                           <p class="help-block">
@@ -334,14 +345,22 @@
 
                               <!-- Company -->
                               @if ((Gate::allows('canEditAuthFields', $user)) && (\App\Models\Company::canManageUsersCompanies()))
-                                  @include ('partials.forms.edit.company-select', ['translated_name' => trans('general.company'), 'fieldname' => 'company_id'])
+                                  @include ('partials.forms.edit.company-select', [
+                                      'translated_name' => trans('general.company'),
+                                      'fieldname' => 'company_ids',
+                                      'multiple' => 'true',
+                                      'selected' => old('company_ids', $user->companies->isNotEmpty() ? $user->companies->pluck('id')->toArray() : ($user->company_id ? [$user->company_id] : [])),
+                                  ])
                               @else
-                                  @if ($user->company)
+                                  @if ($user->companies->isNotEmpty())
                                       <div class="form-group">
                                           <label class="col-md-3 control-label" for="locale">{{ trans('general.company') }}</label>
                                           <div class="col-md-6">
                                               <p class="form-control-static">
-                                                  {{ $user->company ? $user->company->name : '' }}
+                                                  @foreach ($user->companies as $company)
+                                                      <span class="label label-light">{!! $company->present()->formattedNameLink !!}</span>
+                                                  @endforeach
+
                                               </p>
                                           </div>
                                       </div>
@@ -726,7 +745,6 @@ $(document).ready(function() {
     $('#genPassword').pGenerator({
         'bind': 'click',
         'passwordElement': '#password',
-        'displayElement': '#generated-password',
         'passwordLength': {{ ($settings->pwd_secure_min + 9) }},
         'uppercase': true,
         'lowercase': true,

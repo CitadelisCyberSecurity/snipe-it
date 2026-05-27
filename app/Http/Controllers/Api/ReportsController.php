@@ -36,18 +36,18 @@ class ReportsController extends Controller
         // then they shouldn't be able to see the activity log for that item or target,
         // but if they have the general activity view permission,
         // then they can see all activity logs regardless of the item or target.
-        if ((! Gate::allows('activity.view')) && (($request->filled('target_type')) && ($request->filled('target_id'))) || (($request->filled('item_type')) && ($request->filled('item_id')))) {
+        if ((! Gate::allows('activity.view')) && (($request->filled('target_type') && $request->filled('target_id')) || ($request->filled('item_type') && $request->filled('item_id')))) {
 
             if (($request->filled('target_type')) && ($request->filled('target_id'))) {
-                $target = Helper::normalizeFullModelName(request()->input('target_type'));
-                $target::find(request()->input('target_id'))?->withTrashed();
-                $this->authorize('view', $target);
+                $targetClass = Helper::normalizeFullModelName(request()->input('target_type'));
+                $target = $targetClass::withTrashed()->find(request()->input('target_id'));
+                $this->authorize('view', $target ?? $targetClass);
             }
 
             if (($request->filled('item_type')) && ($request->filled('item_id'))) {
-                $item = Helper::normalizeFullModelName(request()->input('item_type'));
-                $item::find(request()->input('item_id'))?->withTrashed();
-                $this->authorize('view', $item);
+                $itemClass = Helper::normalizeFullModelName(request()->input('item_type'));
+                $item = $itemClass::withTrashed()->find(request()->input('item_id'));
+                $this->authorize('view', $item ?? $itemClass);
             }
 
         } else {

@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Laravel\Passport\Client;
 use Laravel\Passport\ClientRepository;
+use Laravel\Passport\Token;
 use Livewire\Component;
 
 class OauthClients extends Component
@@ -50,11 +51,11 @@ class OauthClients extends Component
                 ->get();
 
             if ($clients->isNotEmpty()) {
-                $tokenCountsByClientId = DB::table('oauth_access_tokens')
+                $tokenCountsByClientId = Token::query()
                     ->whereIn('client_id', $clients->pluck('id')->all())
-                    ->selectRaw('client_id, COUNT(*) as token_count')
+                    ->get(['client_id'])
                     ->groupBy('client_id')
-                    ->pluck('token_count', 'client_id');
+                    ->map->count();
 
                 $clients->each(function ($client) use ($tokenCountsByClientId): void {
                     $client->setAttribute('associated_token_count', (int) ($tokenCountsByClientId[$client->id] ?? 0));
@@ -64,32 +65,28 @@ class OauthClients extends Component
 
         $authorizedApplications = collect();
         if ($this->showAuthorizedApplications()) {
-            $authorizedTokenSummary = DB::table('oauth_access_tokens as tokens')
-                ->where('tokens.revoked', false)
-                ->selectRaw('tokens.client_id')
-                ->selectRaw('MAX(tokens.scopes) as scopes')
-                ->selectRaw('MAX(tokens.created_at) as created_at')
-                ->selectRaw('MAX(tokens.expires_at) as expires_at')
-                ->groupBy('tokens.client_id');
-
-            $authorizedApplications = DB::table('oauth_clients as clients')
-                ->joinSub($authorizedTokenSummary, 'token_summary', function ($join) {
-                    $join->on('clients.id', '=', 'token_summary.client_id');
-                })
-                ->leftJoin('users as creators', 'clients.user_id', '=', 'creators.id')
-                ->select([
-                    'clients.id as client_id',
-                    'clients.name as client_name',
-                    'clients.user_id as client_owner_id',
-                    'creators.display_name as client_owner_display_name',
-                    'creators.username as client_owner_username',
-                    'creators.deleted_at as client_owner_deleted_at',
-                    'token_summary.scopes',
-                    'token_summary.created_at',
-                    'token_summary.expires_at',
+            $authorizedApplications = Token::query()
+                ->where('revoked', false)
+                ->with([
+                    'client',
+                    'client.user' => fn ($q) => $q->withTrashed(),
                 ])
-                ->orderByDesc('token_summary.created_at')
-                ->get();
+                ->orderByDesc('created_at')
+                ->get()
+                ->unique('client_id')
+                ->filter(fn ($token) => $token->client !== null)
+                ->map(fn ($token) => (object) [
+                    'client_id' => $token->client_id,
+                    'client_name' => $token->client->name,
+                    'client_owner_id' => $token->client->user_id,
+                    'client_owner_display_name' => $token->client->user?->display_name,
+                    'client_owner_username' => $token->client->user?->username,
+                    'client_owner_deleted_at' => $token->client->user?->deleted_at,
+                    'scopes' => $token->scopes,
+                    'created_at' => $token->created_at,
+                    'expires_at' => $token->expires_at,
+                ])
+                ->values();
         }
 
         return view('livewire.oauth-clients', [

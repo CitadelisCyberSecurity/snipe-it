@@ -438,7 +438,7 @@ return [
     'timezone' => 'Vremenska zona',
     'test_mail' => 'Probna e-poruka',
     'profile_edit' => 'Izmeni profil',
-    'profile_edit_help' => 'Allow users to edit their own profiles. (This does not include accessibility settings like light/dark mode, audio feedback, or link colors.)',
+    'profile_edit_help' => 'Dozvolite korisnicima da izmene svoje profile. (Ovo ne uključuje postavke pristupačnosti poput svetlog/tamnog režima, zvučni odgovor, ili boje veza.)',
     'default_avatar' => 'Prilagođeni podrazumevani avatar',
     'default_avatar_help' => 'Ova slika će se prikazivati kao profilna ako korisnik nema svoju sliku profila.',
     'restore_default_avatar' => 'Vrati <a href=":default_avatar" data-toggle="lightbox" data-type="image">originalnu podrazumevanu sličicu</a>',

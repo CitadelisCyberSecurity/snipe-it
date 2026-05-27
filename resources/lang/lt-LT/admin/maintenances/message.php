@@ -18,4 +18,9 @@ return [
     'asset_maintenance_incomplete' => 'Nebaigta',
     'warranty' => 'Garantija',
     'not_warranty' => 'Ne garantinis',
+    'complete' => [
+        'confirm' => 'Ar tikrai norite pažymėti šį aptarnavimą kaip užbaigtą? Šio veiksmo atšaukti nebus galima.',
+        'success' => 'Aptarnavimas pažymėtas kaip užbaigtas.',
+        'error' => 'Bandant pažymėti šį aptarnavimą kaip užbaigtą įvyko klaida. Bandykite dar kartą.',
+    ],
 ];

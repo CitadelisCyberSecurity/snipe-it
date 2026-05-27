@@ -17,6 +17,7 @@ use App\Http\Middleware\PreventBackHistory;
 use App\Http\Middleware\RedirectIfAuthenticated;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetAPIResponseHeaders;
+use App\Http\Middleware\SetPaginationDefaults;
 use App\Http\Middleware\TrimStrings;
 use App\Http\Middleware\TrustProxies;
 use App\Http\Middleware\VerifyCsrfToken;
@@ -84,6 +85,7 @@ class Kernel extends HttpKernel
             'auth:api',
             CheckLocale::class,
             LogAuthedUserHeader::class,
+            SetPaginationDefaults::class,
             SubstituteBindings::class,
         ],
 

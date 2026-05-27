@@ -573,6 +573,27 @@ class SearchableTraitTest extends TestCase
     }
 
     /**
+     * Regression: passing search as an array (?search[]=foo) must not throw
+     * "Array to string conversion" — values should be joined and searched normally.
+     */
+    public function test_array_search_param_does_not_throw()
+    {
+        Asset::factory()->create(['name' => 'ArraySearchMacBook']);
+        Asset::factory()->create(['name' => 'ArraySearchDell']);
+
+        // search[]=ArraySearchMacBook simulates ?search[]=ArraySearchMacBook in the URL
+        $this->actingAsForApi(User::factory()->viewAssets()->create())
+            ->getJson(route('api.assets.index', ['search' => ['ArraySearchMacBook']]))
+            ->assertOk()
+            ->assertJson(fn (AssertableJson $json) => $json->has('rows', 1)->etc());
+
+        // Multiple array values must not throw — exact match count depends on join semantics
+        $this->actingAsForApi(User::factory()->viewAssets()->create())
+            ->getJson(route('api.assets.index', ['search' => ['ArraySearchMacBook', 'ArraySearchDell']]))
+            ->assertOk();
+    }
+
+    /**
      * Test no results when search matches nothing
      */
     public function test_search_no_results()

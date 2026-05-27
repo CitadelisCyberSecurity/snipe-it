@@ -66,7 +66,6 @@ class LicensesTransformer
             'created_at' => Helper::getFormattedDateObject($license->created_at, 'datetime'),
             'updated_at' => Helper::getFormattedDateObject($license->updated_at, 'datetime'),
             'deleted_at' => Helper::getFormattedDateObject($license->deleted_at, 'datetime'),
-            'user_can_checkout' => (bool) ($license->free_seats_count > 0),
             'disabled' => $license->isInactive(),
         ];
 
@@ -76,6 +75,7 @@ class LicensesTransformer
             'clone' => Gate::allows('create', License::class),
             'update' => Gate::allows('update', License::class),
             'delete' => $license->isDeletable(),
+            'user_can_checkout' => (bool) (($license->free_seats_count - License::unReassignableCount($license)) > 0),
             'bulk_selectable' => [
                 'delete' => $license->isDeletable(),
             ],

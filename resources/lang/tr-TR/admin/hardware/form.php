@@ -64,4 +64,6 @@ return [
     'optional_infos' => 'Opsiyonel Bilgi',
     'order_details' => 'Sipariş Bilgileri',
     'calc_eol' => 'EOL tarihini null yapılırsa, satın alma tarihi ve EOL oranına göre otomatik EOL hesaplaması kullanın.',
+    'checkin_licenses' => 'Checkin associated license seats',
+    'checkin_child_assets' => 'Checkin associated assets',
 ];

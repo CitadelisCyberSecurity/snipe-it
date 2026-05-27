@@ -17,7 +17,7 @@ class BulkLicensesController extends Controller
         $errors = [];
         $success_count = 0;
 
-        foreach ($request->ids as $id) {
+        foreach ($request->input('ids', []) as $id) {
             $license = License::find($id);
 
             if (is_null($license)) {

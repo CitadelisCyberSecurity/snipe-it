@@ -803,7 +803,7 @@ class License extends Depreciable
      *
      * @return mixed
      */
-    public function freeSeat()
+    public function freeSeat(bool $lock = false)
     {
         return $this->licenseseats()
             ->whereNull('deleted_at')
@@ -813,6 +813,7 @@ class License extends Depreciable
                     ->whereNull('asset_id');
             })
             ->orderBy('id', 'asc')
+            ->when($lock, fn ($q) => $q->lockForUpdate())
             ->first();
     }
 

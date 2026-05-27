@@ -511,7 +511,7 @@ class AssetsController extends Controller
 
         // Validate required serial based on model setting
         if ($model && $model->require_serial === 1 && empty($serial[1])) {
-            return redirect()->to(Helper::getRedirectOption($request, $asset->id, 'Assets'))
+            return Helper::getRedirectOption($request, $asset->id, 'Assets')
                 ->with('warning', trans('admin/hardware/form.serial_required_post_model_update', [
                     'asset_model' => $model->name,
                 ]));
@@ -567,11 +567,12 @@ class AssetsController extends Controller
      *
      * @since [v3.0]
      */
-    public function getAssetBySerial(Request $request): RedirectResponse
+    public function getAssetBySerial(Request $request, $serial = null): RedirectResponse
     {
+        $serial = $serial ?: $request->input('serial');
         $topsearch = ($request->input('topsearch') == 'true');
 
-        if (! $asset = Asset::where('serial', '=', $request->input('serial'))->first()) {
+        if (! $asset = Asset::where('serial', '=', $serial)->first()) {
             return redirect()->route('hardware.index')->with('error', trans('admin/hardware/message.does_not_exist'));
         }
         $this->authorize('view', $asset);

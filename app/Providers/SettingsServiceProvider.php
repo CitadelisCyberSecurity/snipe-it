@@ -32,43 +32,6 @@ class SettingsServiceProvider extends ServiceProvider
             $view->with('snipeSettings', Setting::getSettings());
         });
 
-        // Make sure the limit is actually set, is an integer and does not exceed system limits
-        app()->singleton('api_limit_value', function () {
-            $limit = config('app.max_results');
-            $int_limit = intval(request('limit'));
-
-            if ((abs($int_limit) > 0) && ($int_limit <= config('app.max_results'))) {
-                $limit = abs($int_limit);
-            }
-
-            return $limit;
-        });
-
-        // Make sure the offset is actually set and is an integer.
-        // If 'page' is passed without 'offset', derive the offset from the page number.
-        app()->singleton('api_offset_value', function () {
-            if (request()->filled('page') && ! request()->filled('offset')) {
-                $page = max(1, intval(request('page')));
-
-                return ($page - 1) * (int) app('api_limit_value');
-            }
-
-            return intval(request('offset'));
-        });
-
-        // Resolve the current page number for inclusion in API list responses.
-        // Supports both page= and legacy offset= parameters.
-        app()->singleton('api_current_page', function () {
-            if (request()->filled('page') && ! request()->filled('offset')) {
-                return max(1, intval(request('page')));
-            }
-
-            $limit = (int) app('api_limit_value');
-            $offset = (int) app('api_offset_value');
-
-            return $limit > 0 ? (int) floor($offset / $limit) + 1 : 1;
-        });
-
         /**
          * Set some common variables so that they're globally available.
          * The paths should always be public (versus private uploads)

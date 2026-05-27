@@ -94,6 +94,12 @@ return [
         'success' => 'Bene assegnato correttamente.|Beni assegnati correttamente.',
     ],
 
+    'multi-checkin' => [
+        'error' => 'Asset was not checked in, please try again|Assets were not checked in, please try again',
+        'success' => 'Asset checked in successfully.|Assets checked in successfully.',
+        'no_assets_selected' => 'Devi selezionare almeno un Bene dall\'elenco',
+    ],
+
     'checkin' => [
         'error' => 'Il Bene non è stato restituito, riprova',
         'success' => 'Bene restituito con successo.',

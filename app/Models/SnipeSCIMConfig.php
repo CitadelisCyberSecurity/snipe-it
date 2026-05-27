@@ -142,10 +142,11 @@ class SnipeSCIMConfig
                     }
                 },
                 (new class('id', null) extends Constant // TODO - this 'id' is in the same namespace for objects OR groups?
-                {protected function doRead(&$object, $attributes = [])
                 {
-                    return (string) $object->id;
-                }
+                    protected function doRead(&$object, $attributes = [])
+                    {
+                        return (string) $object->id;
+                    }
 
                     public function remove($value, &$object, $path = null)
                     {
@@ -385,7 +386,9 @@ class SnipeSCIMConfig
                         {
                             \Log::debug('What type of value is value? '.gettype($value));
                             $manager_id = null;
-                            if (is_scalar($value)) {
+                            if (is_null($value)) {
+                                // nothing to do
+                            } elseif (is_scalar($value)) {
                                 \Log::debug('Weird Microsoft mode - set manager to the $value and move on with life?');
                                 $manager_id = $value;
                             } elseif (array_key_exists('$ref', $value)) {

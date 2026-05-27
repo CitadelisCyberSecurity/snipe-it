@@ -123,7 +123,7 @@ class UsersController extends Controller
         $user->mobile = $request->input('mobile');
         $user->location_id = $request->input('location_id', null);
         $user->department_id = $request->input('department_id', null);
-        $user->company_id = Company::getIdForUser($request->input('company_id', null));
+        $companyIds = array_filter(array_map('intval', (array) ($request->input('company_ids') ?? ($request->filled('company_id') ? [$request->input('company_id')] : []))));
         $user->manager_id = $request->input('manager_id', null);
         $user->notes = $request->input('notes');
         $user->address = $request->input('address', null);
@@ -153,6 +153,7 @@ class UsersController extends Controller
         }
 
         if ($user->save()) {
+            $user->syncCompaniesWithLogging(Company::getIdsForCurrentUser($companyIds));
 
             if (($user->activated == '1') && ($user->email != '') && ($request->input('send_welcome') == '1')) {
 
@@ -164,7 +165,7 @@ class UsersController extends Controller
 
             }
 
-            if (auth()->user()->can('canEditAuthFields', $user) && auth()->user()->can('editableOnDemo')) {
+            if (auth()->user()->isSuperUser() && auth()->user()->can('editableOnDemo')) {
                 $user->groups()->sync($request->input('groups'));
             }
 
@@ -275,7 +276,7 @@ class UsersController extends Controller
         $user->phone = $request->input('phone');
         $user->mobile = $request->input('mobile');
         $user->location_id = $request->input('location_id', null);
-        $user->company_id = Company::getIdForUser($request->input('company_id', null));
+        $companyIds = array_filter(array_map('intval', (array) ($request->input('company_ids') ?? ($request->filled('company_id') ? [$request->input('company_id')] : []))));
         $user->manager_id = $request->input('manager_id', null);
         $user->notes = $request->input('notes');
         $user->department_id = $request->input('department_id', null);
@@ -311,12 +312,14 @@ class UsersController extends Controller
                 $user->password = bcrypt($request->input('password'));
             }
 
-            $user->permissions = json_encode(PreserveUnauthorizedPrivilegedPermissionsAction::run(
-                requestedPermissions: NormalizePermissionsPayloadAction::run($request->input('permission')),
-                authenticatedUser: $authenticatedUser,
-                originalPermissions: $orig_permissions_array,
-                targetUser: $user,
-            ));
+            if ($request->has('permission')) {
+                $user->permissions = json_encode(PreserveUnauthorizedPrivilegedPermissionsAction::run(
+                    requestedPermissions: NormalizePermissionsPayloadAction::run($request->input('permission')),
+                    authenticatedUser: $authenticatedUser,
+                    originalPermissions: $orig_permissions_array,
+                    targetUser: $user,
+                ));
+            }
 
             // Only save groups if the user is a superuser
             if (auth()->user()->isSuperUser()) {
@@ -334,6 +337,8 @@ class UsersController extends Controller
         session()->put(['redirect_option' => $request->input('redirect_option')]);
 
         if ($user->save()) {
+            $user->syncCompaniesWithLogging(Company::getIdsForCurrentUser($companyIds));
+
             // Redirect to the user page
             return Helper::getRedirectOption($request, $user->id, 'Users')
                 ->with('success', trans('admin/users/message.success.update'));
@@ -478,7 +483,7 @@ class UsersController extends Controller
         $permissions = $request->input('permissions', []);
         app('request')->request->set('permissions', $permissions);
 
-        $user_to_clone = User::with('userloc')->withTrashed()->find($user->id);
+        $user_to_clone = User::with('userloc', 'companies')->withTrashed()->find($user->id);
         // Make sure they can view this particular user
         $this->authorize('view', $user_to_clone);
 
@@ -596,10 +601,10 @@ class UsersController extends Controller
                 'manager',
                 'groups',
                 'userloc',
-                'company',
+                'companies',
                 'createdBy'
             )->withCount(['managesUsers as manages_users_count', 'managedLocations as manages_locations_count'])
-            ->orderBy('created_at', 'DESC')
+                ->orderBy('created_at', 'DESC')
                 ->chunk(500, function ($users) use ($handle) {
 
                     $formatter = new EscapeFormula('`');
@@ -618,7 +623,7 @@ class UsersController extends Controller
                         // Add a new row with data
                         $values = [
                             $user->id,
-                            ($user->company) ? $user->company->name : '',
+                            $user->companies->pluck('name')->implode('|'),
                             $user->jobtitle,
                             $user->employee_num,
                             $user->first_name,

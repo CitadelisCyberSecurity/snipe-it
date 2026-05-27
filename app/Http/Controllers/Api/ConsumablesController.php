@@ -315,7 +315,7 @@ class ConsumablesController extends Controller
             return response()->json(Helper::formatStandardApiResponse('error', null, 'No user found'));
         }
 
-        if ((Setting::getSettings()->full_multiple_companies_support == '1') && ($consumable->company_id !== $user->company_id)) {
+        if ((Setting::getSettings()->full_multiple_companies_support == '1') && (! $user->companies()->where('companies.id', $consumable->company_id)->exists())) {
             return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.error_user_company')));
         }
 
@@ -356,6 +356,8 @@ class ConsumablesController extends Controller
      */
     public function selectlist(Request $request): array
     {
+        $this->authorize('view.selectlists');
+
         $consumables = Consumable::select([
             'consumables.id',
             'consumables.name',

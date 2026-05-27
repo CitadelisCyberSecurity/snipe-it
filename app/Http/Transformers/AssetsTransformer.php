@@ -388,6 +388,9 @@ class AssetsTransformer
         $permissions_array['available_actions'] = [
             'checkout' => false,
             'checkin' => Gate::allows('checkin', License::class),
+            'bulk_selectable' => [
+                'checkin' => Gate::allows('checkin', License::class),
+            ],
         ];
 
         $array += $permissions_array;

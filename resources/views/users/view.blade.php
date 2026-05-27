@@ -310,6 +310,24 @@
                     </x-tabs.pane>
 
                     <x-tabs.pane name="licenses" :count="$user->licenses()->count()">
+
+                        @can('checkin', \App\Models\License::class)
+                        <x-slot:table_header>{{ trans('general.licenses') }}</x-slot:table_header>
+                        <x-slot:bulkactions>
+                            <div class="hidden-print" style="padding-top:10px; min-width:400px;">
+                                <form method="POST" action="{{ route('licenses.bulkcheckin.selected') }}" id="userLicenseBulkCheckinForm" class="form-inline">
+                                    @csrf
+                                    <label for="userLicenseBulkActions"><span class="sr-only">{{ trans('button.bulk_actions') }}</span></label>
+                                    <select name="bulk_actions" id="userLicenseBulkActions" class="form-control select2" style="min-width:350px;">
+                                        <option value="checkin">{{ trans('general.checkin') }}</option>
+                                    </select>
+                                    <button type="submit" id="userLicenseBulkCheckinButton" class="btn btn-theme" disabled>{{ trans('button.go') }}</button>
+                                    <span id="userLicenseBulkCheckinCount" style="display:none; margin-left:8px; line-height:34px;">&mdash; <span class="badge">0</span> {{ trans('general.selected') }}</span>
+                                </form>
+                            </div>
+                        </x-slot:bulkactions>
+                        @endcan
+
                         <table
                             data-cookie-id-table="userLicenseTable"
                             data-id-table="userLicenseTable"
@@ -326,6 +344,9 @@
 
                             <thead>
                                 <tr>
+                                    @can('checkin', \App\Models\License::class)
+                                    <th class="hidden-print"><input type="checkbox" id="userLicenseSelectAll"></th>
+                                    @endcan
                                     <th>{{ trans('general.name') }}</th>
                                     <th>{{ trans('admin/licenses/form.license_key') }}</th>
                                     <th data-footer-formatter="sumFormatter" data-fieldname="purchase_cost">{{ trans('general.purchase_cost') }}</th>
@@ -337,6 +358,11 @@
                             <tbody>
                                 @foreach ($user->licenses as $license)
                                     <tr>
+                                        @can('checkin', \App\Models\License::class)
+                                        <td class="hidden-print">
+                                            <input type="checkbox" class="user-license-seat-checkbox hidden-print" form="userLicenseBulkCheckinForm" name="ids[]" value="{{ $license->pivot->id }}">
+                                        </td>
+                                        @endcan
                                         <td class="col-md-4">
                                             {!! $license->present()->nameUrl() !!}
                                         </td>
@@ -651,6 +677,24 @@ $(function () {
         $('#optional_info_icon').toggleClass('fa-caret-right fa-caret-down');
         var optional_info_open = $('#optional_info_icon').hasClass('fa-caret-down');
         document.cookie = "optional_info_open="+optional_info_open+'; path=/';
+    });
+
+    $(document).on('change', '.user-license-seat-checkbox', function () {
+        var count = $('.user-license-seat-checkbox:checked').length;
+        $('#userLicenseBulkCheckinButton').prop('disabled', count === 0);
+        $('#userLicenseBulkCheckinCount .badge').text(count);
+        if (count > 0) {
+            $('#userLicenseBulkCheckinCount').show();
+        } else {
+            $('#userLicenseBulkCheckinCount').hide();
+        }
+        var total = $('.user-license-seat-checkbox').length;
+        $('#userLicenseSelectAll').prop('indeterminate', count > 0 && count < total);
+        $('#userLicenseSelectAll').prop('checked', count === total);
+    });
+
+    $(document).on('change', '#userLicenseSelectAll', function () {
+        $('.user-license-seat-checkbox').prop('checked', $(this).is(':checked')).trigger('change');
     });
 });
 </script>

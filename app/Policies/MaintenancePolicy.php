@@ -37,8 +37,12 @@ final class MaintenancePolicy
      * Determine whether the user can view a specific maintenance record.
      * Allowed if the user can edit the associated asset.
      */
-    public function view(User $user, Maintenance $maintenance): bool
+    public function view(User $user, ?Maintenance $maintenance = null): bool
     {
+        if (is_null($maintenance)) {
+            return $user->hasAccess('assets.view');
+        }
+
         return Gate::allows('update', $maintenance->asset);
     }
 
@@ -93,5 +97,10 @@ final class MaintenancePolicy
         return Gate::allows('view', $maintenance->asset)
             || Gate::allows('view', $maintenance)
             || $user->hasAccess('activity.view');
+    }
+
+    public function journal(User $user, Maintenance $maintenance): bool
+    {
+        return Gate::allows('view', $maintenance) || $user->hasAccess('activity.view');
     }
 }

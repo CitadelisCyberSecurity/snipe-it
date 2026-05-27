@@ -76,7 +76,7 @@
                                                 <input class="form-control" placeholder="{{ trans('admin/users/table.password')  }}" name="password" type="password" id="password-field" autocomplete="{{ (config('auth.login_autocomplete') === true) ? 'on' : 'off'  }}" autocorrect="off" autocapitalize="off" spellcheck="false">
                                                 <span class="input-group-addon">
                                                    <i data-toggle="#password-field" class="fa fa-fw fa-eye toggle-password" aria-hidden="true"></i>
-                                                    <span class="sr-only">Toggle password visibility</span>
+                                                    <span class="sr-only">{{ trans('general.toggle_password_visibility') }}</span>
                                                 </span>
                                             </div>
 

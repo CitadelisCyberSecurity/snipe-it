@@ -688,4 +688,41 @@ class UpdateAssetTest extends TestCase
             '_snipeit_non_existent_custom_field_50' => 'test attribute',
         ])->assertStatusMessageIs('error');
     }
+
+    public function test_updating_next_audit_date_creates_update_log_entry(): void
+    {
+        $asset = Asset::factory()->create(['next_audit_date' => now()->addMonths(3)->toDateString()]);
+
+        $this->actingAsForApi(User::factory()->editAssets()->create())
+            ->patchJson(route('api.assets.update', $asset), [
+                'next_audit_date' => now()->addMonths(6)->toDateString(),
+            ])
+            ->assertOk();
+
+        $this->assertHasTheseActionLogs($asset, ['create', 'update']);
+    }
+
+    public function test_updating_next_audit_date_with_other_fields_logs_all_changes(): void
+    {
+        $asset = Asset::factory()->create([
+            'name' => 'Old Name',
+            'next_audit_date' => now()->addMonths(3)->toDateString(),
+        ]);
+
+        $this->actingAsForApi(User::factory()->editAssets()->create())
+            ->patchJson(route('api.assets.update', $asset), [
+                'name' => 'New Name',
+                'next_audit_date' => now()->addMonths(6)->toDateString(),
+            ])
+            ->assertOk();
+
+        // One update log — not suppressed by the presence of next_audit_date
+        $this->assertHasTheseActionLogs($asset, ['create', 'update']);
+
+        $logMeta = json_decode($asset->assetlog()->where('action_type', 'update')->first()->log_meta, true);
+        $this->assertArrayHasKey('name', $logMeta);
+        $this->assertArrayHasKey('next_audit_date', $logMeta);
+        $this->assertEquals('Old Name', $logMeta['name']['old']);
+        $this->assertEquals('New Name', $logMeta['name']['new']);
+    }
 }

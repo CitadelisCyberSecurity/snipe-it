@@ -15,6 +15,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class LicenseCheckoutController extends Controller
@@ -94,23 +95,31 @@ class LicenseCheckoutController extends Controller
             return redirect()->route('licenses.index')->with('error', trans('admin/licenses/message.checkout.license_is_inactive'));
         }
 
-        $licenseSeat = $this->findLicenseSeatToCheckout($license, $seatId);
-        $licenseSeat->created_by = auth()->id();
-        $licenseSeat->notes = $request->input('notes');
+        $licenseSeat = null;
+        $checkoutTarget = null;
+
+        DB::transaction(function () use ($request, $license, $seatId, &$licenseSeat, &$checkoutTarget): void {
+            $licenseSeat = $this->findLicenseSeatToCheckout($license, $seatId, lock: true);
+            $licenseSeat->created_by = auth()->id();
+            $licenseSeat->notes = $request->input('notes');
+
+            if ($request->filled('asset_id')) {
+                $checkoutTarget = $this->checkoutToAsset($licenseSeat);
+            } elseif ($request->filled('assigned_to')) {
+                $checkoutTarget = $this->checkoutToUser($licenseSeat);
+            }
+        });
 
         if ($request->filled('asset_id')) {
             session()->put(['checkout_to_type' => 'asset']);
-            $checkoutTarget = $this->checkoutToAsset($licenseSeat);
             $request->request->add(['assigned_asset' => $checkoutTarget->id]);
             session()->put([
                 'redirect_option' => $request->input('redirect_option'),
                 'checkout_to_type' => 'asset',
                 'sign_in_place' => $request->boolean('sign_in_place'),
             ]);
-
         } elseif ($request->filled('assigned_to')) {
             session()->put(['checkout_to_type' => 'user']);
-            $checkoutTarget = $this->checkoutToUser($licenseSeat);
             $request->request->add(['assigned_user' => $checkoutTarget->id]);
             session()->put([
                 'redirect_option' => $request->input('redirect_option'),
@@ -156,9 +165,11 @@ class LicenseCheckoutController extends Controller
         return redirect()->route('licenses.index')->with('error', trans('Something went wrong handling this checkout.'));
     }
 
-    protected function findLicenseSeatToCheckout($license, $seatId)
+    protected function findLicenseSeatToCheckout($license, $seatId, bool $lock = false)
     {
-        $licenseSeat = LicenseSeat::find($seatId) ?? $license->freeSeat();
+        $licenseSeat = $seatId
+            ? LicenseSeat::where('id', $seatId)->when($lock, fn ($q) => $q->lockForUpdate())->first()
+            : $license->freeSeat(lock: $lock);
 
         if (! $licenseSeat) {
             if ($seatId) {

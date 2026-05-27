@@ -64,13 +64,13 @@
 
                         <!-- Company -->
                         @if (\App\Models\Company::canManageUsersCompanies())
-                            @include ('partials.forms.edit.company-select', ['translated_name' => trans('general.select_company'), 'fieldname' => 'company_id'])
+                            @include ('partials.forms.edit.company-select', ['translated_name' => trans('general.select_company'), 'fieldname' => 'company_ids', 'multiple' => 'true'])
 
                             <div class="form-group">
                                 <div class=" col-md-9 col-md-offset-3">
                                     <label class="form-control">
-                                        <input type="checkbox" name="null_company_id" value="1" />
-                                        {{ trans_choice('general.set_users_field_to_null', count($users), ['field' => trans('general.company'), 'user_count' => count($users)]) }}
+                                        <input type="checkbox" name="null_company_ids" value="1" />
+                                        {{ trans_choice('general.set_users_field_to_null', count($users), ['field' => trans('general.companies'), 'user_count' => count($users)]) }}
                                     </label>
                                 </div>
                             </div>
@@ -159,6 +159,7 @@
                                         <input type="radio" name="ldap_import" id="ldap_import" value="1" aria-label="ldap_import">
                                         {{ trans('general.user_managed_passwords_disallow') }}
                                     </label>
+                                    <p class="help-block">{{ trans('general.user_managed_passwords_bulk_help') }}</p>
                             </div>
                         </div> <!--/form-group-->
 

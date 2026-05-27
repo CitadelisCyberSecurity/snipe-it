@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Accessory;
 use App\Models\Actionlog;
 use App\Models\Asset;
+use App\Models\Company;
 use App\Models\ConsumableAssignment;
 use App\Models\Group;
 use App\Models\License;
@@ -168,11 +169,8 @@ class BulkUsersController extends Controller
 
         $this->conditionallyAddItem('location_id')
             ->conditionallyAddItem('department_id')
-            ->conditionallyAddItem('company_id')
             ->conditionallyAddItem('locale')
             ->conditionallyAddItem('remote')
-            ->conditionallyAddItem('ldap_import')
-            ->conditionallyAddItem('activated')
             ->conditionallyAddItem('display_name')
             ->conditionallyAddItem('start_date')
             ->conditionallyAddItem('end_date')
@@ -202,7 +200,7 @@ class BulkUsersController extends Controller
             $this->update_array['manager_id'] = null;
         }
 
-        if ($request->input('null_company_id') == '1') {
+        if ($request->input('null_company_ids') == '1') {
             $this->update_array['company_id'] = null;
         }
 
@@ -235,11 +233,37 @@ class BulkUsersController extends Controller
                 ->update(['location_id' => $this->update_array['location_id']]);
         }
 
-        // Only sync groups if groups were selected
-        if ($request->filled('groups')) {
+        // Handle company pivot sync separately from the mass update.
+        // company_ids[] comes from the multi-select; null_company_ids clears all memberships.
+        $bulkCompanyIds = array_filter(array_map('intval', (array) $request->input('company_ids', [])));
+        $clearCompanies = $request->input('null_company_ids') == '1';
 
+        if ($bulkCompanyIds || $clearCompanies) {
+            $allowedIds = Company::getIdsForCurrentUser($bulkCompanyIds);
+            // Also update the scalar company_id column for display/backward compat.
+            $scalarCompanyId = $allowedIds[0] ?? null;
+            User::whereIn('id', $user_raw_array)->where('id', '!=', auth()->id())
+                ->update(['company_id' => $scalarCompanyId]);
             foreach ($users as $user) {
-                if (auth()->user()->can('canEditAuthFields', $user) && auth()->user()->can('editableOnDemo')) {
+                $user->companies()->sync($allowedIds);
+            }
+        }
+
+        // Fields that require canEditAuthFields (non-admins cannot touch admins/superusers,
+        // admins cannot touch superusers) must be applied per-user, not via mass update.
+        foreach ($users as $user) {
+            if (auth()->user()->can('canEditAuthFields', $user) && auth()->user()->can('editableOnDemo')) {
+                $authFieldUpdate = [];
+                if ($request->filled('activated')) {
+                    $authFieldUpdate['activated'] = $request->input('activated');
+                }
+                if ($request->filled('ldap_import')) {
+                    $authFieldUpdate['ldap_import'] = $request->input('ldap_import');
+                }
+                if (! empty($authFieldUpdate)) {
+                    $user->update($authFieldUpdate);
+                }
+                if ($request->filled('groups') && auth()->user()->isSuperUser()) {
                     $user->groups()->sync($request->input('groups'));
                 }
             }
@@ -398,7 +422,7 @@ class BulkUsersController extends Controller
      */
     public function merge(Request $request)
     {
-        $this->authorize('update', User::class);
+        $this->authorize('delete', User::class);
 
         if (config('app.lock_passwords')) {
             return redirect()->route('users.index')->with('error', trans('general.feature_disabled'));
@@ -418,6 +442,10 @@ class BulkUsersController extends Controller
 
         // Walk users
         foreach ($users_to_merge as $user_to_merge) {
+
+            if (! auth()->user()->can('canEditAuthFields', $user_to_merge) || ! auth()->user()->can('editableOnDemo')) {
+                return redirect()->route('users.index')->with('error', trans('general.insufficient_permissions'));
+            }
 
             foreach ($user_to_merge->assets as $asset) {
                 Log::debug('Updating asset: '.$asset->asset_tag.' to '.$merge_into_user->id);
@@ -459,6 +487,12 @@ class BulkUsersController extends Controller
             foreach ($user_to_merge->managedLocations as $managedLocation) {
                 $managedLocation->manager_id = $merge_into_user->id;
                 $managedLocation->save();
+            }
+
+            // Carry over company pivot memberships from the merged user into the target.
+            $mergedCompanyIds = $user_to_merge->companies()->pluck('companies.id')->toArray();
+            if (! empty($mergedCompanyIds)) {
+                $merge_into_user->companies()->syncWithoutDetaching($mergedCompanyIds);
             }
 
             $user_to_merge->delete();

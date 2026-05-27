@@ -371,6 +371,12 @@ class AssetsController extends Controller
             $assets->where('assets.order_number', '=', strval($request->input('order_number')));
         }
 
+        foreach ($all_custom_fields as $field) {
+            if ($request->filled($field->db_column_name())) {
+                $assets->where($field->db_column_name(), '=', $request->input($field->db_column_name()));
+            }
+        }
+
         // This is kinda gross, but we need to do this because the Bootstrap Tables
         // API passes custom field ordering as custom_fields.fieldname, and we have to strip
         // that out to let the default sorter below order them correctly on the assets table.
@@ -590,6 +596,7 @@ class AssetsController extends Controller
      */
     public function selectlist(Request $request): array
     {
+        $this->authorize('view.selectlists');
 
         $assets = Asset::select([
             'assets.id',
@@ -602,8 +609,11 @@ class AssetsController extends Controller
         ])->with('model', 'status', 'assignedTo')
             ->NotArchived();
 
-        if ((Setting::getSettings()->full_multiple_companies_support == '1') && ($request->filled('companyId'))) {
-            $assets->where('assets.company_id', $request->input('companyId'));
+        if ((Setting::getSettings()->full_multiple_companies_support == '1') && $request->filled('companyId')) {
+            $companyIds = array_values(array_filter(array_map('intval', explode(',', $request->input('companyId')))));
+            if (! empty($companyIds)) {
+                $assets->whereIn('assets.company_id', $companyIds);
+            }
         }
 
         if ($request->filled('statusType') && $request->input('statusType') === 'RTD') {

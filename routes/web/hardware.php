@@ -168,6 +168,16 @@ Route::group(
             [BulkAssetsController::class, 'storeCheckout']
         )->name('hardware.bulkcheckout.store');
 
+        Route::get('bulkcheckin', [BulkAssetsController::class, 'showCheckin'])
+            ->name('hardware.bulkcheckin.show')
+            ->breadcrumbs(fn (Trail $trail) => $trail->parent('hardware.index')
+                ->push(trans('admin/hardware/general.bulk_checkin'), route('hardware.index'))
+            );
+
+        Route::post('bulkcheckin',
+            [BulkAssetsController::class, 'storeCheckin']
+        )->name('hardware.bulkcheckin.store');
+
     });
 
 Route::resource('hardware',
@@ -180,6 +190,10 @@ Route::resource('maintenances',
     MaintenancesController::class,
     ['middleware' => ['auth'],
     ])->parameters(['maintenance' => 'maintenance', 'asset' => 'asset_id']);
+
+Route::post('maintenances/{maintenance}/complete',
+    [MaintenancesController::class, 'complete']
+)->name('maintenances.complete')->middleware(['auth']);
 
 Route::get('ht/{any?}',
     [AssetsController::class, 'getAssetByTag'])
