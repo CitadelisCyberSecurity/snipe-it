@@ -83,11 +83,12 @@
             <div class="tab-content" style="border:1px solid #ddd; border-top:none; padding:16px;">
                 @foreach(['all', 'delete', 'modify', 'keep', 'pending'] as $tab)
                     @php
+                        // Only reveal a decision once the manager has submitted
                         $tabItems = match($tab) {
-                            'delete'  => $items->where('manager_status', 'delete'),
-                            'modify'  => $items->where('manager_status', 'modify'),
-                            'keep'    => $items->where('manager_status', 'keep'),
-                            'pending' => $items->whereNull('manager_status'),
+                            'delete'  => $items->where('manager_completed_at', '!=', null)->where('manager_status', 'delete'),
+                            'modify'  => $items->where('manager_completed_at', '!=', null)->where('manager_status', 'modify'),
+                            'keep'    => $items->where('manager_completed_at', '!=', null)->where('manager_status', 'keep'),
+                            'pending' => $items->filter(fn ($i) => $i->manager_completed_at === null),
                             default   => $items,
                         };
                     @endphp
@@ -111,13 +112,14 @@
                                 <tbody>
                                     @foreach($tabItems as $item)
                                         @php
-                                            $decisionClass = match($item->manager_status) {
+                                            $visibleStatus = $item->manager_completed_at ? $item->manager_status : null;
+                                            $decisionClass = match($visibleStatus) {
                                                 'keep'   => 'success',
                                                 'modify' => 'warning',
                                                 'delete' => 'danger',
                                                 default  => 'default',
                                             };
-                                            $decisionLabel = match($item->manager_status) {
+                                            $decisionLabel = match($visibleStatus) {
                                                 'keep'   => trans('admin/access-review/general.keep'),
                                                 'modify' => trans('admin/access-review/general.modify'),
                                                 'delete' => trans('admin/access-review/general.remove'),
@@ -136,7 +138,7 @@
                                             <td>
                                                 <span class="label label-{{ $decisionClass }}">{{ $decisionLabel }}</span>
                                             </td>
-                                            <td>{{ $item->manager_comment ?: '—' }}</td>
+                                            <td>{{ $item->manager_completed_at ? ($item->manager_comment ?: '—') : '—' }}</td>
                                             <td>
                                                 @if($item->isExecuted())
                                                     <i class="fa fa-check text-success"
@@ -146,9 +148,9 @@
                                                 @endif
                                             </td>
                                             <td>
-                                                @if($item->manager_status && ! $item->isExecuted())
+                                                @if($visibleStatus && ! $item->isExecuted())
                                                     @php
-                                                        $confirmMsg = match($item->manager_status) {
+                                                        $confirmMsg = match($visibleStatus) {
                                                             'delete' => trans('admin/access-review/general.execute_delete_confirm'),
                                                             'modify' => trans('admin/access-review/general.execute_modify_confirm'),
                                                             default  => trans('admin/access-review/general.execute_keep_confirm'),

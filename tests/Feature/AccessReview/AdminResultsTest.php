@@ -66,18 +66,19 @@ class AdminResultsTest extends TestCase
         $admin    = User::factory()->admin()->create();
         $campaign = AccessReviewCampaign::factory()->active()->create();
 
-        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_status' => AccessReviewItem::STATUS_KEEP]);
-        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_status' => AccessReviewItem::STATUS_KEEP]);
-        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_status' => AccessReviewItem::STATUS_MODIFY]);
-        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_status' => AccessReviewItem::STATUS_DELETE]);
-        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_status' => null]);
-        AccessReviewItem::factory()->executed()->create(['campaign_id' => $campaign->id]);
+        $submitted = ['manager_completed_at' => now()];
+        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_status' => AccessReviewItem::STATUS_KEEP] + $submitted);
+        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_status' => AccessReviewItem::STATUS_KEEP] + $submitted);
+        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_status' => AccessReviewItem::STATUS_MODIFY] + $submitted);
+        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_status' => AccessReviewItem::STATUS_DELETE] + $submitted);
+        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_status' => null]); // unsubmitted → pending
+        AccessReviewItem::factory()->executed()->create(['campaign_id' => $campaign->id]);               // submitted + executed, keep
 
         $response = $this->actingAs($admin)
             ->get(route('access-review.campaigns.results', $campaign))
             ->assertOk();
 
-        // executed() factory state also sets manager_status = STATUS_KEEP, so keep = 3
+        // keep=3 (2 submitted keep + 1 executed keep), modify=1, delete=1, pending=1 (unsubmitted), executed=1
         $response->assertViewHas('summary', fn ($s) =>
             $s['total']    === 6 &&
             $s['keep']     === 3 &&

@@ -79,10 +79,15 @@
                                 </div>
                             </td>
                             <td>
-                                <textarea class="form-control review-comment"
-                                          rows="1"
-                                          style="min-width:160px;"
-                                          {{ $item->isCompleted() ? 'disabled' : '' }}>{{ $item->manager_comment }}</textarea>
+                                <div class="form-group comment-group" style="margin-bottom:0;">
+                                    <textarea class="form-control review-comment"
+                                              rows="1"
+                                              style="min-width:160px;"
+                                              {{ $item->isCompleted() ? 'disabled' : '' }}>{{ $item->manager_comment }}</textarea>
+                                    <span class="help-block comment-error" style="display:none;margin-bottom:0;">
+                                        {{ trans('admin/access-review/general.comment_required') }}
+                                    </span>
+                                </div>
                             </td>
                             <td class="save-indicator text-center" style="vertical-align:middle;">
                                 @if($item->isCompleted())
@@ -148,20 +153,33 @@ $(function () {
         var colors  = { keep: 'btn-success', modify: 'btn-warning', delete: 'btn-danger' };
         var $ta     = $row.find('.review-comment');
 
+        // Second click on the active button = deselect
+        if ($btn.hasClass('active')) {
+            $btn.removeClass('active btn-success btn-warning btn-danger').addClass('btn-default');
+            $ta.closest('.comment-group').removeClass('has-error');
+            $row.find('.comment-error').hide();
+            states[itemId] = false;
+            updateSubmitButton();
+            doSave(itemId, null, '', $row);
+            return;
+        }
+
         // Update button group appearance
         $row.find('.decision-btn')
             .removeClass('active btn-success btn-warning btn-danger')
             .addClass('btn-default');
         $btn.removeClass('btn-default').addClass('active ' + colors[status]);
 
-        // Modify requires a comment — focus the textarea and wait for input
+        // Modify requires a comment — highlight the textarea and wait for input
         if (status === 'modify' && $ta.val().trim() === '') {
-            $ta.addClass('has-error').focus();
-            $row.find('.save-indicator').html('<small class="text-warning">{{ trans('admin/access-review/general.comment_required') }}</small>');
+            $ta.closest('.comment-group').addClass('has-error');
+            $row.find('.comment-error').show();
+            $ta.focus();
             return;
         }
 
-        $ta.removeClass('has-error');
+        $ta.closest('.comment-group').removeClass('has-error');
+        $row.find('.comment-error').hide();
         states[itemId] = true;
         updateSubmitButton();
         doSave(itemId, status, $ta.val(), $row);
@@ -178,8 +196,10 @@ $(function () {
             if (!status) return;
             // Don't save a modify decision until the comment is filled in
             if (status === 'modify' && $ta.val().trim() === '') return;
-            $ta.removeClass('has-error');
-            $row.find('.save-indicator').html('');
+            $ta.closest('.comment-group').removeClass('has-error');
+            $row.find('.comment-error').hide();
+            states[itemId] = true;
+            updateSubmitButton();
             doSave(itemId, status, $ta.val(), $row);
         }, 600);
     });
@@ -191,8 +211,8 @@ $(function () {
         $.ajax({
             url:         $row.data('save-url'),
             method:      'PATCH',
-            data:        { _token: csrfToken, manager_status: status, manager_comment: comment || '' },
-            success:     function () { $ind.html('<i class="fa fa-check text-success"></i>'); },
+            data:        { _token: csrfToken, manager_status: status || '', manager_comment: comment || '' },
+            success:     function () { $ind.html(status ? '<i class="fa fa-check text-success"></i>' : ''); },
             error:       function () { $ind.html('<i class="fa fa-times text-danger"></i>'); },
         });
     }

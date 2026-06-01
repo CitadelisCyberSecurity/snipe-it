@@ -197,12 +197,14 @@ class CampaignsController extends Controller
             ->orderBy('manager_status')
             ->get();
 
+        $submitted = $items->whereNotNull('manager_completed_at');
+
         $summary = [
             'total'    => $items->count(),
-            'keep'     => $items->where('manager_status', AccessReviewItem::STATUS_KEEP)->count(),
-            'modify'   => $items->where('manager_status', AccessReviewItem::STATUS_MODIFY)->count(),
-            'delete'   => $items->where('manager_status', AccessReviewItem::STATUS_DELETE)->count(),
-            'pending'  => $items->whereNull('manager_status')->count(),
+            'keep'     => $submitted->where('manager_status', AccessReviewItem::STATUS_KEEP)->count(),
+            'modify'   => $submitted->where('manager_status', AccessReviewItem::STATUS_MODIFY)->count(),
+            'delete'   => $submitted->where('manager_status', AccessReviewItem::STATUS_DELETE)->count(),
+            'pending'  => $items->filter(fn ($i) => $i->manager_completed_at === null)->count(),
             'executed' => $items->filter(fn ($i) => $i->isExecuted())->count(),
         ];
 

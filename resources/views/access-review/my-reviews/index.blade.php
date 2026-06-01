@@ -42,7 +42,7 @@
                                     @endif
                                 </td>
                                 <td style="min-width:180px;">
-                                    <div class="progress" style="margin-bottom:4px;">
+                                    <div class="progress" style="margin-bottom:4px; background-color:#ddd;">
                                         <div class="progress-bar progress-bar-{{ $isComplete ? 'success' : 'info' }}"
                                              style="width:{{ $pct }}%"></div>
                                     </div>

@@ -70,7 +70,18 @@ class ManagerReviewController extends Controller
             return response()->json(['error' => trans('admin/access-review/general.review_already_completed')], 422);
         }
 
-        $isModify = $request->input('manager_status') === AccessReviewItem::STATUS_MODIFY;
+        $rawStatus = $request->input('manager_status');
+
+        // Empty status = manager is clearing their decision
+        if ($rawStatus === null || $rawStatus === '') {
+            $item->manager_status  = null;
+            $item->manager_comment = null;
+            $item->save();
+
+            return response()->json(['success' => true]);
+        }
+
+        $isModify = $rawStatus === AccessReviewItem::STATUS_MODIFY;
 
         $validated = $request->validate([
             'manager_status'  => ['required', Rule::in(AccessReviewItem::VALID_STATUSES)],
@@ -110,10 +121,21 @@ class ManagerReviewController extends Controller
                 ->exists();
 
             if (! $hasUnreviewed) {
+                $now = now();
                 AccessReviewItem::where('campaign_id', $campaign->id)
                     ->where('manager_id', auth()->id())
                     ->whereNull('manager_completed_at')
-                    ->update(['manager_completed_at' => now()]);
+                    ->update(['manager_completed_at' => $now]);
+
+                // Keep decisions require no admin action — auto-execute them now
+                AccessReviewItem::where('campaign_id', $campaign->id)
+                    ->where('manager_id', auth()->id())
+                    ->where('manager_status', AccessReviewItem::STATUS_KEEP)
+                    ->whereNull('admin_executed_at')
+                    ->update([
+                        'admin_executed_at' => $now,
+                        'admin_executed_by' => auth()->id(),
+                    ]);
             }
         });
 
