@@ -9,6 +9,7 @@ use App\Models\AccessReviewCampaign;
 use App\Models\AccessReviewItem;
 use App\Models\Asset;
 use App\Models\User;
+use App\Notifications\AccessReviewCampaignLaunchedNotification;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -172,6 +173,17 @@ class CampaignsController extends Controller
                 ->route('access-review.campaigns.index')
                 ->with('error', trans('admin/access-review/general.not_launchable_unless_draft'));
         }
+
+        $campaign->items()
+            ->with('manager')
+            ->get()
+            ->groupBy('manager_id')
+            ->each(function ($managerItems) use ($campaign) {
+                $manager = $managerItems->first()->manager;
+                if ($manager && $manager->email) {
+                    $manager->notify(new AccessReviewCampaignLaunchedNotification($campaign, $managerItems->count()));
+                }
+            });
 
         return redirect()
             ->route('access-review.campaigns.index')

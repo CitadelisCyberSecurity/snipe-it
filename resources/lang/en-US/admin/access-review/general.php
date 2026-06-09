@@ -81,4 +81,10 @@ return [
     'executed'                  => 'Executed',
     'execute_success'           => 'Action executed.',
     'execute_error'             => 'Failed to execute action.',
+
+    // Email notifications
+    'email_launched_subject'    => 'Action Required: Access Review — :campaign',
+    'email_launched_greeting'   => 'Hi :name,',
+    'email_launched_body'       => 'A new access review campaign ":campaign" has been launched. You have :count license seat(s) assigned to your direct reports that require your review.',
+    'email_launched_cta'        => 'Start My Review',
 ];
