@@ -17,7 +17,7 @@ class AssetPresenter extends Presenter
      *
      * @return string
      */
-    public static function dataTableLayout()
+    public static function dataTableLayout($hide_fields = [])
     {
         $layout = [
             [
@@ -278,7 +278,23 @@ class AssetPresenter extends Presenter
                 'title' => trans('general.updated_at'),
                 'visible' => false,
                 'formatter' => 'dateDisplayFormatter',
-            ], [
+            ],
+        ];
+
+        if (! in_array('deleted_at', $hide_fields)) {
+            $layout[] = [
+                'field' => 'deleted_at',
+                'searchable' => false,
+                'sortable' => true,
+                'switchable' => true,
+                'title' => trans('general.deleted_at'),
+                'visible' => true,
+                'formatter' => 'dateDisplayFormatter',
+            ];
+        }
+
+        $layout = array_merge($layout, [
+            [
                 'field' => 'last_checkout',
                 'searchable' => false,
                 'sortable' => true,
@@ -323,7 +339,7 @@ class AssetPresenter extends Presenter
                 'formatter' => 'trueFalseFormatter',
 
             ],
-        ];
+        ]);
 
         // This looks complicated, but we have to confirm that the custom fields exist in custom fieldsets
         // *and* those fieldsets are associated with models, otherwise we'll trigger

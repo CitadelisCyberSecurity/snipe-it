@@ -50,7 +50,7 @@
             @if ($selected)
                 @foreach(Arr::wrap($selected) as $value)
                     <option value="{{ $value }}" selected="selected" role="option" aria-selected="true"  role="option">
-                        {{ optional(Location::find($value))->name }}
+                        {{ Location::find($value)?->name }}
                     </option>
                 @endforeach
             @endif

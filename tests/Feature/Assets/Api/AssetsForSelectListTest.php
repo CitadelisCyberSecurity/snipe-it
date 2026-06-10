@@ -78,6 +78,18 @@ class AssetsForSelectListTest extends TestCase
             ->assertResponseContainsInResults($assetB);
     }
 
+    public function test_asset_is_excluded_from_selectlist_when_exclude_id_matches()
+    {
+        [$assetA, $assetB] = Asset::factory()->count(2)->create();
+
+        $actor = User::factory()->createAssets()->create();
+
+        $this->actingAsForApi($actor)
+            ->getJson(route('assets.selectlist', ['excludeId' => $assetA->id]))
+            ->assertResponseDoesNotContainInResults($assetA)
+            ->assertResponseContainsInResults($assetB);
+    }
+
     public function test_assets_are_filtered_by_multiple_comma_separated_company_ids_when_full_company_support_is_enabled()
     {
         $this->settings->enableMultipleFullCompanySupport();

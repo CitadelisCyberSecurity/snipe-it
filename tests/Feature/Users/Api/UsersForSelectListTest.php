@@ -115,6 +115,18 @@ class UsersForSelectListTest extends TestCase
         $this->assertEquals(0, collect($response->json('results'))->count());
     }
 
+    public function test_user_is_excluded_from_selectlist_when_exclude_id_matches()
+    {
+        [$userA, $userB] = User::factory()->count(2)->create();
+
+        Passport::actingAs(User::factory()->superuser()->create());
+        $response = $this->getJson(route('api.users.selectlist', ['excludeId' => $userA->id]))->assertOk();
+
+        $results = collect($response->json('results'));
+        $this->assertFalse($results->contains('id', $userA->id), 'Excluded user should not appear');
+        $this->assertTrue($results->contains('id', $userB->id), 'Other user should still appear');
+    }
+
     public function test_users_are_filtered_by_company_id_parameter_when_full_company_support_is_enabled()
     {
         $this->settings->enableMultipleFullCompanySupport();

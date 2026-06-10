@@ -178,6 +178,10 @@ class LocationsController extends Controller
             if (Helper::test_locations_fmcs(false, $location->id, $location->company_id)) {
                 return redirect()->back()->withInput()->withInput()->with('error', 'error scoped locations');
             }
+            // check if parent is set and has a different company
+            if ($location->parent_id && Location::find($location->parent_id)->company_id != $location->company_id) {
+                return redirect()->back()->withInput()->withInput()->with('error', 'different company than parent');
+            }
         } else {
             $location->company_id = $request->input('company_id');
         }

@@ -7,6 +7,7 @@ use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
 use App\Models\CheckoutAcceptance;
 use App\Models\Consumable;
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\View\View;
@@ -94,6 +95,14 @@ class ConsumableCheckoutController extends Controller
         if (is_null($user = User::find($assigned_to))) {
             // Redirect to the consumable management page with error
             return redirect()->route('consumables.checkout.show', $consumable)->with('error', trans('admin/consumables/message.checkout.user_does_not_exist'))->withInput();
+        }
+
+        if (
+            Setting::getSettings()->full_multiple_companies_support == '1'
+            && $consumable->company_id
+            && ! $user->canReceiveFromCompany($consumable->company_id)
+        ) {
+            return redirect()->back()->with('error', trans('general.error_user_company'));
         }
 
         // Update the consumable data

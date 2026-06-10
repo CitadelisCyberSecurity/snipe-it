@@ -21,7 +21,6 @@ class UsersTransformer
 
     public function transformUser(User $user)
     {
-
         $role = null;
         if ($user->isSuperUser()) {
             $role = 'superadmin';
@@ -31,6 +30,7 @@ class UsersTransformer
         $array = [
             'id' => (int) $user->id,
             'avatar' => e($user->present()->gravatar) ?? null,
+            'qr_code_url' => route('qr_code/common', ['object_type' => 'users', 'id' => $user->id]),
             'name' => e($user->getFullNameAttribute()) ?? null,
             'first_name' => e($user->first_name) ?? null,
             'last_name' => e($user->last_name) ?? null,

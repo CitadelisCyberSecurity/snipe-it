@@ -496,8 +496,24 @@
                 if (cell.is('th')) {
                     return cell.find('.th-inner').text()
                 }
-                return htmlData
+                // Convert <br> tags to newlines so that line breaks in notes and
+                // textarea fields survive HTML-stripping during export
+                return htmlData.replace(/<br\s*\/?>/gi, '\n');
             }
+            // Escape double quotes in hyperlink href and display text so that
+            // Excel HYPERLINK formulas are not corrupted when values contain "
+            export_options['mso'] = {
+                xlsx: {
+                    onHyperlink: function (cell, row, col, href, cellText, formula) {
+                        var escapedHref = href.replace(/"/g, '""');
+                        var escapedText = cellText.replace(/"/g, '""');
+                        if (escapedText.length) {
+                            return '=HYPERLINK("' + escapedHref + '","' + escapedText + '")';
+                        }
+                        return '=HYPERLINK("' + escapedHref + '")';
+                    }
+                }
+            };
 
             // This allows us to override the table defaults set below using the data-dash attributes
             var table = this;
@@ -620,7 +636,7 @@
                 },
                 locale: '{{ app()->getLocale() }}',
                 exportOptions: export_options,
-                exportTypes: ['xlsx', 'excel', 'csv', 'pdf', 'json', 'xml', 'txt', 'sql', 'doc'],
+                exportTypes: ['xlsx', 'csv', 'pdf', 'json', 'xml', 'txt', 'sql', 'doc'],
                 onLoadSuccess: function () { // possible 'fixme'? this might be for contents, not for headers?
                     $('[data-tooltip="true"]').tooltip(); // Needed to attach tooltips after ajax call
                 },
@@ -1744,33 +1760,53 @@
 
         if ((value) && (value.type)) {
 
-            if (value.type == 'asset') {
+            if (value.type === 'asset') {
                 item_destination = 'hardware';
                 item_icon = 'fas fa-barcode';
-            } else if (value.type == 'accessory') {
+            }
+            else if (value.type === 'accessory') {
                 item_destination = 'accessories';
                 item_icon = 'far fa-keyboard';
-            } else if (value.type == 'component') {
+            }
+            else if (value.type === 'component') {
                 item_destination = 'components';
                 item_icon = 'far fa-hdd';
-            } else if (value.type == 'consumable') {
+            }
+            else if (value.type === 'consumable') {
                 item_destination = 'consumables';
                 item_icon = 'fas fa-tint';
-            } else if (value.type == 'license') {
+            }
+            else if (value.type === 'license') {
                 item_destination = 'licenses';
                 item_icon = 'far fa-save';
-            } else if (value.type == 'user') {
+            }
+            else if (value.type === 'user') {
                 item_destination = 'users';
                 item_icon = 'fas fa-user';
-            } else if (value.type == 'location') {
+            }
+            else if (value.type === 'location') {
                 item_destination = 'locations'
                 item_icon = 'fas fa-map-marker-alt';
-            } else if (value.type == 'maintenance') {
+            }
+            else if (value.type === 'maintenance') {
                 item_destination = 'maintenances'
                 item_icon = 'fa-solid fa-screwdriver-wrench';
-            } else if (value.type == 'model') {
+            }
+            else if (value.type === 'model') {
                 item_destination = 'models'
-                item_icon = '';
+                item_icon = 'fa-solid fa-boxes-stacked';
+            }
+            else if (value.type === 'supplier') {
+                item_destination = 'suppliers';
+                item_icon = 'fa-solid fa-store';
+            }
+            else if (value.type === 'department') {
+                item_destination = 'departments';
+                item_icon = 'fa-solid fa-building-user';
+            }
+            else if (value.type === 'company') {
+                item_destination = 'companies';
+                item_icon = 'fa-regular fa-building';
             }
 
             // display the username if it's checked out to a user, but don't do it if the username's there already
@@ -1973,6 +2009,13 @@
                         return '<a href="mailto:' + row.custom_fields[field_column_plain].value + '" style="white-space: nowrap" data-tooltip="true" title="{{ trans('general.send_email') }}"><x-icon type="email" /> ' + row.custom_fields[field_column_plain].value + '</a>';
                     }
                 }
+                // Convert newlines to <br> for textarea fields so they render in
+                // the table; export will convert <br> back to \n via onCellHtmlData
+                if (row.custom_fields[field_column_plain].element === 'textarea') {
+                    var val = row.custom_fields[field_column_plain].value;
+                    return val ? val.replace(/(?:\r\n|\r|\n)/g, '<br>') : '';
+                }
+
                 return row.custom_fields[field_column_plain].value;
 
             }

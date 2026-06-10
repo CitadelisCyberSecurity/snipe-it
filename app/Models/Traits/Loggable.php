@@ -4,6 +4,7 @@ namespace App\Models\Traits;
 
 use App\Models\Actionlog;
 use App\Models\Asset;
+use App\Models\CompanyableScope;
 use App\Models\ICompanyableChild;
 use App\Models\License;
 use App\Models\LicenseSeat;
@@ -41,13 +42,15 @@ trait Loggable
 
     public function history()
     {
-
+        // Bypass FMCS company scoping: access is already gated by the policy on the
+        // parent object. Objects like AssetModel and Company have no company_id, so
+        // their history logs always have company_id = null, which the scope would hide.
         return $this->morphMany(Actionlog::class, 'item')
+            ->withoutGlobalScope(CompanyableScope::class)
             ->orWhere(function ($query) {
                 $query->where('target_type', '=', static::class)
                     ->where('target_id', '=', $this->getKey());
             });
-
     }
 
     public function getHistory(Request $request)

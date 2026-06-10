@@ -1,6 +1,7 @@
 @props([
     'infoPanelObj' => null,
     'img_path' => null,
+    'qr_code_url' => null,
     'snipeSettings' => \App\Models\Setting::getSettings()
 ])
 
@@ -587,6 +588,12 @@
     </ul>
         @if (isset($after_list))
             {{ $after_list }}
+        @endif
+
+        @if ($qr_code_url && $snipeSettings->isQrEnabled())
+            <div class="col-md-12 text-center asset-qr-img" style="padding-top: 15px;">
+                <img src="{{ $qr_code_url }}" class="img-thumbnail" style="height: 150px; width: 150px; margin-right: 10px;" alt="QR code for {{ $infoPanelObj->name }}">
+            </div>
         @endif
 
 </div>

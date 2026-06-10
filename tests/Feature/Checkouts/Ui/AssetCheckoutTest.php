@@ -119,6 +119,30 @@ class AssetCheckoutTest extends TestCase
         Event::assertNotDispatched(CheckoutableCheckedOut::class);
     }
 
+    public function test_can_checkout_to_user_with_multiple_companies_via_pivot_when_fmcs_enabled()
+    {
+        $this->settings->enableMultipleFullCompanySupport();
+
+        $companyA = Company::factory()->create();
+        $companyB = Company::factory()->create();
+
+        // User's primary company is A but is also assigned to B via pivot
+        $user = User::factory()->for($companyA)->create();
+        $user->companies()->sync([$companyA->id, $companyB->id]);
+
+        // Asset belongs to company B
+        $asset = Asset::factory()->for($companyB)->create();
+
+        $this->actingAs(User::factory()->superuser()->create())
+            ->post(route('hardware.checkout.store', $asset), [
+                'checkout_to_type' => 'user',
+                'assigned_user' => $user->id,
+            ])
+            ->assertRedirect();
+
+        Event::assertDispatched(CheckoutableCheckedOut::class);
+    }
+
     public function test_page_renders()
     {
         $this->actingAs(User::factory()->superuser()->create())

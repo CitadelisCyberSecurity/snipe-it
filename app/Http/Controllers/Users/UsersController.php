@@ -10,11 +10,14 @@ use App\Http\Requests\DeleteUserRequest;
 use App\Http\Requests\ImageUploadRequest;
 use App\Http\Requests\SaveUserRequest;
 use App\Mail\UnacceptedAssetReminderMail;
+use App\Models\Accessory;
 use App\Models\Actionlog;
 use App\Models\Asset;
 use App\Models\CheckoutAcceptance;
 use App\Models\Company;
+use App\Models\Consumable;
 use App\Models\Group;
+use App\Models\License;
 use App\Models\Setting;
 use App\Models\User;
 use App\Notifications\CurrentInventory;
@@ -702,9 +705,17 @@ class UsersController extends Controller
     {
         $this->authorize('view', User::class);
 
-        $user = User::withInventoryRelations($id)->first();
+        $actor = auth()->user();
+        $canViewLicenses = $actor->can('view', License::class);
+        $canViewAccessories = $actor->can('view', Accessory::class);
+        $canViewConsumables = $actor->can('view', Consumable::class);
 
-        $indirectItemsCount = $user?->assets?->flatMap->assignedAssets->count() + $user?->assets?->flatMap->components->count() + $user?->assets?->flatMap->licenses->count() + $user?->assets?->flatMap->assignedAccessories->count();
+        $user = User::withInventoryRelations($id, $canViewLicenses, $canViewAccessories, $canViewConsumables)->first();
+
+        $indirectItemsCount = $user?->assets?->flatMap->assignedAssets->count()
+            + $user?->assets?->flatMap->components->count()
+            + ($canViewLicenses ? $user?->assets?->flatMap->licenses->count() : 0)
+            + ($canViewAccessories ? $user?->assets?->flatMap->assignedAccessories->count() : 0);
 
         if ($user) {
             $this->authorize('view', $user);

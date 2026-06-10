@@ -303,6 +303,11 @@
 
                             @endif
 
+                                @if ($snipeSettings->isQrEnabled())
+                                    <div class="col-md-12 text-center user-qr-img" style="padding-top: 15px;">
+                                        <img src="{{ route('qr_code/common', ['object_type' => 'users', 'id' => $user->id]) }}" class="img-thumbnail" style="height: 150px; width: 150px; margin-right: 10px;" alt="QR code for {{ $user->display_name }}">
+                                    </div>
+                                @endif
 
                         </x-page-column>
                         <!-- end side stats well column-->
@@ -328,6 +333,7 @@
                         </x-slot:bulkactions>
                         @endcan
 
+                        @can('view', \App\Models\License::class)
                         <table
                             data-cookie-id-table="userLicenseTable"
                             data-id-table="userLicenseTable"
@@ -391,6 +397,7 @@
                                 @endforeach
                             </tbody>
                         </table>
+                        @endcan
 
                     </x-tabs.pane>
 
@@ -403,6 +410,7 @@
                             {{ trans('general.accessories_assigned') }}
                         </x-slot:table_header>
 
+                        @can('view', \App\Models\Accessory::class)
                         <table
                             data-cookie-id-table="userAccessoryTable"
                             data-id-table="userAccessoryTable"
@@ -444,10 +452,12 @@
                                 @endforeach
                             </tbody>
                         </table>
+                        @endcan
 
                     </x-tabs.pane>
 
                     <x-tabs.pane name="consumables" :count="$user->consumables()->count()">
+                        @can('view', \App\Models\Consumable::class)
                         <table
                             data-cookie-id-table="userConsumableTable"
                             data-id-table="userConsumableTable"
@@ -482,6 +492,7 @@
                                 @endforeach
                             </tbody>
                         </table>
+                        @endcan
 
                     </x-tabs.pane>
 

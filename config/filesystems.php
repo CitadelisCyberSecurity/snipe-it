@@ -131,6 +131,7 @@ $config['allowed_upload_extensions_array'] = [
     'docx',
     'gif',
     'ico',
+    'jfif',
     'jpeg',
     'jpg',
     'json',

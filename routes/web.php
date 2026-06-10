@@ -22,6 +22,7 @@ use App\Http\Controllers\ManufacturersController;
 use App\Http\Controllers\ModalController;
 use App\Http\Controllers\NotesController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\QrCodeController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ReportTemplatesController;
 use App\Http\Controllers\SettingsController;
@@ -696,6 +697,14 @@ Route::group(['middleware' => 'web'], function () {
         'logout',
         [LoginController::class, 'logout']
     )->name('logout.post');
+
+    /**
+     * QR Code routes
+     */
+    Route::get('{object_type}/{id}/qr_code',
+        [QrCodeController::class, 'show']
+    )->name('qr_code/common')
+        ->where(['object_type' => 'accessories|assets|hardware|licenses|locations|models|companies|components|consumables|users']);
 
     /**
      * Uploaded files API routes

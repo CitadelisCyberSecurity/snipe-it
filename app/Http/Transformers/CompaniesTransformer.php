@@ -30,6 +30,7 @@ class CompaniesTransformer
                 'fax' => ($company->fax != '') ? e($company->fax) : null,
                 'email' => ($company->email != '') ? e($company->email) : null,
                 'image' => ($company->image) ? Storage::disk('public')->url('companies/'.e($company->image)) : null,
+                'qr_code_url' => route('qr_code/common', ['object_type' => 'companies', 'id' => $company->id]),
                 'assets_count' => (int) $company->assets_count,
                 'licenses_count' => (int) $company->licenses_count,
                 'accessories_count' => (int) $company->accessories_count,

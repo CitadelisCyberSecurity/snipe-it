@@ -434,4 +434,34 @@ class ImportUsersTest extends ImportDataTestCase implements TestsPermissionsRequ
 
         $this->assertEquals('updated@example.com', $target->refresh()->email);
     }
+
+    #[Test]
+    public function display_name_falls_back_to_full_name_when_column_is_missing_from_csv(): void
+    {
+        $importFileBuilder = ImportFileBuilder::new()->forget('displayName');
+        $row = $importFileBuilder->firstRow();
+        $import = Import::factory()->users()->create(['file_path' => $importFileBuilder->saveToImportsDirectory()]);
+
+        $this->actingAsForApi(User::factory()->superuser()->create());
+        $this->importFileResponse(['import' => $import->id])->assertOk();
+
+        $newUser = User::query()->where('username', $row['username'])->sole();
+
+        $this->assertEquals("{$row['firstName']} {$row['lastName']}", $newUser->display_name);
+    }
+
+    #[Test]
+    public function display_name_falls_back_to_full_name_when_column_is_empty_in_csv(): void
+    {
+        $importFileBuilder = ImportFileBuilder::new(['displayName' => '']);
+        $row = $importFileBuilder->firstRow();
+        $import = Import::factory()->users()->create(['file_path' => $importFileBuilder->saveToImportsDirectory()]);
+
+        $this->actingAsForApi(User::factory()->superuser()->create());
+        $this->importFileResponse(['import' => $import->id])->assertOk();
+
+        $newUser = User::query()->where('username', $row['username'])->sole();
+
+        $this->assertEquals("{$row['firstName']} {$row['lastName']}", $newUser->display_name);
+    }
 }

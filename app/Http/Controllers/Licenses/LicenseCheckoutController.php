@@ -10,6 +10,7 @@ use App\Models\Asset;
 use App\Models\CheckoutAcceptance;
 use App\Models\License;
 use App\Models\LicenseSeat;
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\View\View;
@@ -93,6 +94,20 @@ class LicenseCheckoutController extends Controller
         // Make sure the license is expired or terminated
         if ($license->isInactive()) {
             return redirect()->route('licenses.index')->with('error', trans('admin/licenses/message.checkout.license_is_inactive'));
+        }
+
+        if (Setting::getSettings()->full_multiple_companies_support == '1') {
+            if ($request->filled('asset_id')) {
+                $fmcsTarget = Asset::find($request->input('asset_id'));
+                if ($fmcsTarget && $license->company_id && $license->company_id !== $fmcsTarget->company_id) {
+                    return redirect()->route('licenses.index')->with('error', trans('general.error_user_company'));
+                }
+            } elseif ($request->filled('assigned_to')) {
+                $fmcsTarget = User::find($request->input('assigned_to'));
+                if ($fmcsTarget && $license->company_id && ! $fmcsTarget->canReceiveFromCompany($license->company_id)) {
+                    return redirect()->route('licenses.index')->with('error', trans('general.error_user_company'));
+                }
+            }
         }
 
         $licenseSeat = null;
@@ -240,19 +255,28 @@ class LicenseCheckoutController extends Controller
 
         Log::debug('Checking out '.$licenseId.' via bulk');
         $license = License::findOrFail($licenseId);
-        $this->authorize('checkin', $license);
-        $avail_count = $license->getAvailSeatsCountAttribute();
+        $this->authorize('checkout', $license);
 
-        $users = User::whereNull('deleted_at')->where('autoassign_licenses', '=', 1)->with('licenses')->get();
-        Log::debug($avail_count.' will be assigned');
-
-        if ($users->count() > $avail_count) {
-            Log::debug('You do not have enough free seats to complete this task, so we will check out as many as we can. ');
+        if ($license->isInactive()) {
+            return redirect()->back()->with('error', trans('admin/licenses/message.checkout.license_is_inactive'));
         }
 
         // If the license is valid, check that there is an available seat
         if ($license->availCount()->count() < 1) {
             return redirect()->back()->with('error', trans('admin/licenses/general.bulk.checkout_all.error_no_seats'));
+        }
+
+        $avail_count = $license->getAvailSeatsCountAttribute();
+
+        $usersQuery = User::whereNull('deleted_at')->where('autoassign_licenses', '=', 1)->with('licenses');
+        if (Setting::getSettings()->full_multiple_companies_support && $license->company_id) {
+            $usersQuery->where('company_id', '=', $license->company_id);
+        }
+        $users = $usersQuery->get();
+        Log::debug($avail_count.' will be assigned');
+
+        if ($users->count() > $avail_count) {
+            Log::debug('You do not have enough free seats to complete this task, so we will check out as many as we can. ');
         }
 
         $assigned_count = 0;

@@ -111,7 +111,7 @@ class AssetImporter extends ItemImporter
         }
 
         $this->item['notes'] = trim($this->findCsvMatch($row, 'asset_notes'));
-        $this->item['image'] = trim($this->findCsvMatch($row, 'image'));
+        $this->item['image'] = basename(trim($this->findCsvMatch($row, 'image')));
         $this->item['requestable'] = trim(($this->fetchHumanBoolean($this->findCsvMatch($row, 'requestable'))) == 1) ? '1' : 0;
         $asset->requestable = $this->item['requestable'];
         $this->item['warranty_months'] = intval(trim($this->findCsvMatch($row, 'warranty_months')));

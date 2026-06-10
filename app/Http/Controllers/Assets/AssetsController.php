@@ -358,7 +358,7 @@ class AssetsController extends Controller
 
             $qr_code = (object) [
                 'display' => $settings->qr_code == '1',
-                'url' => route('qr_code/hardware', $asset),
+                'url' => route('qr_code/common', ['object_type' => 'hardware', 'id' => $asset->id]),
             ];
 
             $total_maintenance_cost = $asset->maintenances?->sum('cost');
@@ -443,7 +443,7 @@ class AssetsController extends Controller
 
         if ($request->filled('image_delete')) {
             try {
-                unlink(public_path().'/uploads/assets/'.$asset->image);
+                unlink(public_path().'/uploads/assets/'.basename($asset->image));
                 $asset->image = '';
             } catch (\Exception $e) {
                 Log::info($e);
@@ -549,7 +549,7 @@ class AssetsController extends Controller
 
         if ($asset->image) {
             try {
-                Storage::disk('public')->delete('assets'.'/'.$asset->image);
+                Storage::disk('public')->delete('assets/'.basename($asset->image));
             } catch (\Exception $e) {
                 Log::debug($e);
             }

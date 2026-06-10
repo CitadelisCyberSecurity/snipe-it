@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 use Watson\Validating\ValidatingTrait;
 
 /**
@@ -155,11 +156,27 @@ final class Company extends SnipeModel
             if ($current_user->isSuperUser()) {
                 return self::getIdFromInput($unescaped_input);
             } else {
-                if ($current_user->company_id != null) {
-                    return $current_user->company_id;
-                } else {
-                    return null;
+                $userCompanyIds = self::getCurrentUserCompanyIds();
+                $submittedId = (int) self::getIdFromInput($unescaped_input);
+
+                // Company membership is now determined entirely by the pivot (company_user table).
+                // If the submitted value is a company the user actually belongs to, honour it.
+                if ($submittedId && in_array($submittedId, $userCompanyIds)) {
+                    return $submittedId;
                 }
+
+                // A user with pivot memberships who submits a company they don't belong to is
+                // attempting cross-tenant assignment — reject outright rather than silently
+                // overriding or storing null.
+                if ($submittedId && ! empty($userCompanyIds)) {
+                    throw ValidationException::withMessages([
+                        'company_id' => [trans('validation.in', ['attribute' => 'company_id'])],
+                    ]);
+                }
+
+                // No company submitted (or user has no pivot memberships) — fall back to the
+                // user's single company if unambiguous, otherwise null.
+                return count($userCompanyIds) === 1 ? $userCompanyIds[0] : null;
             }
         }
     }
@@ -269,7 +286,7 @@ final class Company extends SnipeModel
     {
         return ! self::isFullMultipleCompanySupportEnabled()
             || auth()->user()->isSuperUser()
-            || empty(self::getCurrentUserCompanyIds());
+            || ! empty(self::getCurrentUserCompanyIds());
     }
 
     /**
@@ -403,6 +420,16 @@ final class Company extends SnipeModel
 
             if (empty($companyIds)) {
                 return $query->whereNull($table.$column);
+            }
+
+            // action_logs: a NULL company_id means the logged object (AssetModel, Company, etc.)
+            // has no company_id column of its own. Those are global objects, visible to all users,
+            // so their log entries should not be hidden by the company filter.
+            if ($query->getModel()->getTable() === 'action_logs') {
+                return $query->where(function ($q) use ($table, $column, $companyIds) {
+                    $q->whereIn($table.$column, $companyIds)
+                        ->orWhereNull($table.$column);
+                });
             }
 
             return $query->whereIn($table.$column, $companyIds);

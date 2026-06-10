@@ -19,6 +19,7 @@ use App\Models\Group;
 use App\Models\Setting;
 use App\Models\User;
 use App\Notifications\MailTest;
+use App\Rules\CssColor;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -188,6 +189,13 @@ class SettingsController extends Controller
             if ($request->has('site_name')) {
                 $request->validate(['site_name' => 'required']);
             }
+
+            $request->validate([
+                'header_color' => ['nullable', new CssColor],
+                'link_light_color' => ['nullable', new CssColor],
+                'link_dark_color' => ['nullable', new CssColor],
+                'nav_link_color' => ['nullable', new CssColor],
+            ]);
 
             $setting->header_color = $request->input('header_color', '#3c8dbc');
             $setting->link_light_color = $request->input('link_light_color', '#296282');

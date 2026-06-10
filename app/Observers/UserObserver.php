@@ -75,13 +75,18 @@ class UserObserver
                     foreach (array_unique(array_merge(array_keys($oldDecoded), array_keys($newDecoded))) as $permKey) {
                         $oldPerm = $oldDecoded[$permKey] ?? null;
                         $newPerm = $newDecoded[$permKey] ?? null;
-                        if ($oldPerm != $newPerm) {
+                        // null and "0" are both "inherit" — treat them as equivalent
+                        $normalizedOld = ($oldPerm === null || $oldPerm === '0' || $oldPerm === 0) ? null : $oldPerm;
+                        $normalizedNew = ($newPerm === null || $newPerm === '0' || $newPerm === 0) ? null : $newPerm;
+                        if ($normalizedOld !== $normalizedNew) {
                             $diffOld[$permKey] = $oldPerm;
                             $diffNew[$permKey] = $newPerm;
                         }
                     }
-                    $changed['permissions']['old'] = json_encode($diffOld);
-                    $changed['permissions']['new'] = json_encode($diffNew);
+                    if (! empty($diffOld) || ! empty($diffNew)) {
+                        $changed['permissions']['old'] = json_encode($diffOld);
+                        $changed['permissions']['new'] = json_encode($diffNew);
+                    }
 
                     continue;
                 }

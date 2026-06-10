@@ -609,11 +609,20 @@ class AssetsController extends Controller
         ])->with('model', 'status', 'assignedTo')
             ->NotArchived();
 
+        // When FMCS is enabled, automatically scope to companies the acting user belongs to.
+        // scopeCompanyables is a no-op for superusers and when FMCS is disabled.
+        $assets = Company::scopeCompanyables($assets);
+
+        // Allow further narrowing to a specific company passed via data-company-id on the select.
         if ((Setting::getSettings()->full_multiple_companies_support == '1') && $request->filled('companyId')) {
             $companyIds = array_values(array_filter(array_map('intval', explode(',', $request->input('companyId')))));
             if (! empty($companyIds)) {
                 $assets->whereIn('assets.company_id', $companyIds);
             }
+        }
+
+        if ($request->filled('excludeId')) {
+            $assets->where('assets.id', '!=', (int) $request->input('excludeId'));
         }
 
         if ($request->filled('statusType') && $request->input('statusType') === 'RTD') {
@@ -904,11 +913,21 @@ class AssetsController extends Controller
 
     private function checkoutCompanyMismatchResponse(Asset $asset, User|Asset|Location $target): ?JsonResponse
     {
-        if ((Setting::getSettings()->full_multiple_companies_support == '1')
-            && (! is_null($asset->company_id))
-            && (! is_null($target->company_id))
-            && ((int) $asset->company_id !== (int) $target->company_id)
-        ) {
+        if (Setting::getSettings()->full_multiple_companies_support != '1' || is_null($asset->company_id)) {
+            return null;
+        }
+
+        // For users with multiple companies, check all their associated companies,
+        // not just the primary company_id column.
+        if ($target instanceof User) {
+            if (! $target->canReceiveFromCompany((int) $asset->company_id)) {
+                return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.error_user_company')));
+            }
+
+            return null;
+        }
+
+        if (! is_null($target->company_id) && (int) $asset->company_id !== (int) $target->company_id) {
             return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.error_user_company')));
         }
 
@@ -1062,13 +1081,8 @@ class AssetsController extends Controller
         }
 
         // In FMCS mode, enforce explicit same-company target checks before mutating checkout state.
-        $targetCompanyId = data_get($target, 'company_id');
-        if ((Setting::getSettings()->full_multiple_companies_support == '1')
-            && (! is_null($asset->company_id))
-            && (! is_null($targetCompanyId))
-            && ((int) $asset->company_id !== (int) $targetCompanyId)
-        ) {
-            return response()->json(Helper::formatStandardApiResponse('error', $error_payload, trans('general.error_user_company')));
+        if ($mismatch = $this->checkoutCompanyMismatchResponse($asset, $target)) {
+            return $mismatch;
         }
 
         $checkout_at = request('checkout_at', date('Y-m-d H:i:s'));
@@ -1126,7 +1140,9 @@ class AssetsController extends Controller
         $asset->assignedTo()->disassociate($asset);
         $asset->accepted = null;
 
-        if ($request->has('name')) {
+        if ($request->input('clear_name') == '1') {
+            $asset->name = null;
+        } elseif ($request->has('name')) {
             $asset->name = $request->input('name');
         }
 
@@ -1268,6 +1284,10 @@ class AssetsController extends Controller
             }
 
             $asset->last_audit_date = date('Y-m-d H:i:s');
+
+            if ($request->input('clear_name') == '1') {
+                $asset->name = null;
+            }
 
             // Set up the payload for re-display in the API response
             $payload = [

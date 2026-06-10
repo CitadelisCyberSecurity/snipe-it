@@ -102,7 +102,7 @@ class MaintenancesController extends Controller
         }
 
         // Make sure the offset and limit are actually integers and do not exceed system limits
-        $offset = ($request->input('offset') > $maintenances->count()) ? $maintenances->count() : abs($request->input('offset'));
+        $offset = ($request->input('offset') > $maintenances->count()) ? $maintenances->count() : app('api_offset_value');
         $limit = app('api_limit_value');
 
         $allowed_columns = [

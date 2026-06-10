@@ -9,6 +9,7 @@ use App\Models\Traits\Loggable;
 use App\Models\Traits\Searchable;
 use App\Presenters\Presentable;
 use App\Presenters\UserPresenter;
+use App\Rules\CssColor;
 use Illuminate\Auth\Authenticatable;
 use Illuminate\Auth\Passwords\CanResetPassword;
 use Illuminate\Contracts\Auth\Access\Authorizable as AuthorizableContract;
@@ -322,7 +323,7 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
     protected function displayName(): Attribute
     {
         return Attribute::make(
-            get: fn (mixed $value) => $value ?? $this->getFullNameAttribute(),
+            get: fn (mixed $value) => ($value !== null && $value !== '') ? $value : $this->getFullNameAttribute(),
         );
     }
 
@@ -600,7 +601,6 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
             && (($this->accessories_count ?? $this->accessories()->count()) === 0)
             && (($this->licenses_count ?? $this->licenses()->count()) === 0)
             && (($this->consumables_count ?? $this->consumables()->count()) === 0)
-            && (($this->accessories_count ?? $this->accessories()->count()) === 0)
             && (($this->manages_users_count ?? $this->managesUsers()->count()) === 0)
             && (($this->manages_locations_count ?? $this->managedLocations()->count()) === 0)
             && ($this->deleted_at == '');
@@ -623,6 +623,43 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
     public function companies(): BelongsToMany
     {
         return $this->belongsToMany(Company::class, 'company_user');
+    }
+
+    /**
+     * Returns whether an FMCS company check should allow this user to receive
+     * an asset that belongs to the given company.
+     *
+     * - If the user has no company associations at all: returns true (no restriction).
+     * - If the user has associations: returns true only when $companyId is among them.
+     */
+    public function canReceiveFromCompany(int $companyId): bool
+    {
+        // Query the pivot directly to avoid the Company model's FMCS global scope,
+        // which would restrict results to the current actor's visible companies.
+        $userCompanyIds = DB::table('company_user')
+            ->where('user_id', $this->id)
+            ->pluck('company_id');
+
+        if ($userCompanyIds->contains($companyId)) {
+            return true;
+        }
+
+        // User has no company associations — don't enforce.
+        if ($userCompanyIds->isEmpty()) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Returns all companies this user belongs to — union of the primary company_id
+     * column and the many-to-many pivot — as a deduplicated Collection.
+     * Used to scope FMCS dropdowns to companies the user is allowed to work with.
+     */
+    public function allCompanies(): Collection
+    {
+        return $this->companies->unique('id')->values();
     }
 
     /**
@@ -711,6 +748,27 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
         }
 
         return $this->last_name ? $this->first_name.' '.$this->last_name : $this->first_name;
+    }
+
+    protected function linkLightColor(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => CssColor::sanitize($value, '#296282'),
+        );
+    }
+
+    protected function linkDarkColor(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => CssColor::sanitize($value, '#5fa4cc'),
+        );
+    }
+
+    protected function navLinkColor(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => CssColor::sanitize($value, '#ffffff'),
+        );
     }
 
     /**
@@ -1464,28 +1522,38 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
 
     }
 
-    public function scopeWithInventoryRelations($query, int $id)
+    public function scopeWithInventoryRelations($query, int $id, bool $withLicenses = true, bool $withAccessories = true, bool $withConsumables = true)
     {
-        return $query->where('id', $id)
-            ->with([
-                'assets.log' => fn ($query) => $query->withTrashed()
-                    ->where('target_type', User::class)
-                    ->where('target_id', $id)
-                    ->where('action_type', 'accepted'),
-                'assets.defaultLoc',
-                'assets.location',
-                'assets.model.category',
-                'assets.assignedAssets.log' => fn ($query) => $query->withTrashed()
-                    ->where('target_type', User::class)
-                    ->where('target_id', $id)
-                    ->where('action_type', 'accepted'),
-                'assets.assignedAssets.assignedTo',
-                'assets.assignedAssets.defaultLoc',
-                'assets.assignedAssets.location',
-                'assets.assignedAssets.model.category',
-                'assets.components.category',
+        $with = [
+            'assets.log' => fn ($query) => $query->withTrashed()
+                ->where('target_type', User::class)
+                ->where('target_id', $id)
+                ->where('action_type', 'accepted'),
+            'assets.defaultLoc',
+            'assets.location',
+            'assets.model.category',
+            'assets.assignedAssets.log' => fn ($query) => $query->withTrashed()
+                ->where('target_type', User::class)
+                ->where('target_id', $id)
+                ->where('action_type', 'accepted'),
+            'assets.assignedAssets.assignedTo',
+            'assets.assignedAssets.defaultLoc',
+            'assets.assignedAssets.location',
+            'assets.assignedAssets.model.category',
+            'assets.components.category',
+        ];
+
+        if ($withLicenses) {
+            $with = array_merge($with, [
                 'assets.licenses',
                 'assets.licenses.category',
+                'directLicenses.category',
+                'licenses.category',
+            ]);
+        }
+
+        if ($withAccessories) {
+            $with = array_merge($with, [
                 'assets.assignedAccessories',
                 'assets.assignedAccessories.accessory.category',
                 'accessories.log' => fn ($query) => $query->withTrashed()
@@ -1494,16 +1562,21 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
                     ->where('action_type', 'accepted'),
                 'accessories.category',
                 'accessories.manufacturer',
+            ]);
+        }
+
+        if ($withConsumables) {
+            $with = array_merge($with, [
                 'consumables.log' => fn ($query) => $query->withTrashed()
                     ->where('target_type', User::class)
                     ->where('target_id', $id)
                     ->where('action_type', 'accepted'),
                 'consumables.category',
                 'consumables.manufacturer',
-                'directLicenses.category',
-                'licenses.category',
-            ])
-            ->withTrashed();
+            ]);
+        }
+
+        return $query->where('id', $id)->with($with)->withTrashed();
     }
 
     /**

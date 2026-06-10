@@ -277,6 +277,87 @@ class AssetCheckoutTest extends TestCase
         });
     }
 
+    public function test_asset_can_be_checked_out_to_user_in_same_company_via_pivot_when_fmcs_enabled()
+    {
+        // Regression: company check used to compare asset company_id to user's primary company_id only.
+        // Users assigned to multiple companies via the pivot table must be able to receive assets
+        // from any of their companies — not just their first/primary one.
+        $this->settings->enableMultipleFullCompanySupport();
+
+        [$companyA, $companyB, $companyC] = Company::factory()->count(3)->create();
+
+        // Actor is in companyC (same as the asset) so FMCS scoping lets them see and checkout it.
+        $actor = User::factory()->checkoutAssets()->for($companyC)->create();
+        $assetInCompanyC = Asset::factory()->for($companyC)->create();
+
+        // Target user's primary company is A, but they also belong to C via pivot.
+        $target = User::factory()->for($companyA)->create();
+        $target->companies()->sync([$companyA->id, $companyB->id, $companyC->id]);
+
+        $this->actingAsForApi($actor)
+            ->postJson(route('api.asset.checkout', $assetInCompanyC), [
+                'checkout_to_type' => 'user',
+                'assigned_user' => $target->id,
+            ])
+            ->assertOk()
+            ->assertStatusMessageIs('success');
+
+        $assetInCompanyC->refresh();
+        $this->assertEquals($target->id, $assetInCompanyC->assigned_to);
+    }
+
+    public function test_asset_cannot_be_checked_out_to_user_whose_companies_exclude_asset_company_when_fmcs_enabled()
+    {
+        $this->settings->enableMultipleFullCompanySupport();
+
+        [$companyA, $companyB, $companyC] = Company::factory()->count(3)->create();
+
+        // Actor is in companyC (same as the asset).
+        $actor = User::factory()->checkoutAssets()->for($companyC)->create();
+        $assetInCompanyC = Asset::factory()->for($companyC)->create();
+
+        // Target belongs to A and B — not C. Checkout to them should be blocked.
+        $target = User::factory()->for($companyA)->create();
+        $target->companies()->sync([$companyA->id, $companyB->id]);
+
+        $this->actingAsForApi($actor)
+            ->postJson(route('api.asset.checkout', $assetInCompanyC), [
+                'checkout_to_type' => 'user',
+                'assigned_user' => $target->id,
+            ])
+            ->assertOk()
+            ->assertStatusMessageIs('error')
+            ->assertMessagesAre(trans('general.error_user_company'));
+
+        $assetInCompanyC->refresh();
+        $this->assertNull($assetInCompanyC->assigned_to);
+    }
+
+    public function test_asset_can_be_checked_out_to_user_with_no_company_when_fmcs_enabled()
+    {
+        // Users with no company associations should not be blocked — they're unrestricted.
+        $this->settings->enableMultipleFullCompanySupport();
+
+        $company = Company::factory()->create();
+        // Actor is in the same company as the asset.
+        $actor = User::factory()->checkoutAssets()->for($company)->create();
+        $assetInCompany = Asset::factory()->for($company)->create();
+
+        $target = User::factory()->create(['company_id' => null]);
+        $target->companies()->sync([]);
+
+        $this->actingAsForApi($actor)
+            ->postJson(route('api.asset.checkout', $assetInCompany), [
+                'checkout_to_type' => 'user',
+                'assigned_user' => $target->id,
+            ])
+            ->assertOk()
+            ->assertStatusMessageIs('success');
+
+        $assetInCompany->refresh();
+        $this->assertEquals($target->id, $assetInCompany->assigned_to);
+    }
+
     public function test_license_seats_are_assigned_to_user_upon_checkout()
     {
         $this->markTestIncomplete('This is not implemented');

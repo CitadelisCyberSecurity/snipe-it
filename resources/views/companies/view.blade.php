@@ -75,7 +75,7 @@
         </x-page-column>
         <x-page-column class="col-md-3">
             <x-box class="side-box expanded">
-                <x-info-panel :infoPanelObj="$company" img_path="{{ app('companies_upload_url') }}">
+                <x-info-panel :infoPanelObj="$company" img_path="{{ app('companies_upload_url') }}" :qr_code_url="route('qr_code/common', ['object_type' => 'companies', 'id' => $company->id])">
 
                     <x-slot:buttons>
                         <x-button.edit :item="$company" :route="route('companies.edit', $company->id)" />

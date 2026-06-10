@@ -413,7 +413,7 @@
 
 
                               <!-- Manager -->
-                              @include ('partials.forms.edit.user-select', ['translated_name' => trans('admin/users/table.manager'), 'fieldname' => 'manager_id'])
+                              @include ('partials.forms.edit.user-select', ['translated_name' => trans('admin/users/table.manager'), 'fieldname' => 'manager_id', 'exclude_id' => isset($item) ? $item->id : null])
 
                               <!--  Department -->
                               @include ('partials.forms.edit.department-select', ['translated_name' => trans('general.department'), 'fieldname' => 'department_id'])

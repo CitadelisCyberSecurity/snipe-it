@@ -2,7 +2,6 @@
 
 namespace App\Http;
 
-use App\Http\Middleware\AssetCountForSidebar;
 use App\Http\Middleware\CheckColorSettings;
 use App\Http\Middleware\CheckForDebug;
 use App\Http\Middleware\CheckForSetup;
@@ -75,7 +74,6 @@ class Kernel extends HttpKernel
             CheckUserIsActivated::class,
             CheckForTwoFactor::class,
             CreateFreshApiToken::class,
-            AssetCountForSidebar::class,
             CheckColorSettings::class,
             AuthenticateSession::class,
             SubstituteBindings::class,

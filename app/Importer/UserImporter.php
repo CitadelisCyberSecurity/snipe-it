@@ -75,7 +75,7 @@ class UserImporter extends ItemImporter
         // Pull the records from the CSV to determine their values
         $this->item['id'] = trim($this->findCsvMatch($row, 'id'));
         $this->item['username'] = trim($this->findCsvMatch($row, 'username'));
-        $this->item['display_name'] = trim($this->findCsvMatch($row, 'display_name'));
+        $this->item['display_name'] = trim($this->findCsvMatch($row, 'display_name')) ?: null;
         $this->item['first_name'] = trim($this->findCsvMatch($row, 'first_name'));
         $this->item['last_name'] = trim($this->findCsvMatch($row, 'last_name'));
         $this->item['email'] = trim($this->findCsvMatch($row, 'email'));

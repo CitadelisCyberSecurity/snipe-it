@@ -10,7 +10,7 @@
 @include ('partials.forms.edit.name', ['translated_name' => trans('admin/locations/table.name')])
 
 <!-- parent -->
-@include ('partials.forms.edit.location-select', ['translated_name' => trans('admin/locations/table.parent'), 'fieldname' => 'parent_id'])
+@include ('partials.forms.edit.location-select', ['translated_name' => trans('admin/locations/table.parent'), 'fieldname' => 'parent_id', 'exclude_id' => isset($item) ? $item->id : null])
 
 <!-- Manager-->
 @include ('partials.forms.edit.user-select', ['translated_name' => trans('admin/users/table.manager'), 'fieldname' => 'manager_id'])

@@ -377,4 +377,37 @@ class AssetCheckinTest extends TestCase
             ->assertSessionHasNoErrors()
             ->assertRedirect(route('hardware.show', $asset));
     }
+
+    public function test_deleted_checked_out_asset_checkin_page_renders()
+    {
+        $asset = Asset::factory()->deleted()->assignedToUser()->create();
+
+        $this->actingAs(User::factory()->checkinAssets()->create())
+            ->get(route('hardware.checkin.create', $asset))
+            ->assertOk();
+    }
+
+    public function test_deleted_checked_out_asset_can_be_checked_in()
+    {
+        Event::fake([CheckoutableCheckedIn::class]);
+
+        $user = User::factory()->create();
+        $asset = Asset::factory()->deleted()->assignedToUser($user)->create();
+
+        $this->assertTrue($asset->assignedTo->is($user));
+        $this->assertNotNull($asset->deleted_at);
+
+        $this->actingAs(User::factory()->checkinAssets()->create())
+            ->post(route('hardware.checkin.store', $asset))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $asset->refresh();
+
+        $this->assertNull($asset->assignedTo);
+        $this->assertNull($asset->assigned_to);
+        $this->assertNotNull($asset->deleted_at, 'Asset should remain deleted after checkin');
+
+        Event::assertDispatched(CheckoutableCheckedIn::class);
+    }
 }

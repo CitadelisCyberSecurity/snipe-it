@@ -2377,6 +2377,8 @@
                 // Use element id to find the text element to hide / show
                 var targetElement = e.id+"-to-show";
                 var hiddenElement = e.id+"-to-hide";
+                var targetEl = document.getElementById(targetElement);
+                var isMarkdown = targetEl && targetEl.dataset.markdown;
                 var audio = new Audio('{{ config('app.url') }}/sounds/lock.mp3');
                 if($(e).hasClass('fa-lock')) {
                     @if ((isset($user)) && ($user->enable_sounds))
@@ -2384,7 +2386,11 @@
                     @endif
                     $(e).removeClass('fa-lock').addClass('fa-unlock');
                     // Show the encrypted custom value and hide the element with asterisks
-                    document.getElementById(targetElement).style.fontSize = "100%";
+                    if (isMarkdown) {
+                        targetEl.style.display = "block";
+                    } else {
+                        targetEl.style.fontSize = "100%";
+                    }
                     document.getElementById(hiddenElement).style.display = "none";
 
                 } else {
@@ -2393,7 +2399,12 @@
                     @endif
                     $(e).removeClass('fa-unlock').addClass('fa-lock');
                     // ClipboardJS can't copy display:none elements so use a trick to hide the value
-                    document.getElementById(targetElement).style.fontSize = "0px";
+                    if (isMarkdown) {
+                        targetEl.style.display = "none";
+                    } else {
+                        // ClipboardJS can't copy display:none elements so use a trick to hide the value
+                        targetEl.style.fontSize = "0px";
+                    }
                     document.getElementById(hiddenElement).style.display = "";
 
                  }
@@ -2515,23 +2526,34 @@
 
                 // Function to add original value to elements
                 function addValue($element) {
-                    // Get original value of the element
-                    var originalValue = $element.text().trim();
+                    var originalHtml = $element.html().trim();
+                    var originalText = $element.text().trim();
+                    var hasHtmlContent = originalHtml !== '' && originalHtml !== originalText;
 
-                    // Show asterisks only for not empty values
-                    if (originalValue !== '') {
-                        // This is necessary to avoid loop because value is generated dynamically
-                        if (originalValue !== '' && originalValue !== asterisks) $element.attr('value', originalValue);
+                    // Show asterisks only for non-empty values
+                    if (originalText !== '') {
+                        var asterisks = '*'.repeat(11);
+                        // Avoid reprocessing already-asterisked elements
+                        if (originalText !== asterisks) {
+                            if (hasHtmlContent) {
+                                $element.data('encrypted-html', originalHtml);
+                            }
+                            $element.attr('value', originalText);
+                        }
 
-                        // Hide the original value and show asterisks of the same length
-                        var asterisks = '*'.repeat(originalValue.length);
+                        // Hide the original value and show a fixed-length asterisk placeholder
                         $element.text(asterisks);
 
-                        // Add click event to show original text
+                        // Add click event to show original value
                         $element.click(function() {
                             var $this = $(this);
                             if ($this.text().trim() === asterisks) {
-                                $this.text($this.attr('value'));
+                                var savedHtml = $this.data('encrypted-html');
+                                if (savedHtml) {
+                                    $this.html(savedHtml);
+                                } else {
+                                    $this.text($this.attr('value'));
+                                }
                             } else {
                                 $this.text(asterisks);
                             }

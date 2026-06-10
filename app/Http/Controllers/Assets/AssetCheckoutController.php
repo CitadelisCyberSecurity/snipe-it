@@ -121,9 +121,14 @@ class AssetCheckoutController extends Controller
 
             $settings = Setting::getSettings();
 
-            // We have to check whether $target->company_id is null here since locations don't have a company yet
-            if (($settings->full_multiple_companies_support) && ((! is_null($target->company_id)) && (! is_null($asset->company_id)))) {
-                if ($target->company_id != $asset->company_id) {
+            // Locations have no company, so we only enforce FMCS when both sides have a company_id.
+            // For users with multiple companies, check all their associated companies via the pivot.
+            if ($settings->full_multiple_companies_support && ! is_null($asset->company_id)) {
+                $mismatch = $target instanceof User
+                    ? ! $target->canReceiveFromCompany((int) $asset->company_id)
+                    : (! is_null($target->company_id) && (int) $target->company_id !== (int) $asset->company_id);
+
+                if ($mismatch) {
                     return redirect()->route('hardware.checkout.create', $asset)->with('error', trans('general.error_user_company'));
                 }
             }
