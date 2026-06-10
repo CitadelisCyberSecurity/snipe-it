@@ -10,6 +10,7 @@ use App\Models\AccessReviewItem;
 use App\Models\Asset;
 use App\Models\User;
 use App\Notifications\AccessReviewCampaignLaunchedNotification;
+use App\Notifications\AccessReviewReminderNotification;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -250,15 +251,36 @@ class CampaignsController extends Controller
         $managers = $items->groupBy('manager_id')->map(function ($managerItems) {
             $first = $managerItems->first();
             return [
+                'id'    => $first->manager_id,
                 'name'  => $first->manager
                     ? trim($first->manager->first_name.' '.$first->manager->last_name)
                     : '—',
+                'email' => $first->manager?->email,
                 'total' => $managerItems->count(),
                 'done'  => $managerItems->every(fn ($i) => $i->manager_completed_at !== null),
             ];
         })->values();
 
         return view('access-review.campaigns.results', compact('campaign', 'items', 'summary', 'managers'));
+    }
+
+    public function remindManager(AccessReviewCampaign $campaign, User $manager): JsonResponse
+    {
+        $this->authorize('admin');
+
+        if (! $manager->email) {
+            return response()->json([
+                'error' => trans('admin/access-review/general.reminder_no_email'),
+            ], 422);
+        }
+
+        $itemCount = $campaign->items()->where('manager_id', $manager->id)->count();
+
+        $manager->notify(new AccessReviewReminderNotification($campaign, $itemCount));
+
+        return response()->json([
+            'success' => trans('admin/access-review/general.reminder_sent', ['name' => $manager->first_name]),
+        ]);
     }
 
     public function executeItem(Request $request, AccessReviewCampaign $campaign, AccessReviewItem $item): JsonResponse

@@ -140,6 +140,8 @@ Route::group(['middleware' => 'auth'], function () {
                 ->push($campaign->name));
         Route::post('campaigns/{campaign}/items/{item}/execute', [App\Http\Controllers\AccessReview\CampaignsController::class, 'executeItem'])
             ->name('campaigns.items.execute');
+        Route::post('campaigns/{campaign}/remind/{manager}', [App\Http\Controllers\AccessReview\CampaignsController::class, 'remindManager'])
+            ->name('campaigns.remind-manager');
         Route::post('campaigns/bulk-destroy', [App\Http\Controllers\AccessReview\CampaignsController::class, 'bulkDestroy'])
             ->name('campaigns.bulk-destroy');
         Route::post('campaigns', [App\Http\Controllers\AccessReview\CampaignsController::class, 'store'])

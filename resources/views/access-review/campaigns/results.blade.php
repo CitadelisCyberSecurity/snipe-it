@@ -52,6 +52,7 @@
                         <th>{{ trans('admin/access-review/general.manager') }}</th>
                         <th>{{ trans('admin/access-review/general.items_count') }}</th>
                         <th>{{ trans('admin/access-review/general.status') }}</th>
+                        <th class="hidden-print"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -64,6 +65,17 @@
                                     <span class="label label-success">{{ trans('admin/access-review/general.review_status_complete') }}</span>
                                 @else
                                     <span class="label label-warning">{{ trans('admin/access-review/general.review_status_in_progress') }}</span>
+                                @endif
+                            </td>
+                            <td class="hidden-print" style="white-space:nowrap;">
+                                @if($mgr['id'] && $mgr['email'])
+                                    <button type="button"
+                                            class="btn btn-xs btn-default remind-btn"
+                                            data-url="{{ route('access-review.campaigns.remind-manager', [$campaign, $mgr['id']]) }}"
+                                            data-name="{{ $mgr['name'] }}">
+                                        <i class="fa fa-envelope fa-fw"></i>
+                                        {{ trans('admin/access-review/general.remind') }}
+                                    </button>
                                 @endif
                             </td>
                         </tr>
@@ -198,6 +210,30 @@
 <script>
 $(function () {
     var csrfToken = '{{ csrf_token() }}';
+
+    $(document).on('click', '.remind-btn', function () {
+        var $btn  = $(this);
+        var url   = $btn.data('url');
+        var name  = $btn.data('name');
+
+        $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin fa-fw"></i>');
+
+        $.ajax({
+            url:    url,
+            method: 'POST',
+            data:   { _token: csrfToken },
+            success: function (res) {
+                $btn.html('<i class="fa fa-check fa-fw"></i> {{ trans('admin/access-review/general.remind') }}')
+                    .addClass('btn-success').removeClass('btn-default');
+            },
+            error: function (xhr) {
+                $btn.prop('disabled', false)
+                    .html('<i class="fa fa-envelope fa-fw"></i> {{ trans('admin/access-review/general.remind') }}');
+                var msg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Failed to send.';
+                alert(msg);
+            },
+        });
+    });
 
     $(document).on('click', '.execute-btn', function () {
         var $btn    = $(this);

@@ -88,4 +88,9 @@ return [
     'email_launched_greeting'   => 'Hi :name,',
     'email_launched_body'       => 'A new access review campaign ":campaign" has been launched. You have :count license seat(s) assigned to your direct reports that require your review.',
     'email_launched_cta'        => 'Start My Review',
+    'email_reminder_subject'    => 'Reminder: Access Review Pending — :campaign',
+    'email_reminder_body'       => 'This is a reminder that you still have :count license seat(s) pending review for the ":campaign" campaign. Please complete your review at your earliest convenience.',
+    'remind'                    => 'Send Reminder',
+    'reminder_sent'             => 'Reminder sent to :name.',
+    'reminder_no_email'         => 'This manager has no email address on file.',
 ];
