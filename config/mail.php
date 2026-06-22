@@ -47,6 +47,8 @@ return [
 
     'default' => env('MAIL_DRIVER') != null ? env('MAIL_DRIVER') : env('MAIL_MAILER', 'smtp'),
 
+    'to_override' => env('MAIL_TO_OVERRIDE'),
+
     /*
     |--------------------------------------------------------------------------
     | Mailer Configurations

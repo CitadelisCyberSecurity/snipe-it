@@ -27,6 +27,7 @@ use App\View\Composers\SidebarComposer;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Routing\UrlGenerator;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
@@ -73,6 +74,10 @@ class AppServiceProvider extends ServiceProvider
             } else {
                 Log::error('Your APP_URL in your .env is misconfigured - it is: '.config('app.url').'. Many things will work strangely unless you fix it.');
             }
+        }
+
+        if (config('mail.to_override')) {
+            Mail::alwaysTo(config('mail.to_override'));
         }
 
         Paginator::useBootstrap();

@@ -1566,6 +1566,14 @@
 
     }
 
+    function costSorter(a, b) {
+        var toNum = function (v) {
+            var s = String(v).replace(/[$,]/g, '').trim();
+            return (s === '—' || s === '&mdash;' || s === '') ? -1 : parseFloat(s);
+        };
+        return toNum(a) - toNum(b);
+    }
+
     function progressBarFormatter(value) {
         var bar_color = 'danger';
 

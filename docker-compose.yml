@@ -6,12 +6,12 @@ volumes:
 
 services:
   app:
-    build : .
+    image: snipe/snipe-it:${APP_VERSION:-latest}
     restart: unless-stopped
     volumes:
       - storage:/var/lib/snipeit
     ports:
-      - "8000:80"
+      - "${APP_PORT:-8000}:80"
     depends_on:
       db:
         condition: service_healthy

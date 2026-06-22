@@ -235,6 +235,13 @@ Route::group(['prefix' => 'v1', 'middleware' => ['api', 'api-throttle:api']], fu
         ]
     ); // end departments API routes
 
+    /*
+     * Access Review API routes
+     */
+    Route::get('access-review/campaigns',
+        [Api\AccessReview\CampaignsController::class, 'index']
+    )->name('api.access-review.campaigns.index');
+
     /**
      * Components API routes
      */
