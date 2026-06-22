@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\AccessReview;
 use App\Http\Controllers\Controller;
 use App\Http\Transformers\AccessReviewCampaignsTransformer;
 use App\Models\AccessReviewCampaign;
+use App\Models\Company;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,6 +14,12 @@ class CampaignsController extends Controller
     public function index(Request $request): JsonResponse|array
     {
         $this->authorize('admin');
+
+        // Mirror the web controller: the feature is not company-scoped, so under Full Multiple
+        // Company Support only superusers may read the campaign datatable feed.
+        if (Company::isFullMultipleCompanySupportEnabled() && ! auth()->user()->isSuperUser()) {
+            abort(403, trans('admin/access-review/general.fmcs_superuser_only'));
+        }
 
         $allowed_columns = ['id', 'name', 'status', 'status_label', 'launched_at', 'closed_at', 'created_at'];
 

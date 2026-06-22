@@ -14,14 +14,19 @@ final class SnapshotCampaignItemsAction
         $count = 0;
 
         DB::transaction(function () use ($campaign, $now, &$count) {
-            $rows = DB::table('license_seats')
+            $query = DB::table('license_seats')
                 ->join('users', 'license_seats.assigned_to', '=', 'users.id')
                 ->join('licenses', 'license_seats.license_id', '=', 'licenses.id')
                 ->whereNull('license_seats.deleted_at')
                 ->whereNull('users.deleted_at')
                 ->whereNull('licenses.deleted_at')
-                ->whereNotNull('users.manager_id')
-                ->select([
+                ->whereNotNull('users.manager_id');
+
+            if (! empty($campaign->company_ids)) {
+                $query->whereIn('licenses.company_id', $campaign->company_ids);
+            }
+
+            $rows = $query->select([
                     'license_seats.id as license_seat_id',
                     'license_seats.license_id',
                     'users.id as user_id',

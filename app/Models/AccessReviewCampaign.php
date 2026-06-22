@@ -30,12 +30,14 @@ class AccessReviewCampaign extends SnipeModel
     protected $fillable = [
         'name',
         'description',
+        'company_ids',
     ];
 
     protected $casts = [
-        'launched_at' => 'datetime',
-        'closed_at' => 'datetime',
-        'created_by' => 'integer',
+        'launched_at'  => 'datetime',
+        'closed_at'    => 'datetime',
+        'created_by'   => 'integer',
+        'company_ids'  => 'array',
     ];
 
     public function items(): HasMany

@@ -189,6 +189,39 @@ class AdminExecuteActionsTest extends TestCase
         $this->assertEquals($admin->id, $item->fresh()->admin_executed_by);
     }
 
+    public function test_executing_delete_does_not_revoke_a_seat_reassigned_to_another_user(): void
+    {
+        $admin     = User::factory()->admin()->create();
+        $reviewed  = User::factory()->create();
+        $newHolder = User::factory()->create();
+        $license   = License::factory()->create(['reassignable' => 1]);
+        // Seat was reviewed for $reviewed, but has since been re-issued to $newHolder.
+        $seat      = LicenseSeat::factory()->create(['license_id' => $license->id, 'assigned_to' => $newHolder->id]);
+        $campaign  = AccessReviewCampaign::factory()->active()->create();
+        $item      = AccessReviewItem::factory()
+            ->reviewedAs(AccessReviewItem::STATUS_DELETE)
+            ->create([
+                'campaign_id'     => $campaign->id,
+                'user_id'         => $reviewed->id,
+                'license_id'      => $license->id,
+                'license_seat_id' => $seat->id,
+            ]);
+
+        $this->actingAs($admin)
+            ->postJson($this->executeUrl($campaign, $item))
+            ->assertOk()
+            ->assertJsonStructure(['success', 'warning']);
+
+        // The current (innocent) holder must NOT be revoked.
+        $this->assertDatabaseHas('license_seats', [
+            'id'          => $seat->id,
+            'assigned_to' => $newHolder->id,
+        ]);
+
+        // Item is still marked executed (the reviewed assignment no longer exists).
+        $this->assertNotNull($item->fresh()->admin_executed_at);
+    }
+
     public function test_executing_delete_when_seat_already_unassigned_still_marks_item_executed(): void
     {
         $admin    = User::factory()->admin()->create();

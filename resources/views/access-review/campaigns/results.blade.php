@@ -171,7 +171,7 @@
                                             <td>
                                                 @if($visibleStatus && ! $item->isExecuted() && $visibleStatus !== 'keep')
                                                     @if($visibleStatus === 'modify')
-                                                        <a href="{{ route('licenses.edit', $item->license_id) }}"
+                                                        <a href="{{ route('licenses.show', $item->license_id) }}#seats"
                                                            class="btn btn-xs btn-{{ $decisionClass }}">
                                                             {{ trans('admin/access-review/general.execute') }}
                                                         </a>
@@ -251,10 +251,13 @@ $(function () {
             url:    url,
             method: 'POST',
             data:   { _token: csrfToken },
-            success: function () {
+            success: function (response) {
                 var $row = $('#item-row-' + itemId);
                 $row.find('td:nth-last-child(2)').html('<i class="fa fa-check text-success"></i>');
                 $btn.closest('td').empty();
+                if (response && response.warning) {
+                    alert(response.warning);
+                }
             },
             error: function (xhr) {
                 var msg = '{{ trans('admin/access-review/general.execute_error') }}';

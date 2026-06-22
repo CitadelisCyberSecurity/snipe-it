@@ -6,7 +6,8 @@ return [
     'campaign' => 'Campaign',
     'new_campaign' => 'New Campaign',
     'edit_campaign' => 'Edit Campaign',
-    'name' => 'Name',
+    'name'      => 'Name',
+    'companies' => 'Companies',
     'description' => 'Description',
     'status' => 'Status',
     'status_draft' => 'Draft',
@@ -82,6 +83,7 @@ return [
     'executed'                  => 'Executed',
     'execute_success'           => 'Action executed.',
     'execute_error'             => 'Failed to execute action.',
+    'seat_changed_since_snapshot' => 'The seat was no longer assigned to the reviewed user (it may have been reassigned or checked in since this campaign launched), so nothing was revoked. The item has been marked as executed.',
 
     // Email notifications
     'email_launched_subject'    => 'Action Required: Access Review — :campaign',
@@ -93,4 +95,8 @@ return [
     'remind'                    => 'Send Reminder',
     'reminder_sent'             => 'Reminder sent to :name.',
     'reminder_no_email'         => 'This manager has no email address on file.',
+    'reminder_no_items'         => 'This user has no items to review in this campaign.',
+
+    // Authorization
+    'fmcs_superuser_only'       => 'Access Review is restricted to superusers when Full Multiple Company Support is enabled.',
 ];
