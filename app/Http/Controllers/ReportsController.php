@@ -16,6 +16,7 @@ use App\Models\AssetModel;
 use App\Models\Category;
 use App\Models\Checkoutable;
 use App\Models\CheckoutAcceptance;
+use App\Models\Company;
 use App\Models\Component;
 use App\Models\Consumable;
 use App\Models\CustomField;
@@ -799,12 +800,11 @@ class ReportsController extends Controller
                 $checkout_start = Carbon::parse($request->input('checkout_date_start'))->startOfDay();
                 $checkout_end = Carbon::parse($request->input('checkout_date_end', now()))->endOfDay();
 
-                $actionlogassets = Actionlog::where('action_type', '=', 'checkout')
-                    ->where('item_type', 'LIKE', '%Asset%')
-                    ->whereBetween('action_date', [$checkout_start, $checkout_end])
-                    ->pluck('item_id');
+                $actionlogassets = Actionlog::select('item_id')->where('action_type', '=', 'checkout')
+                    ->where('item_type', '=', Asset::class)
+                    ->whereBetween('action_date', [$checkout_start, $checkout_end]); // we are *not* doing ->get()...
 
-                $assets->whereIn('assets.id', $actionlogassets);
+                $assets->whereIn('assets.id', $actionlogassets); // ...because this _should_ act as a 'subquery'
             }
 
             if (($request->filled('checkin_date_start'))) {
@@ -1325,6 +1325,11 @@ class ReportsController extends Controller
             // Redirect to the unaccepted items report page with error
             return redirect()->route('reports/unaccepted_assets')->with('error', trans('general.bad_data'));
         }
+
+        if (! $this->currentUserCanAccessAcceptance($acceptance)) {
+            return redirect()->route('reports/unaccepted_assets')->with('error', trans('general.insufficient_permissions'));
+        }
+
         $item = $acceptance->checkoutable;
         $assignee = $acceptance->assignedTo ?? $item->assignedTo ?? null;
         $email = $assignee?->email;
@@ -1359,6 +1364,28 @@ class ReportsController extends Controller
         return redirect()->route('reports/unaccepted_assets')->with('success', trans('admin/reports/general.reminder_sent'));
     }
 
+    private function currentUserCanAccessAcceptance(CheckoutAcceptance $acceptance): bool
+    {
+        if (! Company::isFullMultipleCompanySupportEnabled()) {
+            return true;
+        }
+
+        if (auth()->user()->isSuperUser()) {
+            return true;
+        }
+
+        // Bypass Eloquent global scopes so cross-company items are still resolved for the check.
+        $checkoutableType = $acceptance->checkoutable_type;
+        $checkoutable = $checkoutableType::withoutGlobalScopes()->find($acceptance->checkoutable_id);
+
+        // LicenseSeat has no company_id of its own; the parent License carries the company.
+        if ($checkoutable instanceof LicenseSeat) {
+            $checkoutable = License::withoutGlobalScopes()->find($checkoutable->license_id);
+        }
+
+        return Company::isCurrentUserHasAccess($checkoutable);
+    }
+
     private function getCheckoutMailType(CheckoutAcceptance $acceptance, $logItem): Mailable
     {
         $lookup = [
@@ -1391,9 +1418,19 @@ class ReportsController extends Controller
     {
         $this->authorize('reports.view');
 
-        if (! $acceptance = CheckoutAcceptance::pending()->find($acceptanceId)) {
+        $acceptance = CheckoutAcceptance::pending()
+            ->with(['checkoutable' => function (MorphTo $morphTo) {
+                $morphTo->morphWith([LicenseSeat::class => ['license']]);
+            }])
+            ->find($acceptanceId);
+
+        if (! $acceptance) {
             // Redirect to the unaccepted assets report page with error
             return redirect()->route('reports/unaccepted_assets')->with('error', trans('general.bad_data'));
+        }
+
+        if (! $this->currentUserCanAccessAcceptance($acceptance)) {
+            return redirect()->route('reports/unaccepted_assets')->with('error', trans('general.insufficient_permissions'));
         }
 
         if ($acceptance->delete()) {

@@ -310,7 +310,7 @@ class AssetPresenter extends Presenter
                 'formatter' => 'dateDisplayFormatter',
             ], [
                 'field' => 'expected_checkin',
-                'searchable' => false,
+                'searchable' => true,
                 'sortable' => true,
                 'visible' => false,
                 'title' => trans('admin/hardware/form.expected_checkin'),

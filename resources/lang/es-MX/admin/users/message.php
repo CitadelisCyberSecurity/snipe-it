@@ -15,7 +15,7 @@ return [
     'user_deleted_warning' => 'Este usuario ha sido eliminado. Tendrá que restaurar este usuario para editarlo o para asignarle nuevos activos.',
     'ldap_not_configured' => 'La integración con LDAP no ha sido configurada para esta instalación.',
     'password_resets_sent' => 'Los usuarios seleccionados que están activados y tienen una dirección de correo electrónico válida han sido enviados un enlace de restablecimiento de contraseña.',
-    'not_activated' => 'This user cannot login, so they cannot accept assets via email.',
+    'not_activated' => 'Este usuario no puede iniciar sesión, por lo que no puede aceptar activos por correo electrónico.',
     'password_reset_sent' => '¡Se ha enviado un enlace de restablecimiento de contraseña a :email!',
     'user_has_no_email' => 'Este usuario no tiene una dirección de correo electrónico en su perfil.',
     'log_record_not_found' => 'No se pudo encontrar un registro de eventos que coincida con este usuario.',
@@ -31,7 +31,7 @@ return [
         'unsuspend' => 'Usuario correctamente no suspendido.',
         'restored' => 'Usuario correctamente restaurado.',
         'import' => 'Usuarios importados correctamente.',
-        'acceptance_reminder_sent' => 'Acceptance reminder sent for :count pending item.|Acceptance reminder sent for :count pending items.',
+        'acceptance_reminder_sent' => 'Recordatorio de aceptación enviado para :count elemento pendiente.|Recordatorio de aceptación enviado para :count elementos pendientes.',
     ],
 
     'error' => [
@@ -56,7 +56,7 @@ return [
         'ldap_could_not_get_entries' => 'No se han podido obtener entradas del servidor LDAP. Por favor verifique la configuración de su servidor LDAP en su archivo de configuración.<br> Error del servidor LDAP:',
         'password_ldap' => 'La contraseña para esta cuenta es administrada por LDAP / Active Directory. Póngase en contacto con su departamento de TI para cambiar su contraseña.',
         'multi_company_items_assigned' => 'Este usuario tiene elementos asignados que pertenecen a una empresa diferente. Por favor, ingréselos o edite su empresa.',
-        'no_pending_acceptances' => 'This user has no pending acceptances to remind them about.',
+        'no_pending_acceptances' => 'Este usuario no tiene aceptaciones pendientes de recordarles.',
     ],
 
     'deletefile' => [

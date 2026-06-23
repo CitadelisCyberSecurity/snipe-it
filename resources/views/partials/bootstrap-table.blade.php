@@ -1383,26 +1383,45 @@
     }
 
 
+    // Use document.getElementById and DOM/jQuery element constructors throughout this block
+    // rather than jQuery selector parsing or HTML string concatenation. The countId value
+    // originates from a data attribute that may contain stored user input (e.g. a manufacturer
+    // or supplier name), and jQuery decodes HTML entities in data attributes before returning
+    // them to JS. Concatenating a decoded attacker-controlled value into an HTML string passed
+    // to .after() would allow stored XSS; setting it via DOM APIs treats it as plain text.
     function updateSelectedCount(table) {
         var countId = $(table).data('selected-count-id');
-        if (!countId || !$(countId).length) return;
+        if (!countId) return;
+        var rawCountId = countId.charAt(0) === '#' ? countId.substring(1) : countId;
+        if (!rawCountId) return;
+        var el = document.getElementById(rawCountId);
+        if (!el) return;
         var count = $(table).bootstrapTable('getSelections').length;
-        $(countId).find('.badge').text(count);
+        $(el).find('.badge').text(count);
         if (count > 0) {
-            $(countId).show();
+            $(el).show();
         } else {
-            $(countId).hide();
+            $(el).hide();
         }
     }
 
     $('.snipe-table').on('post-body.bs.table', function () {
         var countId = $(this).data('selected-count-id');
         if (!countId) return;
+        var rawCountId = countId.charAt(0) === '#' ? countId.substring(1) : countId;
+        if (!rawCountId) return;
         var $paginationDetail = $(this).closest('.bootstrap-table')
             .find('.fixed-table-pagination').first()
             .find('.pagination-detail');
-        if ($paginationDetail.length && $(countId).length === 0) {
-            $paginationDetail.after('<span id="' + countId.substring(1) + '" style="display:none; float:left; margin-top:10px; margin-bottom:10px; margin-left:10px; line-height:34px;">&mdash; <span class="badge">0</span> {{ trans('general.selected') }}</span>');
+        if ($paginationDetail.length && !document.getElementById(rawCountId)) {
+            var $selectedCount = $('<span/>', {
+                id: rawCountId,
+                style: 'display:none; float:left; margin-top:10px; margin-bottom:10px; margin-left:10px; line-height:34px;'
+            });
+            $selectedCount.append(document.createTextNode('— '));
+            $selectedCount.append($('<span/>', { 'class': 'badge', text: '0' }));
+            $selectedCount.append(document.createTextNode(' {{ trans('general.selected') }}'));
+            $paginationDetail.after($selectedCount);
         }
         updateSelectedCount(this);
     });
@@ -1413,7 +1432,12 @@
         var tableId =  $(this).data('id-table');
 
         $(buttonName).removeAttr('disabled');
-        $(buttonName).after('<input id="' + tableId + '_checkbox_' + $element.id + '" type="hidden" name="ids[]" value="' + $element.id + '">');
+        $(buttonName).after($('<input/>', {
+            id: tableId + '_checkbox_' + $element.id,
+            type: 'hidden',
+            name: 'ids[]',
+            value: $element.id
+        }));
         updateSelectedCount(this);
     });
 
@@ -1424,8 +1448,13 @@
 
         for (var i in rowsAfter) {
             // Do not select things that were already selected
-            if($('#'+ tableId + '_checkbox_' + rowsAfter[i].id).length == 0) {
-                $(buttonName).after('<input id="' + tableId + '_checkbox_' + rowsAfter[i].id + '" type="hidden" name="ids[]" value="' + rowsAfter[i].id + '">');
+            if (!document.getElementById(tableId + '_checkbox_' + rowsAfter[i].id)) {
+                $(buttonName).after($('<input/>', {
+                    id: tableId + '_checkbox_' + rowsAfter[i].id,
+                    type: 'hidden',
+                    name: 'ids[]',
+                    value: rowsAfter[i].id
+                }));
             }
         }
 

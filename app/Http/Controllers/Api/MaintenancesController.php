@@ -269,17 +269,33 @@ class MaintenancesController extends Controller
 
         if ($maintenance = Maintenance::with('asset')->find($id)) {
 
-            // Can this user manage this asset?
-            if (! Company::isCurrentUserHasAccess($maintenance->asset)) {
-                return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.action_permission_denied', ['item_type' => trans('admin/maintenances/general.maintenance'), 'id' => $id, 'action' => trans('general.edit')])));
-            }
-
-            // The asset this miantenance is attached to is not valid or has been deleted
+            // The asset this maintenance is attached to is not valid or has been deleted
             if (! $maintenance->asset) {
                 return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.item_not_found', ['item_type' => trans('general.asset'), 'id' => $id])));
             }
 
-            $maintenance->fill($request->all());
+            // Can this user manage the existing asset?
+            if (! Company::isCurrentUserHasAccess($maintenance->asset)) {
+                return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.action_permission_denied', ['item_type' => trans('admin/maintenances/general.maintenance'), 'id' => $id, 'action' => trans('general.edit')])));
+            }
+
+            // If the request changes asset_id, verify the new asset is accessible
+            if ($request->filled('asset_id') && (int) $request->input('asset_id') !== $maintenance->asset_id) {
+                $newAsset = Asset::find($request->input('asset_id'));
+
+                if (! $newAsset) {
+                    return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.item_not_found', ['item_type' => trans('general.asset'), 'id' => $request->input('asset_id')])));
+                }
+
+                if (! Company::isCurrentUserHasAccess($newAsset)) {
+                    return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.action_permission_denied', ['item_type' => trans('general.asset'), 'id' => $request->input('asset_id'), 'action' => trans('general.edit')])), 403);
+                }
+
+                $maintenance->fill($request->except('asset_id'));
+                $maintenance->asset_id = $newAsset->id;
+            } else {
+                $maintenance->fill($request->except('asset_id'));
+            }
 
             if ($maintenance->save()) {
                 return response()->json(Helper::formatStandardApiResponse('success', $maintenance, trans('admin/maintenances/message.edit.success')));

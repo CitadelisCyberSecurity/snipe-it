@@ -151,4 +151,70 @@ class ExportUsersTest extends TestCase
                 trans('admin/companies/table.title') => 'Rebel Alliance|Galactic Senate',
             ]);
     }
+
+    public function test_fmcs_export_excludes_other_company_users()
+    {
+        $this->settings->enableMultipleFullCompanySupport();
+
+        [$companyA, $companyB] = Company::factory()->count(2)->create();
+
+        $actorCompany = $companyA;
+        $inScope  = User::factory()->create();
+        $inScope->companies()->sync([$actorCompany->id]);
+
+        $outScope = User::factory()->create();
+        $outScope->companies()->sync([$companyB->id]);
+
+        $actor = User::factory()->viewUsers()->create();
+        $actor->companies()->sync([$actorCompany->id]);
+
+        $this->actingAs($actor)
+            ->get(route('users.export'))
+            ->assertOk()
+            ->assertSeeTextInStreamedResponse([$inScope->username])
+            ->assertDontSeeTextInStreamedResponse([$outScope->username]);
+    }
+
+    public function test_fmcs_export_excludes_null_company_users_when_floater_off()
+    {
+        $this->settings->enableMultipleFullCompanySupport();
+        $this->settings->disableFloaterMode();
+
+        $company = Company::factory()->create();
+
+        $inScope    = User::factory()->create();
+        $inScope->companies()->sync([$company->id]);
+
+        $nullCompany = User::factory()->create(['company_id' => null]);
+
+        $actor = User::factory()->viewUsers()->create();
+        $actor->companies()->sync([$company->id]);
+
+        $this->actingAs($actor)
+            ->get(route('users.export'))
+            ->assertOk()
+            ->assertSeeTextInStreamedResponse([$inScope->username])
+            ->assertDontSeeTextInStreamedResponse([$nullCompany->username]);
+    }
+
+    public function test_fmcs_export_includes_null_company_users_when_floater_on()
+    {
+        $this->settings->enableMultipleFullCompanySupport();
+        $this->settings->enableFloaterMode();
+
+        $company = Company::factory()->create();
+
+        $inScope    = User::factory()->create();
+        $inScope->companies()->sync([$company->id]);
+
+        $nullCompany = User::factory()->create(['company_id' => null]);
+
+        $actor = User::factory()->viewUsers()->create();
+        $actor->companies()->sync([$company->id]);
+
+        $this->actingAs($actor)
+            ->get(route('users.export'))
+            ->assertOk()
+            ->assertSeeTextInStreamedResponse([$inScope->username, $nullCompany->username]);
+    }
 }

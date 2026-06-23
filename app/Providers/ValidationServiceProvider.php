@@ -349,6 +349,20 @@ class ValidationServiceProvider extends ServiceProvider
             return in_array($value, $options);
         });
 
+        Validator::replacer('fmcs_location', function ($message, $attribute, $rule, $parameters, $validator) {
+            $locationId = $validator->getData()[$attribute] ?? null;
+            $location = $locationId ? Location::find($locationId) : null;
+
+            return str_replace(
+                [':location_company', ':location'],
+                [
+                    $location?->company?->name ?? trans('general.unassigned'),
+                    $location?->name ?? '?',
+                ],
+                $message
+            );
+        });
+
         // Validates that the company of the validated object matches the company of the location in case of scoped locations
         Validator::extend('fmcs_location', function ($attribute, $value, $parameters, $validator) {
             $settings = Setting::getSettings();
@@ -359,10 +373,25 @@ class ValidationServiceProvider extends ServiceProvider
                     (array) ($data['company_ids'] ?? []),
                     [$data['company_id'] ?? null]
                 )));
+                // No company context available (e.g. model-level validation before companies are
+                // persisted) — nothing to compare against, so skip the check.
+                if (empty($companyIds)) {
+                    return true;
+                }
+
                 $location = Location::find($value);
 
-                if ($location && ! in_array($location->company_id, $companyIds)) {
-                    return false;
+                if ($location) {
+                    $effectiveCompanyId = $location->effectiveFmcsCompanyId();
+
+                    if ($effectiveCompanyId === null) {
+                        // No company found anywhere in the parent chain — floater rule applies.
+                        return (bool) $settings->null_company_is_floater;
+                    }
+
+                    if (! in_array($effectiveCompanyId, $companyIds)) {
+                        return false;
+                    }
                 }
             }
 

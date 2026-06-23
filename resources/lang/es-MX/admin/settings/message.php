@@ -61,7 +61,7 @@ return [
         'token_unrevoked' => 'Token de acceso personal restablecido con éxito.',
         'token_not_found' => 'Ese token de acceso personal no pudo ser encontrado.',
         'token_revoke_error' => 'Se ha producido un error al revocar el token.',
-        'token_unrevoke_error' => 'Ocurrió un error mientras se restablecía el token.',
+        'token_unrevoke_error' => 'Se ha producido un error al restablecer el token.',
         'client_created' => 'Cliente OAuth creado correctamente.',
         'client_updated' => 'Cliente OAuth actualizado correctamente.',
         'client_deleted' => 'Cliente OAuth eliminado correctamente.',

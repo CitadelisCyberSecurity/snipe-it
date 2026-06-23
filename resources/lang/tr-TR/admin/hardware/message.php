@@ -95,8 +95,8 @@ return [
     ],
 
     'multi-checkin' => [
-        'error' => 'Asset was not checked in, please try again|Assets were not checked in, please try again',
-        'success' => 'Asset checked in successfully.|Assets checked in successfully.',
+        'error' => 'Varlık zimmetten düşülemedi, lütfen tekrar deneyin|Varlıklar zimmetten düşülemedi, lütfen tekrar deneyin',
+        'success' => 'Varlık başarıyla zimmetten düşüldü.|Varlıklar başarıyla zimmetten düşüldü.',
         'no_assets_selected' => 'Listeden en az bir varlık seçmelisiniz',
     ],
 

@@ -64,6 +64,6 @@ return [
     'optional_infos' => 'Informazioni Opzionali',
     'order_details' => 'Informazioni relative all\'ordine',
     'calc_eol' => 'Se viene annullata la data di EOL, usa il calcolo automatico in base alla data d\'acquisto e al tasso di EOL.',
-    'checkin_licenses' => 'Checkin associated license seats',
-    'checkin_child_assets' => 'Checkin associated assets',
+    'checkin_licenses' => 'Restituzione slot licenza associati',
+    'checkin_child_assets' => 'Restituzione Beni associati',
 ];

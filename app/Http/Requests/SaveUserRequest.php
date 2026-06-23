@@ -36,6 +36,7 @@ class SaveUserRequest extends FormRequest
             'company_id' => ['nullable', 'integer', 'exists:companies,id'],
             'company_ids' => 'nullable|array',
             'company_ids.*' => 'integer|exists:companies,id',
+            'location_id' => 'nullable|integer|exists:locations,id|fmcs_location',
         ];
 
         switch ($this->method()) {

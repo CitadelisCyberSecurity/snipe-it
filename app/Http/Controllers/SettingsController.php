@@ -93,10 +93,12 @@ class SettingsController extends Controller
         $old_locations_fmcs = $setting->scope_locations_fmcs;
         $setting->full_multiple_companies_support = $request->input('full_multiple_companies_support', '0');
         $setting->scope_locations_fmcs = $request->input('scope_locations_fmcs', '0');
+        $setting->null_company_is_floater = $request->input('null_company_is_floater', '0');
 
-        // Backward compatibility for locations makes no sense without FullMultipleCompanySupport
+        // These options make no sense without FullMultipleCompanySupport
         if (! $setting->full_multiple_companies_support) {
             $setting->scope_locations_fmcs = '0';
+            $setting->null_company_is_floater = '0';
         }
 
         // check for inconsistencies when activating scoped locations

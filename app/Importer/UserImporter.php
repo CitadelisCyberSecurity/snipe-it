@@ -5,6 +5,7 @@ namespace App\Importer;
 use App\Models\Asset;
 use App\Models\Company;
 use App\Models\Department;
+use App\Models\Location;
 use App\Models\Setting;
 use App\Models\User;
 use App\Notifications\WelcomeNotification;
@@ -146,6 +147,18 @@ class UserImporter extends ItemImporter
                 unset($this->item['activated']);
             }
 
+            if (! $this->validateFmcsLocation($this->item['location_id'] ?? null, $companyIds)) {
+                $loc = Location::find($this->item['location_id']);
+                $msg = trans('validation.fmcs_location', [
+                    'location' => $loc?->name ?? $this->item['location_id'],
+                    'location_company' => $loc?->company?->name ?? trans('general.unassigned'),
+                ]);
+                $this->log($msg);
+                $this->addErrorToBag($user, 'location_id', $msg);
+
+                return;
+            }
+
             $user->update($this->sanitizeItemForUpdating($user));
 
             // Why do we have to do this twice? Update should
@@ -181,6 +194,18 @@ class UserImporter extends ItemImporter
         $this->item['password'] = $this->tempPassword;
 
         $this->log('No matching user, creating one');
+
+        if (! $this->validateFmcsLocation($this->item['location_id'] ?? null, $companyIds)) {
+            $msg = trans('validation.fmcs_location', [
+                'location' => Location::find($this->item['location_id'])?->name ?? $this->item['location_id'],
+                'location_company' => Location::find($this->item['location_id'])?->company?->name ?? trans('general.unassigned'),
+            ]);
+            $this->log($msg);
+            $this->addErrorToBag(new User, 'location_id', $msg);
+
+            return;
+        }
+
         $user = new User;
         $user->created_by = auth()->id();
 
@@ -268,6 +293,37 @@ class UserImporter extends ItemImporter
      * we need to set those empty strings to null to avoid passing bad data to the database
      * (ie ending up with 0000-00-00 instead of the intended null).
      */
+    /**
+     * Returns true when the given location is compatible with the given company IDs under
+     * FMCS location scoping rules. Mirrors the fmcs_location custom validator.
+     *
+     * @param  int[]  $companyIds
+     */
+    private function validateFmcsLocation(?int $locationId, array $companyIds): bool
+    {
+        $settings = Setting::getSettings();
+
+        if ($settings->full_multiple_companies_support != '1' || $settings->scope_locations_fmcs != '1') {
+            return true;
+        }
+
+        if (empty($companyIds) || ! $locationId) {
+            return true;
+        }
+
+        $location = Location::find($locationId);
+
+        if (! $location) {
+            return true;
+        }
+
+        if ($location->company_id === null) {
+            return (bool) $settings->null_company_is_floater;
+        }
+
+        return in_array($location->company_id, $companyIds);
+    }
+
     private function handleEmptyStringsForDates(): void
     {
         if ($this->item['start_date'] === '') {

@@ -66,6 +66,7 @@ class ActionlogsTransformer
         }
 
         // This is necessary since we can't escape special characters within a JSON object
+        $meta_array = null;
         if (($actionlog->log_meta) && ($actionlog->log_meta != '')) {
             $meta_array = json_decode($actionlog->log_meta);
 
@@ -74,6 +75,11 @@ class ActionlogsTransformer
             if ($meta_array) {
 
                 foreach ($meta_array as $fieldname => $fieldata) {
+
+                    // Snapshot of audit-visible custom field values — handled separately below.
+                    if ($fieldname === '_audit_snapshot') {
+                        continue;
+                    }
 
                     $clean_meta[$fieldname]['old'] = $this->clean_field($fieldata->old);
                     $clean_meta[$fieldname]['new'] = $this->clean_field($fieldata->new);
@@ -193,8 +199,26 @@ class ActionlogsTransformer
             'action_date' => ($actionlog->action_date) ? Helper::getFormattedDateObject($actionlog->action_date, 'datetime') : Helper::getFormattedDateObject($actionlog->created_at, 'datetime'),
         ];
 
-        //        Log::info("Clean Meta is: ".print_r($clean_meta,true));
-        // dd($array);
+        // Expose audit-visible custom field values as top-level keys so the
+        // audits datatable can bind each column directly to its field name.
+        if ($actionlog->action_type === 'audit' && isset($meta_array->_audit_snapshot)) {
+            foreach ($meta_array->_audit_snapshot as $fieldname => $value) {
+                $field = $custom_fields->firstWhere('db_column', $fieldname);
+                if ($field && $field->field_encrypted == '1') {
+                    if (Gate::allows('assets.view.encrypted_custom_fields')) {
+                        try {
+                            $array[$fieldname] = e(Crypt::decryptString($value));
+                        } catch (\Exception $e) {
+                            $array[$fieldname] = '************';
+                        }
+                    } else {
+                        $array[$fieldname] = '************';
+                    }
+                } else {
+                    $array[$fieldname] = e($value);
+                }
+            }
+        }
 
         return $array;
     }

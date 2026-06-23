@@ -61,6 +61,21 @@
                             </div>
                             <!-- /.form-group -->
 
+                            <!-- Null Company Is Floater -->
+                            <div class="form-group {{ $errors->has('null_company_is_floater') ? 'error' : '' }}">
+                                <div class="col-md-8 col-md-offset-3">
+                                    <label class="form-control">
+                                        <input type="checkbox" name="null_company_is_floater" value="1" @checked(old('null_company_is_floater', $setting->null_company_is_floater)) aria-label="null_company_is_floater" @disabled(! $setting->full_multiple_companies_support) />
+                                        {{ trans('admin/settings/general.null_company_is_floater_text') }}
+                                    </label>
+                                    {!! $errors->first('null_company_is_floater', '<span class="alert-msg" aria-hidden="true">:message</span>') !!}
+                                    <p class="help-block">
+                                        {{ trans('admin/settings/general.null_company_is_floater_help_text') }}
+                                    </p>
+                                </div>
+                            </div>
+                            <!-- /.form-group -->
+
                        </fieldset>
 
                        <fieldset>

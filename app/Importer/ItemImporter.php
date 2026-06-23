@@ -82,6 +82,7 @@ class ItemImporter extends Importer
         $this->item['qty'] = $this->findCsvMatch($row, 'quantity');
         $this->item['requestable'] = $this->findCsvMatch($row, 'requestable');
         $this->item['created_by'] = auth()->id();
+        $this->item['asset_tag'] = $this->findCsvMatch($row, 'asset_tag');
         $this->item['serial'] = $this->findCsvMatch($row, 'serial');
         $this->item['item_no'] = trim($this->findCsvMatch($row, 'item_no'));
 

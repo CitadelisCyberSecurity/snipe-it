@@ -169,7 +169,6 @@ return [
     'login_remote_user_custom_logout_url_text' => 'Custom logout URL',
     'login_remote_user_custom_logout_url_help' => 'If a url is provided here, users will get redirected to this URL after the user logs out of Snipe-IT. This is useful to close the user sessions of your Authentication provider correctly.',
     'login_remote_user_header_name_text' => 'Custom user name header',
-    'login_remote_user_header_name_help' => 'Use the specified header instead of REMOTE_USER',
     'logo' => 'Logo',
     'logo_print_assets' => 'Use in Print',
     'logo_print_assets_help' => 'Use branding on printable asset lists ',
@@ -180,6 +179,8 @@ return [
     'scope_locations_fmcs_check_button' => 'Check Compatibility',
     'scope_locations_fmcs_test_needed' => 'Please Check Compatibility to enable this',
     'scope_locations_fmcs_support_disabled_text' => 'This option is disabled because you have conflicting locations set for :count or more items.',
+    'null_company_is_floater_text' => 'Treat items and users without company associations as floaters',
+    'null_company_is_floater_help_text' => 'When disabled, items can only be checked out to targets without a company association if the item also has no company - null is treated as its own pseudo-company. When enabled, items from any company can be checked out to targets with no company assignment.',
     'show_in_model_list' => 'Show in Model Dropdowns',
     'optional' => 'optional',
     'per_page' => 'Results Per Page',
@@ -455,6 +456,8 @@ return [
     'client_id' => 'Client ID',
     'too_many_users_to_show' => 'The number of users (:count) is larger than the unpaginated record limit (:max). Use the bulk user edit tool to manage group memberships.',
     'update_existing_dates' => 'Also update all of the existing "next audit dates" for assets with an upcoming audit with the Audit Interval above. This is most commonly used when the internal policy for audit interval has changed.',
+    'remote_user_legend_warning' => 'Use with caution! Incorrectly configuring this section could lock you and your users out of the system or worse yet automatically log users in as a specific user.',
+    'login_remote_user_header_name_help' => 'If your web server is configured to send a custom header with the username, you can specify that header here. For example, if your web server sends a header called <code>X-Remote-User</code> with the username, you would enter <code>HTTP_X_REMOTE_USER</code> here. If this field is left blank, the system will use the default <code>REMOTE_USER</code> header. <strong>Misconfiguring this could lock you and all other users out of the system, or could auto-login EVERYONE into your system as a superadmin user!</strong>',
 
     'username_formats' => [
         'username_format' => 'Username Format',

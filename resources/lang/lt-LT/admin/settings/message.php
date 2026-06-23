@@ -7,7 +7,7 @@ return [
         'success' => 'Nustatymai sėkmingai atnaujinti.',
     ],
     'backup' => [
-        'delete_confirm' => 'Ar tikrai norite ištrinti atsarginę kopiją? Šis veiksmas negrįžtamas. ',
+        'delete_confirm' => 'Ar tikrai norite ištrinti šią atsarginę kopiją? Šis veiksmas negrįžtamas. ',
         'file_deleted' => 'Atsarginė kopija sėkmingai ištrinta. ',
         'generated' => 'Atsarginė kopija sėkmingai sukurta.',
         'file_not_found' => 'Šio atsarginės kopijos failo serveryje rasti nepavyko.',

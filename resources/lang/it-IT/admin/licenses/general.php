@@ -32,8 +32,8 @@ return [
         ],
 
         'checkin_selected' => [
-            'success' => ':count seat checked in successfully. | :count seats checked in successfully.',
-            'no_seats_selected' => 'No seats were selected.',
+            'success' => ':count slot licenza restituito con successo. | :count slot licenza restituiti con successo.',
+            'no_seats_selected' => 'Nessuno slot licenza selezionato.',
         ],
 
         'checkout_all' => [

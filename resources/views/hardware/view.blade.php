@@ -402,7 +402,9 @@
                             :table_header="trans('general.audits')"
                             :model="$asset"
                             :route="route('api.activity.index', ['item_id' => $asset->id, 'item_type' => 'asset', 'action_type' => 'audit'])"
-                            :hide_fields="['id','action_type', 'item', 'changed', 'target','quantity','changed','serial','signature_file','log_meta']"/>
+                            :hide_fields="['id','action_type', 'item', 'changed', 'target','quantity','changed','serial','signature_file','log_meta']"
+                            :extra_columns="$audit_custom_field_columns"
+                        />
                     </x-tabs.pane>
                     <!-- end audits tab pane -->
 

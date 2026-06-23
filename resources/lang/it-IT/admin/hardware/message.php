@@ -95,8 +95,8 @@ return [
     ],
 
     'multi-checkin' => [
-        'error' => 'Asset was not checked in, please try again|Assets were not checked in, please try again',
-        'success' => 'Asset checked in successfully.|Assets checked in successfully.',
+        'error' => 'Il Bene non è stato restituito, riprova|I Beni non sono stati restituiti, riprova',
+        'success' => 'Bene restituito correttamente.|Beni restituiti correttamente.',
         'no_assets_selected' => 'Devi selezionare almeno un Bene dall\'elenco',
     ],
 

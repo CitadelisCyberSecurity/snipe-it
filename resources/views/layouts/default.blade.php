@@ -234,6 +234,18 @@
         }
 
         /**
+        Safari ignores option[selected] styling on plain <select multiple> until
+        the user interacts with the list, so pre-selected options render with
+        the browser's default light highlight. Force a lighter background on the
+        whole select in dark mode so pre-selected items stay readable.
+         */
+        [data-theme="dark"] select[multiple],
+        [data-theme="dark"] select[multiple] option {
+            background-color: #d2d6de !important;
+            color: #373636 !important;
+        }
+
+        /**
         Multiselect maybe?
          */
         .select2-results__option[aria-selected=true]

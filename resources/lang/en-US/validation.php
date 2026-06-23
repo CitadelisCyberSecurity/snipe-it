@@ -174,7 +174,7 @@ return [
     'ulid' => 'The :attribute field must be a valid ULID.',
     'uuid' => 'The :attribute field must be a valid UUID.',
     'valid_css_color' => 'The :attribute field must be a valid CSS color (hex, rgb, rgba, hsl, or hsla).',
-    'fmcs_location' => 'Full multiple company support and location scoping is enabled in the Admin Settings, and the selected location and selected company are not compatible.',
+    'fmcs_location' => 'Location ":location" belongs to :location_company, which does not match the selected company.',
     'is_unique_across_company_and_location' => 'The :attribute must be unique within the selected company and location.',
 
     /*

@@ -39,16 +39,25 @@
                             <tbody>
                             @foreach($import_errors AS $key => $actual_import_errors)
                                 @foreach($actual_import_errors AS $table => $error_bag)
-                                    @foreach($error_bag as $field => $error_list)
+                                    {{-- general messages such as "The selected file is invalid" are simple strings --}}
+                                    @if(is_string($error_bag))
                                         <tr>
-                                            <td><b>{{ $key }}</b></td>
-                                            <td><b>{{ $field }}</b></td>
-                                            <td>
-                                                <span>{{ implode(", ",$error_list) }}</span>
-                                                <br />
-                                            </td>
+                                            <td></td>
+                                            <td></td>
+                                            <td>{{ $error_bag }}</td>
                                         </tr>
-                                    @endforeach
+                                    @elseif(is_array($error_bag))
+                                        @foreach($error_bag as $field => $error_list)
+                                            <tr>
+                                                <td><b>{{ $key }}</b></td>
+                                                <td><b>{{ $field }}</b></td>
+                                                <td>
+                                                    <span>{{ implode(", ",$error_list) }}</span>
+                                                    <br />
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    @endif
                                 @endforeach
                             @endforeach
                             </tbody>

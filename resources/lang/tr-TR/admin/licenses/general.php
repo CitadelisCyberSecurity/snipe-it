@@ -32,8 +32,8 @@ return [
         ],
 
         'checkin_selected' => [
-            'success' => ':count seat checked in successfully. | :count seats checked in successfully.',
-            'no_seats_selected' => 'No seats were selected.',
+            'success' => ':count lisans koltuğu başarıyla zimmetten düşüldü. | :count lisans koltuğu başarıyla zimmetten düşüldü.',
+            'no_seats_selected' => 'Hiçbir koltuk seçilmedi.',
         ],
 
         'checkout_all' => [
