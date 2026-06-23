@@ -92,6 +92,22 @@ class UserSeeder extends Seeder
             $user->companies()->sync($ids);
         }
 
+        foreach (Department::all() as $department) {
+            $deptUsers = User::where('department_id', $department->id)
+                ->whereNull('manager_id')
+                ->where('permissions->assets.view', '1')
+                ->orderBy('id')
+                ->get();
+
+            if ($deptUsers->count() < 2) {
+                continue;
+            }
+
+            $manager = $deptUsers->shift();
+            User::whereIn('id', $deptUsers->pluck('id'))
+                ->update(['manager_id' => $manager->id]);
+        }
+
         $src = public_path('/img/demo/avatars/');
         $dst = 'avatars'.'/';
         $del_files = Storage::files($dst);

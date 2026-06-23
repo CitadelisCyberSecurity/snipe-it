@@ -1,8 +1,9 @@
-# Snipe-IT Docker image build for hub.docker.com
+# Snipe-IT Docker image build for GitHub Container Registry (ghcr.io)
 name: Docker images (Ubuntu)
 
 # Run this Build for all pushes to 'master' or develop branch, or tagged releases.
-# Also run for PRs to ensure PR doesn't break Docker build process
+# Also run for PRs to ensure PR doesn't break Docker build process.
+# Use the Actions tab ("Run workflow") to build any other branch on demand.
 on:
   push:
     branches:
@@ -10,35 +11,26 @@ on:
       - develop
     tags:
       - 'v**'
-  # Allows you to run this workflow manually from the Actions tab
+  # Allows you to run this workflow manually from the Actions tab (any branch)
   workflow_dispatch:
 
   pull_request:
 
+# GITHUB_TOKEN needs packages:write to push to ghcr.io
 permissions:
   contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  # docker/metadata-action lowercases this automatically (Mazemp -> mazemp)
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   docker:
-    # Ensure this job never runs on forked repos. It's only executed for 'grokability/snipe-it'
-    if: github.repository == 'grokability/snipe-it'
+    # Only run for this fork. Never executes on upstream or other forks.
+    if: github.repository == 'Mazemp/snipe-it'
     runs-on: ubuntu-latest
-    env:
-      # Define tags to use for Docker images based on Git tags/branches (for docker/metadata-action)
-      # For a new commit on default branch (master), use the literal tag 'latest' on Docker image.
-      # For a new commit on other branches, use the branch name as the tag for Docker image.
-      # For a new tag, copy that tag name as the tag for Docker image.
-      IMAGE_TAGS: |
-        type=raw,value=latest,enable=${{ endsWith(github.ref, github.event.repository.default_branch) }}
-        type=ref,event=branch,enable=${{ !endsWith(github.ref, github.event.repository.default_branch) }}
-        type=ref,event=tag
-        type=semver,pattern=v{{major}}-latest
-      # Define default tag "flavor" for docker/metadata-action per
-      # https://github.com/docker/metadata-action#flavor-input
-      # We turn off 'latest' tag by default.
-      TAGS_FLAVOR: |
-        latest=false
-
     steps:
       # https://github.com/actions/checkout
       - name: Checkout codebase
@@ -49,38 +41,42 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       # https://github.com/docker/login-action
-      - name: Login to DockerHub
+      - name: Log in to Container Registry
         # Only login if not a PR, as PRs only trigger a Docker build and not a push
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      ###############################################
-      # Build/Push the 'snipe/snipe-it' image
-      ###############################################
       # https://github.com/docker/metadata-action
-      # Get Metadata for docker_build step below
-      - name: Sync metadata (tags, labels) from GitHub to Docker for 'snipe-it' image
-        id: meta_build
+      - name: Extract metadata (tags, labels)
+        id: meta
         uses: docker/metadata-action@v6
         with:
-          images: snipe/snipe-it
-          tags: ${{ env.IMAGE_TAGS }}
-          flavor: ${{ env.TAGS_FLAVOR }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+          flavor: |
+            latest=false
 
       # https://github.com/docker/build-push-action
-      - name: Build and push 'snipe-it' image
-        id: docker_build
+      - name: Build and push image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
-          # For pull requests, we run the Docker build (to ensure no PR changes break the build),
-          # but we ONLY do an image push to DockerHub if it's NOT a PR
+          # For pull requests, build only (verify it doesn't break); push otherwise.
           push: ${{ github.event_name != 'pull_request' }}
-          # Use tags / labels provided by 'docker/metadata-action' above
-          tags: ${{ steps.meta_build.outputs.tags }}
-          labels: ${{ steps.meta_build.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Reuse layers across runs via the GitHub Actions cache to speed up builds
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

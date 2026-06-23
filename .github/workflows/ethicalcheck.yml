@@ -47,6 +47,9 @@ permissions:
 
 jobs:
   Trigger_EthicalCheck:
+    # Only run on the upstream repo. On forks the pinned apisec-inc/ethicalcheck-action
+    # no longer resolves, so skip the job here rather than fail every push.
+    if: github.repository == 'grokability/snipe-it'
     permissions:
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
       actions: read # only required for a private repository by github/codeql-action/upload-sarif to get the Action run status

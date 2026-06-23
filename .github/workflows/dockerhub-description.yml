@@ -9,6 +9,9 @@ on:
       - .github/workflows/dockerhub-description.yml
 jobs:
   dockerHubDescription:
+    # Only run on the upstream repo; forks lack the Docker Hub secrets and
+    # don't own the snipe/snipe-it Docker Hub repository.
+    if: github.repository == 'grokability/snipe-it'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

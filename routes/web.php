@@ -34,6 +34,7 @@ use App\Http\Controllers\UploadedFilesController;
 use App\Http\Controllers\ViewAssetsController;
 use App\Livewire\Importer;
 use App\Mail\CheckoutComponentMail;
+use App\Models\AccessReviewCampaign;
 use App\Models\ReportTemplate;
 use Illuminate\Support\Facades\Route;
 use Tabuna\Breadcrumbs\Trail;
@@ -108,6 +109,63 @@ Route::group(['middleware' => 'auth'], function () {
     * Departments
     */
     Route::resource('departments', DepartmentsController::class);
+
+    /*
+    * Access Review
+    */
+    Route::group(['prefix' => 'access-review', 'as' => 'access-review.'], function () {
+        Route::post('campaigns/{campaign}/launch', [App\Http\Controllers\AccessReview\CampaignsController::class, 'launch'])
+            ->name('campaigns.launch');
+        Route::post('campaigns/{campaign}/close', [App\Http\Controllers\AccessReview\CampaignsController::class, 'close'])
+            ->name('campaigns.close');
+        Route::get('campaigns', [App\Http\Controllers\AccessReview\CampaignsController::class, 'index'])
+            ->name('campaigns.index')
+            ->breadcrumbs(fn (Trail $trail) => $trail
+                ->parent('home')
+                ->push(trans('admin/access-review/general.campaigns')));
+        Route::get('campaigns/create', [App\Http\Controllers\AccessReview\CampaignsController::class, 'create'])
+            ->name('campaigns.create')
+            ->breadcrumbs(fn (Trail $trail) => $trail
+                ->parent('access-review.campaigns.index')
+                ->push(trans('admin/access-review/general.new_campaign')));
+        Route::get('campaigns/{campaign}/edit', [App\Http\Controllers\AccessReview\CampaignsController::class, 'edit'])
+            ->name('campaigns.edit')
+            ->breadcrumbs(fn (Trail $trail, AccessReviewCampaign $campaign) => $trail
+                ->parent('access-review.campaigns.index')
+                ->push($campaign->name));
+        Route::get('campaigns/{campaign}/results', [App\Http\Controllers\AccessReview\CampaignsController::class, 'results'])
+            ->name('campaigns.results')
+            ->breadcrumbs(fn (Trail $trail, AccessReviewCampaign $campaign) => $trail
+                ->parent('access-review.campaigns.index')
+                ->push($campaign->name));
+        Route::post('campaigns/{campaign}/items/{item}/execute', [App\Http\Controllers\AccessReview\CampaignsController::class, 'executeItem'])
+            ->name('campaigns.items.execute');
+        Route::post('campaigns/{campaign}/remind/{manager}', [App\Http\Controllers\AccessReview\CampaignsController::class, 'remindManager'])
+            ->name('campaigns.remind-manager');
+        Route::post('campaigns/bulk-destroy', [App\Http\Controllers\AccessReview\CampaignsController::class, 'bulkDestroy'])
+            ->name('campaigns.bulk-destroy');
+        Route::post('campaigns', [App\Http\Controllers\AccessReview\CampaignsController::class, 'store'])
+            ->name('campaigns.store');
+        Route::match(['PUT', 'PATCH'], 'campaigns/{campaign}', [App\Http\Controllers\AccessReview\CampaignsController::class, 'update'])
+            ->name('campaigns.update');
+        Route::delete('campaigns/{campaign}', [App\Http\Controllers\AccessReview\CampaignsController::class, 'destroy'])
+            ->name('campaigns.destroy');
+
+        Route::prefix('my-reviews')->name('my-reviews.')->group(function () {
+            Route::get('/', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'index'])
+                ->name('index')
+                ->breadcrumbs(fn (Trail $trail) => $trail
+                    ->parent('home')
+                    ->push(trans('admin/access-review/general.my_reviews'), route('access-review.my-reviews.index')));
+            Route::get('{campaign}', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'show'])
+                ->name('show')
+                ->breadcrumbs(fn (Trail $trail, AccessReviewCampaign $campaign) => $trail
+                    ->parent('access-review.my-reviews.index')
+                    ->push($campaign->name));
+            Route::post('{campaign}/complete', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'complete'])->name('complete');
+            Route::patch('{campaign}/items/{item}', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'saveItem'])->name('items.save');
+        });
+    });
 });
 
 /*

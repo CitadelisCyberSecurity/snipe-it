@@ -1,3 +1,7 @@
 * text=auto
 public/js/** binary
 public/css/** binary
+
+# Shell scripts and other Unix-executed files must stay LF, even on Windows
+*.sh text eol=lf
+docker/supervisor-exit-event-listener text eol=lf

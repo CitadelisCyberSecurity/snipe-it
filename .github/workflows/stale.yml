@@ -5,6 +5,8 @@ on:
 
 jobs:
   stale:
+    # Only run on the upstream repo; this manages grokability/snipe-it's issues.
+    if: github.repository == 'grokability/snipe-it'
     runs-on: ubuntu-latest
     permissions:
       #  contents: write # only for delete-branch option

@@ -1,0 +1,10 @@
+# Local development overrides.
+# Auto-merged on top of docker-compose.yml by `docker compose` commands.
+# Builds the app image from the local Dockerfile instead of pulling snipe/snipe-it.
+
+services:
+  app:
+    build: .
+  db:
+    ports:
+      - "3306:3306"

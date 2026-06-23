@@ -6,6 +6,8 @@ on:
 
 jobs:
   upload-sources-to-crowdin:
+    # Only run on the upstream repo; forks lack the Crowdin secrets.
+    if: github.repository == 'grokability/snipe-it'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

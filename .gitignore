@@ -71,3 +71,6 @@ storage/ldap_client_tls.key
 /storage/framework/testing
 
 /.phpunit.cache
+
+# Local planning note, not part of the feature
+/docs/snipe-it-pr-acceptance-plan.md

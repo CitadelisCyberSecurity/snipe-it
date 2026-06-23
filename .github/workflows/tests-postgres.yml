@@ -60,7 +60,7 @@ jobs:
         env:
           DB_CONNECTION: pgsql
           DB_DATABASE: snipeit
-          DB_PORT: ${{ job.services.postgresql.ports[5432] }}
+          DB_PORT: ${{ job.services.postgresql.ports['5432'] }}
           DB_USERNAME: snipeit
           DB_PASSWORD: password
         run: |
@@ -73,7 +73,7 @@ jobs:
         env:
           DB_CONNECTION: pgsql
           DB_DATABASE: snipeit
-          DB_PORT: ${{ job.services.postgresql.ports[5432] }}
+          DB_PORT: ${{ job.services.postgresql.ports['5432'] }}
           DB_USERNAME: snipeit
           DB_PASSWORD: password
           LOG_CHANNEL: single
