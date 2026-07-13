@@ -23,7 +23,12 @@ final class SnapshotCampaignItemsAction
                 ->whereNotNull('users.manager_id');
 
             if (! empty($campaign->company_ids)) {
-                $query->whereIn('licenses.company_id', $campaign->company_ids);
+                // FMCS: a campaign scoped to specific companies must only snapshot seats where BOTH
+                // the license and the assigned user belong to a scoped company. Filtering the license
+                // alone would leak another company's user (name, manager) when a license owned by a
+                // scoped company is checked out to a user outside it.
+                $query->whereIn('licenses.company_id', $campaign->company_ids)
+                    ->whereIn('users.company_id', $campaign->company_ids);
             }
 
             $rows = $query->select([

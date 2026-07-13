@@ -141,6 +141,7 @@ Route::group(['middleware' => 'auth'], function () {
         Route::post('campaigns/{campaign}/items/{item}/execute', [App\Http\Controllers\AccessReview\CampaignsController::class, 'executeItem'])
             ->name('campaigns.items.execute');
         Route::post('campaigns/{campaign}/remind/{manager}', [App\Http\Controllers\AccessReview\CampaignsController::class, 'remindManager'])
+            ->middleware('throttle:3,60')
             ->name('campaigns.remind-manager');
         Route::post('campaigns/bulk-destroy', [App\Http\Controllers\AccessReview\CampaignsController::class, 'bulkDestroy'])
             ->name('campaigns.bulk-destroy');

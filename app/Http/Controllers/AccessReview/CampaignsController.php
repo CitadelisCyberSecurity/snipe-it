@@ -131,15 +131,17 @@ class CampaignsController extends Controller
     {
         $this->authorize('admin');
 
-        $ids    = (array) $request->input('ids', []);
-        $action = $request->input('bulk_actions');
+        $data = $request->validate([
+            'ids'   => 'required|array',
+            'ids.*' => 'integer',
+        ]);
 
-        if ($action !== 'delete' || empty($ids)) {
+        if ($request->input('bulk_actions') !== 'delete') {
             return redirect()->route('access-review.campaigns.index')
                 ->with('error', trans('general.no_results_found'));
         }
 
-        AccessReviewCampaign::whereIn('id', $ids)->each(function (AccessReviewCampaign $campaign) {
+        AccessReviewCampaign::whereIn('id', $data['ids'])->each(function (AccessReviewCampaign $campaign) {
             if ($campaign->isDraft()) {
                 DB::transaction(function () use ($campaign) {
                     $campaign->items()->delete();

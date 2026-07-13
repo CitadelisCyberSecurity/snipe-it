@@ -157,4 +157,59 @@ class AdminCampaignCrudTest extends TestCase
 
         $this->assertDatabaseHas('access_review_campaigns', ['id' => $campaign->id]);
     }
+
+    public function test_admin_can_bulk_delete_draft_campaigns(): void
+    {
+        $a = AccessReviewCampaign::factory()->create();
+        $b = AccessReviewCampaign::factory()->create();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->post(route('access-review.campaigns.bulk-destroy'), [
+                'bulk_actions' => 'delete',
+                'ids' => [$a->id, $b->id],
+            ])
+            ->assertRedirect(route('access-review.campaigns.index'));
+
+        $this->assertSoftDeleted('access_review_campaigns', ['id' => $a->id]);
+        $this->assertSoftDeleted('access_review_campaigns', ['id' => $b->id]);
+    }
+
+    public function test_bulk_delete_skips_non_draft_campaigns(): void
+    {
+        $draft = AccessReviewCampaign::factory()->create();
+        $active = AccessReviewCampaign::factory()->active()->create();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->post(route('access-review.campaigns.bulk-destroy'), [
+                'bulk_actions' => 'delete',
+                'ids' => [$draft->id, $active->id],
+            ])
+            ->assertRedirect(route('access-review.campaigns.index'));
+
+        $this->assertSoftDeleted('access_review_campaigns', ['id' => $draft->id]);
+        $this->assertNotSoftDeleted('access_review_campaigns', ['id' => $active->id]);
+    }
+
+    public function test_bulk_delete_rejects_non_integer_ids(): void
+    {
+        $campaign = AccessReviewCampaign::factory()->create();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->post(route('access-review.campaigns.bulk-destroy'), [
+                'bulk_actions' => 'delete',
+                'ids' => ['not-an-int'],
+            ])
+            ->assertSessionHasErrors(['ids.0']);
+
+        $this->assertNotSoftDeleted('access_review_campaigns', ['id' => $campaign->id]);
+    }
+
+    public function test_bulk_delete_requires_ids(): void
+    {
+        $this->actingAs(User::factory()->admin()->create())
+            ->post(route('access-review.campaigns.bulk-destroy'), [
+                'bulk_actions' => 'delete',
+            ])
+            ->assertSessionHasErrors(['ids']);
+    }
 }

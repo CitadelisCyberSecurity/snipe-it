@@ -234,6 +234,34 @@ class ManagerReviewTest extends TestCase
         $this->assertNotNull($item->fresh()->manager_completed_at);
     }
 
+    public function test_completing_review_auto_executes_and_flags_kept_items(): void
+    {
+        $manager  = User::factory()->create();
+        $campaign = AccessReviewCampaign::factory()->active()->create();
+
+        $keep = AccessReviewItem::factory()
+            ->reviewedAs(AccessReviewItem::STATUS_KEEP)
+            ->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
+        $delete = AccessReviewItem::factory()
+            ->reviewedAs(AccessReviewItem::STATUS_DELETE, 'No longer needed.')
+            ->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
+
+        $this->actingAs($manager)
+            ->post(route('access-review.my-reviews.complete', $campaign))
+            ->assertRedirect(route('access-review.my-reviews.index'));
+
+        // Kept seat is auto-executed and flagged so audit reports can tell it apart
+        // from an admin-executed seat.
+        $keep = $keep->fresh();
+        $this->assertTrue($keep->auto_executed);
+        $this->assertNotNull($keep->admin_executed_at);
+
+        // Delete decisions still require an explicit admin execution — never auto-executed.
+        $delete = $delete->fresh();
+        $this->assertFalse($delete->auto_executed);
+        $this->assertNull($delete->admin_executed_at);
+    }
+
     public function test_manager_cannot_mark_complete_with_unreviewed_items(): void
     {
         $manager  = User::factory()->create();

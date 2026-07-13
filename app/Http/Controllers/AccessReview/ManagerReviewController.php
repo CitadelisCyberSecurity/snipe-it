@@ -127,7 +127,9 @@ class ManagerReviewController extends Controller
                     ->whereNull('manager_completed_at')
                     ->update(['manager_completed_at' => $now]);
 
-                // Keep decisions require no admin action — auto-execute them now
+                // Keep decisions require no admin action — auto-execute them now.
+                // Flag them auto_executed so audit reports can distinguish these
+                // manager-completed keeps from seats an admin explicitly executed.
                 AccessReviewItem::where('campaign_id', $campaign->id)
                     ->where('manager_id', auth()->id())
                     ->where('manager_status', AccessReviewItem::STATUS_KEEP)
@@ -135,6 +137,7 @@ class ManagerReviewController extends Controller
                     ->update([
                         'admin_executed_at' => $now,
                         'admin_executed_by' => auth()->id(),
+                        'auto_executed' => true,
                     ]);
             }
         });

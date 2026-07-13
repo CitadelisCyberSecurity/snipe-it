@@ -36,6 +36,7 @@ class AccessReviewItem extends SnipeModel
         'license_id' => 'integer',
         'license_seat_id' => 'integer',
         'admin_executed_by' => 'integer',
+        'auto_executed' => 'boolean',
     ];
 
     public function campaign(): BelongsTo

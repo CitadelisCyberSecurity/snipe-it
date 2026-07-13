@@ -164,6 +164,10 @@
                                                 @if($item->isExecuted())
                                                     <i class="fa fa-check text-success"
                                                        title="{{ $item->admin_executed_at->format('Y-m-d H:i') }}"></i>
+                                                    @if($item->auto_executed)
+                                                        <span class="label label-default"
+                                                              title="{{ trans('admin/access-review/general.auto_executed') }}">{{ trans('admin/access-review/general.auto_executed') }}</span>
+                                                    @endif
                                                 @else
                                                     <span class="text-muted">&mdash;</span>
                                                 @endif

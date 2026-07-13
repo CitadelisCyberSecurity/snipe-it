@@ -5,6 +5,7 @@ namespace Tests\Unit\Actions\AccessReview;
 use App\Actions\AccessReview\SnapshotCampaignItemsAction;
 use App\Models\AccessReviewCampaign;
 use App\Models\AccessReviewItem;
+use App\Models\Company;
 use App\Models\License;
 use App\Models\LicenseSeat;
 use App\Models\User;
@@ -165,5 +166,35 @@ class SnapshotCampaignItemsActionTest extends TestCase
             'manager_id' => $manager->id,
             'license_id' => $licenseB->id,
         ]);
-    }    
+    }
+
+    public function test_it_excludes_seats_whose_user_is_outside_the_campaign_company_scope(): void
+    {
+        $companyA = Company::factory()->create();
+        $companyB = Company::factory()->create();
+
+        $campaign = AccessReviewCampaign::factory()->create(['company_ids' => [$companyA->id]]);
+        $manager = User::factory()->create();
+        $license = License::factory()->create(['company_id' => $companyA->id]);
+
+        // In scope: license and assigned user both in company A.
+        $inScope = User::factory()->create(['manager_id' => $manager->id, 'company_id' => $companyA->id]);
+        LicenseSeat::factory()->assignedToUser($inScope)->create(['license_id' => $license->id]);
+
+        // Out of scope: company-A license checked out to a company-B user must not leak in.
+        $outOfScope = User::factory()->create(['manager_id' => $manager->id, 'company_id' => $companyB->id]);
+        LicenseSeat::factory()->assignedToUser($outOfScope)->create(['license_id' => $license->id]);
+
+        $count = SnapshotCampaignItemsAction::run($campaign);
+
+        $this->assertSame(1, $count);
+        $this->assertDatabaseHas('access_review_items', [
+            'campaign_id' => $campaign->id,
+            'user_id' => $inScope->id,
+        ]);
+        $this->assertDatabaseMissing('access_review_items', [
+            'campaign_id' => $campaign->id,
+            'user_id' => $outOfScope->id,
+        ]);
+    }
 }

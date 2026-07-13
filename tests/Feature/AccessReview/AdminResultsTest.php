@@ -5,6 +5,8 @@ namespace Tests\Feature\AccessReview;
 use App\Models\AccessReviewCampaign;
 use App\Models\AccessReviewItem;
 use App\Models\User;
+use App\Notifications\AccessReviewReminderNotification;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class AdminResultsTest extends TestCase
@@ -155,5 +157,44 @@ class AdminResultsTest extends TestCase
             ->assertOk();
 
         $response->assertViewHas('managers', fn ($managers) => $managers->count() === 2);
+    }
+
+    // -----------------------------------------------------------------------
+    // Manager reminders
+    // -----------------------------------------------------------------------
+
+    public function test_admin_can_send_a_manager_reminder(): void
+    {
+        Notification::fake();
+
+        $admin    = User::factory()->admin()->create();
+        $manager  = User::factory()->create();
+        $campaign = AccessReviewCampaign::factory()->active()->create();
+        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
+
+        $this->actingAs($admin)
+            ->postJson(route('access-review.campaigns.remind-manager', [$campaign, $manager]))
+            ->assertOk();
+
+        Notification::assertSentTo($manager, AccessReviewReminderNotification::class);
+    }
+
+    public function test_remind_manager_is_rate_limited(): void
+    {
+        Notification::fake();
+
+        $admin    = User::factory()->admin()->create();
+        $manager  = User::factory()->create();
+        $campaign = AccessReviewCampaign::factory()->active()->create();
+        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
+
+        $url = route('access-review.campaigns.remind-manager', [$campaign, $manager]);
+
+        // throttle:3,60 — first three go through, the fourth is rejected.
+        for ($i = 0; $i < 3; $i++) {
+            $this->actingAs($admin)->postJson($url)->assertOk();
+        }
+
+        $this->actingAs($admin)->postJson($url)->assertStatus(429);
     }
 }

@@ -123,6 +123,8 @@ class AdminExecuteActionsTest extends TestCase
             'admin_executed_by'  => $admin->id,
         ]);
         $this->assertNotNull($item->fresh()->admin_executed_at);
+        // An explicit admin execution is never flagged auto_executed.
+        $this->assertFalse($item->fresh()->auto_executed);
     }
 
     public function test_executing_modify_item_marks_it_executed_without_seat_change(): void
