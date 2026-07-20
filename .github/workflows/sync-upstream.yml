@@ -1,0 +1,176 @@
+# Automatically sync this fork with upstream STABLE releases.
+#
+# It watches grokability/snipe-it (the canonical Snipe-IT repo; the old
+# snipe/snipe-it now redirects here) and, whenever a new *published, stable*
+# release tag appears, brings it into this fork's default branch.
+#
+# Safety model (this fork carries custom commits, so history is never clobbered):
+#   - If the default branch can fast-forward to the release -> fast-forward + push.
+#   - Otherwise (the normal case here, since we have our own commits) -> open a
+#     PR from a per-release branch for manual review. GitHub surfaces any
+#     conflicts in that PR; we never force-push the default branch.
+name: Sync upstream release
+
+on:
+  # Check once a day at 06:00 UTC...
+  schedule:
+    - cron: '0 6 * * *'
+  # ...and allow on-demand runs from the Actions tab.
+  workflow_dispatch:
+
+# Least privilege: write to contents (push branches/tags) and open PRs.
+permissions:
+  contents: write
+  pull-requests: write
+
+# Never let two sync runs race each other.
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: grokability/snipe-it
+  DEFAULT_BRANCH: master
+
+jobs:
+  sync:
+    # Only run on this fork; never on further forks of it.
+    if: github.repository == 'CitadelisCyberSecurity/snipe-it'
+    runs-on: ubuntu-latest
+    steps:
+      # Full history + tags so we can compute ancestry and merge.
+      - name: Checkout fork
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Configure git and upstream remote
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Register the "ours" merge driver referenced by .gitattributes so the
+          # committed compiled assets auto-resolve to our copy instead of conflicting.
+          git config merge.ours.driver true
+          git remote add upstream "https://github.com/${UPSTREAM}.git" 2>/dev/null \
+            || git remote set-url upstream "https://github.com/${UPSTREAM}.git"
+          git fetch upstream --tags --quiet
+          git fetch origin --tags --quiet
+
+      # /releases/latest returns ONLY the newest published, non-draft,
+      # non-prerelease release — exactly the "stable release" gate we want.
+      - name: Determine latest upstream stable release
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="$(gh api "repos/${UPSTREAM}/releases/latest" --jq '.tag_name')"
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "::error::Could not determine the latest upstream stable release."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "::notice::Latest upstream stable release is $TAG"
+
+      # Decide what to do. State is derived from git itself (no state file):
+      # "already synced" == the release commit is an ancestor of our default branch.
+      - name: Decide whether a sync is needed
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.rel.outputs.tag }}"
+          BRANCH="sync/upstream-${TAG}"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+          # 1) Already merged? Release commit already contained in default branch.
+          if git merge-base --is-ancestor "$TAG" "origin/${DEFAULT_BRANCH}"; then
+            echo "action=none" >> "$GITHUB_OUTPUT"
+            echo "::notice::No new release: ${DEFAULT_BRANCH} already contains ${TAG}."
+            exit 0
+          fi
+
+          # 2) A sync PR for this exact release already open? Don't open a duplicate.
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            echo "action=none" >> "$GITHUB_OUTPUT"
+            echo "::notice::A sync PR for ${TAG} is already open — leaving it for review."
+            exit 0
+          fi
+
+          # 3) Can the default branch fast-forward to the release?
+          #    (Only when we have NO commits the release lacks.)
+          if git merge-base --is-ancestor "origin/${DEFAULT_BRANCH}" "$TAG"; then
+            echo "action=ff" >> "$GITHUB_OUTPUT"
+            echo "::notice::Fast-forward to ${TAG} is possible."
+          else
+            echo "action=pr" >> "$GITHUB_OUTPUT"
+            echo "::notice::Fork has custom commits — a PR will be opened for ${TAG}."
+          fi
+
+      # Push upstream tags into the fork for traceability (never force; existing
+      # tags are left untouched).
+      - name: Push upstream tags to fork
+        if: steps.decide.outputs.action != 'none'
+        run: |
+          set -euo pipefail
+          echo "::notice::Pushing upstream tags to the fork..."
+          git push origin --tags 2>&1 \
+            || echo "::warning::Some tags were rejected (already exist / diverged); left as-is."
+
+      # Clean case: no custom commits in the way -> fast-forward and push.
+      - name: Fast-forward default branch
+        if: steps.decide.outputs.action == 'ff'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.rel.outputs.tag }}"
+          git checkout "$DEFAULT_BRANCH"
+          git merge --ff-only "$TAG"
+          git push origin "$DEFAULT_BRANCH"
+          echo "::notice::SYNCED: fast-forwarded ${DEFAULT_BRANCH} to ${TAG}."
+
+      # Normal case for this fork: build the merge on a disposable per-release
+      # branch and open a PR from it for review. The merge happens HERE in CI (not
+      # on GitHub's servers) because the .gitattributes `merge=ours` driver — which
+      # keeps our committed compiled assets and prevents asset conflicts — is only
+      # honored by a local git merge, never by GitHub's PR-merge machinery.
+      - name: Open sync pull request
+        if: steps.decide.outputs.action == 'pr'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.rel.outputs.tag }}"
+          BRANCH="${{ steps.decide.outputs.branch }}"
+
+          # Build the merge on a disposable, automation-owned branch off the default
+          # branch (never the default branch itself, so history is never clobbered).
+          git checkout -B "$BRANCH" "origin/${DEFAULT_BRANCH}"
+
+          if git merge --no-edit "$TAG"; then
+            # Success: any conflicts were only in the compiled assets and the `ours`
+            # driver resolved them to our copy. The branch now contains a clean merge.
+            CONFLICT=false
+            echo "::notice::${TAG} merged cleanly in CI (compiled-asset conflicts auto-resolved via merge=ours)."
+            NOTE="✅ Merged cleanly in CI. Compiled assets were kept as-is via \`merge=ours\` — after merging this PR, run \`npm run prod\` to regenerate them from the new source."
+          else
+            # Real, non-asset conflicts remain. Abort and point the branch at the
+            # release commit so GitHub surfaces the conflicts in the PR for you.
+            CONFLICT=true
+            echo "::warning::CONFLICT: ${TAG} has conflicts beyond the generated assets — manual resolution needed in the PR."
+            git merge --abort
+            git branch -f "$BRANCH" "$TAG"
+            NOTE="⚠️ **This sync has merge conflicts beyond the generated assets** and must be resolved before merging (GitHub shows them below)."
+          fi
+
+          # Disposable per-release branch — force push is safe (never the default branch).
+          git push --force origin "refs/heads/${BRANCH}"
+
+          gh pr create \
+            --base "$DEFAULT_BRANCH" \
+            --head "$BRANCH" \
+            --title "Sync upstream release ${TAG}" \
+            --body "$(printf "Automated sync of upstream **%s** release **%s** into \`%s\`.\n\n%s\n\nUpstream release notes: https://github.com/%s/releases/tag/%s" "$UPSTREAM" "$TAG" "$DEFAULT_BRANCH" "$NOTE" "$UPSTREAM" "$TAG")"
+
+          echo "::notice::PR OPENED to sync ${TAG} into ${DEFAULT_BRANCH} (conflict=${CONFLICT})."
