@@ -1,6 +1,25 @@
 * text=auto
-public/js/** binary
-public/css/** binary
+
+# Auto-generated / vendored front-end assets (Laravel Mix build output).
+#
+# These are committed on purpose — the Docker images do `COPY . /var/www/html`
+# with no asset build step, so the compiled files must exist in the repo. But
+# every `npm run prod` rewrites them wholesale, so they used to conflict on every
+# upstream merge (they were marked `binary`, i.e. no auto-merge -> manual pick).
+#
+# `merge=ours` makes a merge KEEP OUR committed copy instead of conflicting.
+# After syncing upstream, regenerate them from the merged source with:
+#     npm run prod
+#
+# Requires the custom "ours" driver to be registered once per clone:
+#     git config merge.ours.driver true
+# (The sync-upstream workflow sets this automatically in CI.)
+#
+# `-text -diff` preserves the previous `binary` behaviour: no EOL normalization
+# and no noisy textual diffs for minified files.
+public/js/**              -text -diff merge=ours
+public/css/**             -text -diff merge=ours
+public/mix-manifest.json  -text -diff merge=ours
 
 # Shell scripts and other Unix-executed files must stay LF, even on Windows
 *.sh text eol=lf
