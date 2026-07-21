@@ -138,6 +138,17 @@ jobs:
           git push origin "$TARGET_BRANCH"
           echo "::notice::SYNCED: fast-forwarded ${TARGET_BRANCH} to ${TAG}."
 
+      # Node toolchain for rebuilding compiled assets after a clean merge, so the
+      # PR ships freshly-built CSS/JS and no local checkout is ever needed. The
+      # Docker image copies these committed files in — there is no in-image asset
+      # build — so they must be regenerated here. Version matches the repo .nvmrc.
+      - name: Set up Node (for asset rebuild)
+        if: steps.decide.outputs.action == 'pr'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
       # Normal case for this fork: build the merge on a disposable per-release
       # branch and open a PR from it for review. The merge happens HERE in CI (not
       # on GitHub's servers) because the .gitattributes `merge=ours` driver — which
@@ -161,7 +172,15 @@ jobs:
             # driver resolved them to our copy. The branch now contains a clean merge.
             CONFLICT=false
             echo "::notice::${TAG} merged cleanly in CI (compiled-asset conflicts auto-resolved via merge=ours)."
-            NOTE="✅ Merged cleanly in CI. Compiled assets were kept as-is via \`merge=ours\` — after merging this PR, run \`npm run prod\` to regenerate them from the new source."
+            # Rebuild the compiled assets from the merged source and commit them, so
+            # the PR is complete (new PHP + matching CSS/JS) with no local step needed.
+            echo "::notice::Rebuilding compiled assets (npm ci && npm run prod)..."
+            npm ci
+            npm run prod
+            git add -A
+            git commit -m "chore(assets): rebuild compiled assets for ${TAG}" \
+              || echo "::notice::No asset changes to commit."
+            NOTE="✅ Merged cleanly in CI **and compiled assets were rebuilt automatically** (\`npm run prod\`). No local checkout needed — review and merge."
           else
             # Real, non-asset conflicts remain. Abort and point the branch at the
             # release commit so GitHub surfaces the conflicts in the PR for you.
