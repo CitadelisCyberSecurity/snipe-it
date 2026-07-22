@@ -23,6 +23,11 @@ on:
     - cron: '0 6 * * *'
   # ...and allow on-demand runs from the Actions tab.
   workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Branch to sync into (defaults to develop; override to rehearse against a test branch)'
+        required: false
+        default: develop
 
 # Least privilege: write to contents (push branches/tags) and open PRs.
 permissions:
@@ -37,8 +42,10 @@ concurrency:
 env:
   UPSTREAM: grokability/snipe-it
   # Sync target: the integration branch, NOT master. Promote develop -> master
-  # via a separate PR, then tag a release for the `latest` image.
-  TARGET_BRANCH: develop
+  # via a separate PR, then tag a release for the `latest` image. A manual run
+  # may override this (e.g. to rehearse the full path against a test branch);
+  # scheduled runs always use develop.
+  TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'develop' }}
 
 jobs:
   sync:
