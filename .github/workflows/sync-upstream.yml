@@ -164,12 +164,7 @@ jobs:
       - name: Open sync pull request
         if: steps.decide.outputs.action == 'pr'
         env:
-          # Use a PAT so `gh pr create` isn't blocked by the org/enterprise
-          # "Allow GitHub Actions to create and approve pull requests" policy:
-          # GITHUB_TOKEN is subject to that policy, a user PAT is not. As a bonus,
-          # a PAT-opened PR also triggers the Docker build-to-verify workflows.
-          # Falls back to the default token if the secret is not configured.
-          GH_TOKEN: ${{ secrets.SYNC_PAT || github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TAG="${{ steps.rel.outputs.tag }}"
@@ -206,10 +201,17 @@ jobs:
           # Disposable per-release branch — force push is safe (never the target branch).
           git push --force origin "refs/heads/${BRANCH}"
 
-          gh pr create \
-            --base "$TARGET_BRANCH" \
-            --head "$BRANCH" \
-            --title "Sync upstream release ${TAG}" \
-            --body "$(printf "Automated sync of upstream **%s** release **%s** into \`%s\`.\n\n%s\n\nUpstream release notes: https://github.com/%s/releases/tag/%s" "$UPSTREAM" "$TAG" "$TARGET_BRANCH" "$NOTE" "$UPSTREAM" "$TAG")"
+          # Try to open the PR with the built-in GITHUB_TOKEN. An org/enterprise
+          # policy ("Allow GitHub Actions to create and approve pull requests") may
+          # block GITHUB_TOKEN from creating PRs — if so, don't fail the job: the
+          # sync branch is already pushed and ready, so just print a one-click link
+          # to open the PR manually. If the policy is ever enabled, this auto-opens.
+          BODY="$(printf "Automated sync of upstream **%s** release **%s** into \`%s\`.\n\n%s\n\nUpstream release notes: https://github.com/%s/releases/tag/%s" "$UPSTREAM" "$TAG" "$TARGET_BRANCH" "$NOTE" "$UPSTREAM" "$TAG")"
+          COMPARE_URL="https://github.com/${GITHUB_REPOSITORY}/compare/${TARGET_BRANCH}...${BRANCH}?expand=1"
 
-          echo "::notice::PR OPENED to sync ${TAG} into ${TARGET_BRANCH} (conflict=${CONFLICT})."
+          if gh pr create --base "$TARGET_BRANCH" --head "$BRANCH" \
+               --title "Sync upstream release ${TAG}" --body "$BODY"; then
+            echo "::notice::PR OPENED to sync ${TAG} into ${TARGET_BRANCH} (conflict=${CONFLICT})."
+          else
+            echo "::warning::Could not open the PR automatically (GITHUB_TOKEN is likely blocked by the create-PR policy). The sync branch '${BRANCH}' is pushed and ready — open the PR here: ${COMPARE_URL}"
+          fi
