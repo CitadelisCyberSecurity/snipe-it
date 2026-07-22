@@ -164,7 +164,12 @@ jobs:
       - name: Open sync pull request
         if: steps.decide.outputs.action == 'pr'
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Use a PAT so `gh pr create` isn't blocked by the org/enterprise
+          # "Allow GitHub Actions to create and approve pull requests" policy:
+          # GITHUB_TOKEN is subject to that policy, a user PAT is not. As a bonus,
+          # a PAT-opened PR also triggers the Docker build-to-verify workflows.
+          # Falls back to the default token if the secret is not configured.
+          GH_TOKEN: ${{ secrets.SYNC_PAT || github.token }}
         run: |
           set -euo pipefail
           TAG="${{ steps.rel.outputs.tag }}"
