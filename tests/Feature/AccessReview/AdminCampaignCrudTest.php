@@ -3,6 +3,7 @@
 namespace Tests\Feature\AccessReview;
 
 use App\Models\AccessReviewCampaign;
+use App\Models\AccessReviewItem;
 use App\Models\User;
 use Tests\TestCase;
 
@@ -147,15 +148,16 @@ class AdminCampaignCrudTest extends TestCase
         $this->assertSoftDeleted('access_review_campaigns', ['id' => $campaign->id]);
     }
 
-    public function test_delete_is_blocked_when_campaign_is_not_draft(): void
+    public function test_admin_can_delete_a_non_draft_campaign(): void
     {
+        // Campaigns of any status can now be soft-deleted (not just drafts).
         $campaign = AccessReviewCampaign::factory()->active()->create();
 
         $this->actingAs(User::factory()->admin()->create())
             ->delete(route('access-review.campaigns.destroy', $campaign))
             ->assertRedirect(route('access-review.campaigns.index'));
 
-        $this->assertDatabaseHas('access_review_campaigns', ['id' => $campaign->id]);
+        $this->assertSoftDeleted('access_review_campaigns', ['id' => $campaign->id]);
     }
 
     public function test_admin_can_bulk_delete_draft_campaigns(): void
@@ -174,7 +176,7 @@ class AdminCampaignCrudTest extends TestCase
         $this->assertSoftDeleted('access_review_campaigns', ['id' => $b->id]);
     }
 
-    public function test_bulk_delete_skips_non_draft_campaigns(): void
+    public function test_bulk_delete_removes_campaigns_regardless_of_status(): void
     {
         $draft = AccessReviewCampaign::factory()->create();
         $active = AccessReviewCampaign::factory()->active()->create();
@@ -187,7 +189,7 @@ class AdminCampaignCrudTest extends TestCase
             ->assertRedirect(route('access-review.campaigns.index'));
 
         $this->assertSoftDeleted('access_review_campaigns', ['id' => $draft->id]);
-        $this->assertNotSoftDeleted('access_review_campaigns', ['id' => $active->id]);
+        $this->assertSoftDeleted('access_review_campaigns', ['id' => $active->id]);
     }
 
     public function test_bulk_delete_rejects_non_integer_ids(): void
@@ -211,5 +213,74 @@ class AdminCampaignCrudTest extends TestCase
                 'bulk_actions' => 'delete',
             ])
             ->assertSessionHasErrors(['ids']);
+    }
+
+    public function test_admin_can_restore_a_deleted_campaign(): void
+    {
+        $campaign = AccessReviewCampaign::factory()->active()->create();
+        $campaign->delete();
+        $this->assertSoftDeleted('access_review_campaigns', ['id' => $campaign->id]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->post(route('access-review.campaigns.restore', $campaign))
+            ->assertRedirect(route('access-review.campaigns.index'));
+
+        $this->assertNotSoftDeleted('access_review_campaigns', ['id' => $campaign->id]);
+    }
+
+    public function test_restore_rejects_a_campaign_that_is_not_deleted(): void
+    {
+        $campaign = AccessReviewCampaign::factory()->create();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->post(route('access-review.campaigns.restore', $campaign))
+            ->assertRedirect(route('access-review.campaigns.index'));
+
+        $this->assertNotSoftDeleted('access_review_campaigns', ['id' => $campaign->id]);
+    }
+
+    public function test_non_admin_cannot_restore_a_campaign(): void
+    {
+        $campaign = AccessReviewCampaign::factory()->create();
+        $campaign->delete();
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('access-review.campaigns.restore', $campaign))
+            ->assertForbidden();
+
+        $this->assertSoftDeleted('access_review_campaigns', ['id' => $campaign->id]);
+    }
+
+    public function test_soft_deleting_a_campaign_keeps_its_items_for_a_lossless_restore(): void
+    {
+        $campaign = AccessReviewCampaign::factory()->active()->create();
+        $items = AccessReviewItem::factory()->count(3)->create(['campaign_id' => $campaign->id]);
+
+        $campaign->delete();
+
+        // Items are NOT removed when the campaign is soft-deleted, so a restore is lossless.
+        foreach ($items as $item) {
+            $this->assertDatabaseHas('access_review_items', ['id' => $item->id]);
+        }
+
+        $campaign->restore();
+
+        $this->assertNotSoftDeleted('access_review_campaigns', ['id' => $campaign->id]);
+        $this->assertSame(3, $campaign->fresh()->items()->count());
+    }
+
+    public function test_deleted_view_lists_only_trashed_campaigns(): void
+    {
+        $live = AccessReviewCampaign::factory()->create(['name' => 'Live One']);
+        $deleted = AccessReviewCampaign::factory()->create(['name' => 'Deleted One']);
+        $deleted->delete();
+
+        $response = $this->actingAsForApi(User::factory()->admin()->create())
+            ->getJson(route('api.access-review.campaigns.index', ['status' => 'deleted']));
+
+        $response->assertOk();
+        $names = collect($response->json('rows'))->pluck('name')->all();
+        $this->assertContains('Deleted One', $names);
+        $this->assertNotContains('Live One', $names);
     }
 }

@@ -141,14 +141,10 @@ class CampaignsController extends Controller
                 ->with('error', trans('general.no_results_found'));
         }
 
-        AccessReviewCampaign::whereIn('id', $data['ids'])->each(function (AccessReviewCampaign $campaign) {
-            if ($campaign->isDraft()) {
-                DB::transaction(function () use ($campaign) {
-                    $campaign->items()->delete();
-                    $campaign->delete();
-                });
-            }
-        });
+        // Soft delete the selected campaigns regardless of status. Their items are
+        // left intact so a restore is lossless.
+        AccessReviewCampaign::whereIn('id', $data['ids'])
+            ->each(fn (AccessReviewCampaign $campaign) => $campaign->delete());
 
         return redirect()
             ->route('access-review.campaigns.index')
@@ -159,20 +155,30 @@ class CampaignsController extends Controller
     {
         $this->authorize('admin');
 
-        if (! $campaign->isDraft()) {
-            return redirect()
-                ->route('access-review.campaigns.index')
-                ->with('error', trans('admin/access-review/general.not_deletable_unless_draft'));
-        }
-
-        DB::transaction(function () use ($campaign) {
-            $campaign->items()->delete();
-            $campaign->delete();
-        });
+        // Soft delete only, for any status. The campaign's items are left intact so
+        // a restore is lossless; trashed records are only ever purged globally.
+        $campaign->delete();
 
         return redirect()
             ->route('access-review.campaigns.index')
             ->with('success', trans('admin/access-review/general.deleted'));
+    }
+
+    public function restore(AccessReviewCampaign $campaign): RedirectResponse
+    {
+        $this->authorize('admin');
+
+        if (! $campaign->trashed()) {
+            return redirect()
+                ->route('access-review.campaigns.index')
+                ->with('error', trans('admin/access-review/general.not_deleted'));
+        }
+
+        $campaign->restore();
+
+        return redirect()
+            ->route('access-review.campaigns.index')
+            ->with('success', trans('admin/access-review/general.restored'));
     }
 
     public function launch(AccessReviewCampaign $campaign): RedirectResponse

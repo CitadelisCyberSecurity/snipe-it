@@ -6,27 +6,42 @@
 @stop
 
 @section('header_right')
-    <a href="{{ route('access-review.campaigns.create') }}" class="btn btn-primary pull-right">
-        <x-icon type="plus" class="fa-fw" />
-        {{ trans('admin/access-review/general.new_campaign') }}
-    </a>
+    @php($showingDeleted = request('status') === 'deleted')
+    @if ($showingDeleted)
+        <a href="{{ route('access-review.campaigns.index') }}" class="btn btn-default pull-right">
+            <i class="fa-solid fa-list fa-fw" aria-hidden="true"></i>
+            {{ trans('admin/access-review/general.show_active') }}
+        </a>
+    @else
+        <a href="{{ route('access-review.campaigns.create') }}" class="btn btn-primary pull-right">
+            <x-icon type="plus" class="fa-fw" />
+            {{ trans('admin/access-review/general.new_campaign') }}
+        </a>
+        <a href="{{ route('access-review.campaigns.index', ['status' => 'deleted']) }}" class="btn btn-default pull-right" style="margin-right: 5px;">
+            <i class="fa-solid fa-trash fa-fw" aria-hidden="true"></i>
+            {{ trans('admin/access-review/general.show_deleted') }}
+        </a>
+    @endif
 @stop
 
 @section('content')
+    @php($showingDeleted = request('status') === 'deleted')
     <x-container>
         <x-box name="accessReviewCampaigns">
-            <x-slot:bulkactions>
-                <x-table.bulk-actions
-                    action_route="{{ route('access-review.campaigns.bulk-destroy') }}"
-                    model_name="access_review_campaign">
-                    <option value="delete">{{ trans('general.delete') }}</option>
-                </x-table.bulk-actions>
-            </x-slot:bulkactions>
+            @unless ($showingDeleted)
+                <x-slot:bulkactions>
+                    <x-table.bulk-actions
+                        action_route="{{ route('access-review.campaigns.bulk-destroy') }}"
+                        model_name="access_review_campaign">
+                        <option value="delete">{{ trans('general.delete') }}</option>
+                    </x-table.bulk-actions>
+                </x-slot:bulkactions>
+            @endunless
             <x-table
                     show_column_search="false"
                     fixed_right_number="1"
                     fixed_number="1"
-                    api_url="{{ route('api.access-review.campaigns.index') }}"
+                    api_url="{{ route('api.access-review.campaigns.index', $showingDeleted ? ['status' => 'deleted'] : []) }}"
                     :presenter="\App\Presenters\AccessReviewCampaignPresenter::dataTableLayout()"
                     export_filename="export-access-review-campaigns-{{ date('Y-m-d') }}"
             />

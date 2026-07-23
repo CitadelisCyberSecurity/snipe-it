@@ -25,6 +25,7 @@ return [
     'created' => 'Campaign created.',
     'updated' => 'Campaign updated.',
     'deleted' => 'Campaign deleted.',
+    'restored' => 'Campaign restored.',
     'launched' => 'Campaign launched. :count items snapshotted for review.',
     'closed' => 'Campaign closed.',
 
@@ -32,6 +33,13 @@ return [
     'not_deletable_unless_draft' => 'Only draft campaigns can be deleted.',
     'not_launchable_unless_draft' => 'Only draft campaigns can be launched.',
     'not_closable_unless_active' => 'Only active campaigns can be closed.',
+    'not_deleted' => 'That campaign is not deleted.',
+
+    // Deleted view / restore
+    'show_deleted'    => 'Show Deleted',
+    'show_active'     => 'Show Active',
+    'restore'         => 'Restore',
+    'restore_confirm' => 'Restore this campaign?',
 
     'launch' => 'Launch',
     'close' => 'Close',
