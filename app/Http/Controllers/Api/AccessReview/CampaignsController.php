@@ -35,7 +35,11 @@ class CampaignsController extends Controller
             AccessReviewCampaign::STATUS_CLOSED,
         ];
 
-        if ($request->filled('status') && in_array($request->input('status'), $validStatuses, true)) {
+        // ?status=deleted shows only soft-deleted campaigns (the "Show Deleted" view),
+        // matching the standard Snipe-IT convention. Otherwise filter by lifecycle status.
+        if ($request->input('status') === 'deleted') {
+            $campaigns->onlyTrashed();
+        } elseif ($request->filled('status') && in_array($request->input('status'), $validStatuses, true)) {
             $campaigns->where('status', $request->input('status'));
         }
 
