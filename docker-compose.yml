@@ -6,7 +6,13 @@ volumes:
 
 services:
   app:
-    image: snipe/snipe-it:${APP_VERSION:-latest}
+    # This fork's image, built by .github/workflows/docker-ubuntu.yml. NOT
+    # upstream snipe/snipe-it — that one lacks this fork's custom commits.
+    # `latest` is only ever published from a vX.Y.Z release tag, so it always
+    # means "newest reviewed production build" (see docs/UPDATING.md). Set
+    # APP_VERSION to pin a version (8.6.3) or use the slimmer alpine flavour
+    # (latest-alpine). For staging/pre-release tags use docker-compose.ghcr.yml.
+    image: ghcr.io/citadeliscybersecurity/snipe-it:${APP_VERSION:-latest}
     restart: unless-stopped
     volumes:
       - storage:/var/lib/snipeit
