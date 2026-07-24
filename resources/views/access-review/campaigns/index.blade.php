@@ -6,22 +6,10 @@
 @stop
 
 @section('header_right')
-    @php($showingDeleted = request('status') === 'deleted')
-    @if ($showingDeleted)
-        <a href="{{ route('access-review.campaigns.index') }}" class="btn btn-default pull-right">
-            <i class="fa-solid fa-list fa-fw" aria-hidden="true"></i>
-            {{ trans('admin/access-review/general.show_active') }}
-        </a>
-    @else
-        <a href="{{ route('access-review.campaigns.create') }}" class="btn btn-primary pull-right">
-            <x-icon type="plus" class="fa-fw" />
-            {{ trans('admin/access-review/general.new_campaign') }}
-        </a>
-        <a href="{{ route('access-review.campaigns.index', ['status' => 'deleted']) }}" class="btn btn-default pull-right" style="margin-right: 5px;">
-            <i class="fa-solid fa-trash fa-fw" aria-hidden="true"></i>
-            {{ trans('admin/access-review/general.show_deleted') }}
-        </a>
-    @endif
+    <a href="{{ route('access-review.campaigns.create') }}" class="btn btn-primary pull-right">
+        <x-icon type="plus" class="fa-fw" />
+        {{ trans('admin/access-review/general.new_campaign') }}
+    </a>
 @stop
 
 @section('content')
@@ -37,10 +25,13 @@
                     </x-table.bulk-actions>
                 </x-slot:bulkactions>
             @endunless
+            {{-- Show Deleted lives in the table toolbar (next to refresh/print) via
+                 the accessReviewCampaignsButtons function, matching the Users tab. --}}
             <x-table
                     show_column_search="false"
                     fixed_right_number="1"
                     fixed_number="1"
+                    buttons="accessReviewCampaignsButtons"
                     api_url="{{ route('api.access-review.campaigns.index', $showingDeleted ? ['status' => 'deleted'] : []) }}"
                     :presenter="\App\Presenters\AccessReviewCampaignPresenter::dataTableLayout()"
                     export_filename="export-access-review-campaigns-{{ date('Y-m-d') }}"

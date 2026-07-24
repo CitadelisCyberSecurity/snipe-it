@@ -791,6 +791,21 @@
 
     }); // end user table buttons
 
+    // Access Review campaigns table buttons
+    window.accessReviewCampaignsButtons = () => ({
+        btnShowDeleted: {
+            text: '{{ (request()->input('status') == "deleted") ? trans('admin/access-review/general.show_active') : trans('admin/access-review/general.show_deleted') }}',
+            icon: 'fa-solid fa-trash',
+            event () {
+                window.location.href = '{{ (request()->input('status') == "deleted") ? route('access-review.campaigns.index') : route('access-review.campaigns.index', ['status' => 'deleted']) }}';
+            },
+            attributes: {
+                class: '{{ (request()->input('status') == "deleted") ? ' btn-selected' : '' }}',
+                title: '{{ (request()->input('status') == "deleted") ? trans('admin/access-review/general.show_active') : trans('admin/access-review/general.show_deleted') }}',
+            }
+        },
+    }); // end access review campaigns table buttons
+
     // Oauth table buttons
     window.oauthButtons = () => ({
 
