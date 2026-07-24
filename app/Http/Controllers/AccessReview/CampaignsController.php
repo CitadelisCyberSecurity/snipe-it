@@ -213,40 +213,35 @@ class CampaignsController extends Controller
                 ->with('error', trans('admin/access-review/general.not_launchable_unless_draft'));
         }
 
-        // The campaign is already launched (committed above). Sending the manager
-        // notifications must never fail the launch — if mail is unconfigured or the
-        // SMTP server is unreachable, log it and surface a non-fatal red warning
-        // instead of a 500.
-        $emailFailed = false;
+        // The campaign is already launched (committed above). Send the manager
+        // notifications AFTER the HTTP response is flushed so a slow or unreachable
+        // mail server can never block or slow the launch request. Each send is
+        // isolated; failures are logged, never fatal.
         $campaign->items()
             ->with('manager')
             ->get()
             ->groupBy('manager_id')
-            ->each(function ($managerItems) use ($campaign, &$emailFailed) {
+            ->each(function ($managerItems) use ($campaign) {
                 $manager = $managerItems->first()->manager;
                 if ($manager && $manager->email) {
-                    try {
-                        $manager->notify(new AccessReviewCampaignLaunchedNotification($campaign, $managerItems->count()));
-                    } catch (\Throwable $e) {
-                        $emailFailed = true;
-                        \Log::warning('Access Review: launch notification email failed', [
-                            'campaign_id' => $campaign->id,
-                            'manager_id'  => $manager->id,
-                            'error'       => $e->getMessage(),
-                        ]);
-                    }
+                    $itemCount = $managerItems->count();
+                    dispatch(function () use ($manager, $campaign, $itemCount) {
+                        try {
+                            $manager->notify(new AccessReviewCampaignLaunchedNotification($campaign, $itemCount));
+                        } catch (\Throwable $e) {
+                            \Log::warning('Access Review: launch notification email failed', [
+                                'campaign_id' => $campaign->id,
+                                'manager_id'  => $manager->id,
+                                'error'       => $e->getMessage(),
+                            ]);
+                        }
+                    })->afterResponse();
                 }
             });
 
-        $redirect = redirect()
+        return redirect()
             ->route('access-review.campaigns.index')
             ->with('success', trans('admin/access-review/general.launched', ['count' => $count]));
-
-        if ($emailFailed) {
-            $redirect->with('error', trans('admin/access-review/general.launch_email_failed'));
-        }
-
-        return $redirect;
     }
 
     public function close(AccessReviewCampaign $campaign): RedirectResponse
@@ -341,19 +336,19 @@ class CampaignsController extends Controller
             ], 422);
         }
 
-        try {
-            $manager->notify(new AccessReviewReminderNotification($campaign, $itemCount));
-        } catch (\Throwable $e) {
-            \Log::warning('Access Review: reminder notification email failed', [
-                'campaign_id' => $campaign->id,
-                'manager_id'  => $manager->id,
-                'error'       => $e->getMessage(),
-            ]);
-
-            return response()->json([
-                'error' => trans('admin/access-review/general.reminder_email_failed'),
-            ], 422);
-        }
+        // Send after the response so a slow/unreachable mail server can't hang the
+        // request. Failures are logged; the click gets an immediate acknowledgement.
+        dispatch(function () use ($manager, $campaign, $itemCount) {
+            try {
+                $manager->notify(new AccessReviewReminderNotification($campaign, $itemCount));
+            } catch (\Throwable $e) {
+                \Log::warning('Access Review: reminder notification email failed', [
+                    'campaign_id' => $campaign->id,
+                    'manager_id'  => $manager->id,
+                    'error'       => $e->getMessage(),
+                ]);
+            }
+        })->afterResponse();
 
         return response()->json([
             'success' => trans('admin/access-review/general.reminder_sent', ['name' => $manager->first_name]),
