@@ -27,6 +27,7 @@ return [
     'deleted' => 'Campaign deleted.',
     'restored' => 'Campaign restored.',
     'launched' => 'Campaign launched. :count items snapshotted for review.',
+    'launch_email_failed' => 'The campaign launched, but notification emails could not be sent. Check your mail configuration.',
     'closed' => 'Campaign closed.',
 
     'not_editable_unless_draft' => 'Only draft campaigns can be edited.',
@@ -105,6 +106,7 @@ return [
     'reminder_sent'             => 'Reminder sent to :name.',
     'reminder_no_email'         => 'This manager has no email address on file.',
     'reminder_no_items'         => 'This user has no items to review in this campaign.',
+    'reminder_email_failed'     => 'The reminder email could not be sent. Check your mail configuration.',
 
     // Authorization
     'fmcs_superuser_only'       => 'Access Review is restricted to superusers when Full Multiple Company Support is enabled.',

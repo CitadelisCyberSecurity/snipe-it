@@ -45,6 +45,42 @@ class LaunchAndCloseCampaignTest extends TestCase
         ]);
     }
 
+    public function test_launch_succeeds_with_a_warning_when_notification_email_cannot_be_sent(): void
+    {
+        $campaign = AccessReviewCampaign::factory()->create();
+        $manager = User::factory()->create(['email' => 'manager@example.com']);
+        $reportee = User::factory()->create(['manager_id' => $manager->id]);
+        $license = License::factory()->create();
+        LicenseSeat::factory()->assignedToUser($reportee)->create(['license_id' => $license->id]);
+
+        // Simulate the notification layer failing (e.g. unconfigured/unreachable SMTP)
+        // WITHOUT any real mail transport or network call: make delivery throw.
+        $this->mock(\Illuminate\Contracts\Notifications\Dispatcher::class, function ($mock) {
+            $mock->shouldIgnoreMissing();
+            $mock->shouldReceive('send')->andThrow(new \RuntimeException('mail transport unavailable'));
+            $mock->shouldReceive('sendNow')->andThrow(new \RuntimeException('mail transport unavailable'));
+        });
+
+        $response = $this->actingAs(User::factory()->admin()->create())
+            ->post(route('access-review.campaigns.launch', $campaign));
+
+        // No 500 — it redirects, reports success (it did launch), and flashes a red
+        // "emails could not be sent" error.
+        $response->assertRedirect(route('access-review.campaigns.index'));
+        $response->assertSessionHas('success');
+        $response->assertSessionHas('error');
+
+        // The campaign is still launched despite the email failure.
+        $this->assertDatabaseHas('access_review_campaigns', [
+            'id' => $campaign->id,
+            'status' => AccessReviewCampaign::STATUS_ACTIVE,
+        ]);
+        $this->assertDatabaseHas('access_review_items', [
+            'campaign_id' => $campaign->id,
+            'manager_id' => $manager->id,
+        ]);
+    }
+
     public function test_launching_a_non_draft_campaign_is_blocked(): void
     {
         $campaign = AccessReviewCampaign::factory()->active()->create();

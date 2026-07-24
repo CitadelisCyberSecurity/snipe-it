@@ -213,20 +213,40 @@ class CampaignsController extends Controller
                 ->with('error', trans('admin/access-review/general.not_launchable_unless_draft'));
         }
 
+        // The campaign is already launched (committed above). Sending the manager
+        // notifications must never fail the launch — if mail is unconfigured or the
+        // SMTP server is unreachable, log it and surface a non-fatal red warning
+        // instead of a 500.
+        $emailFailed = false;
         $campaign->items()
             ->with('manager')
             ->get()
             ->groupBy('manager_id')
-            ->each(function ($managerItems) use ($campaign) {
+            ->each(function ($managerItems) use ($campaign, &$emailFailed) {
                 $manager = $managerItems->first()->manager;
                 if ($manager && $manager->email) {
-                    $manager->notify(new AccessReviewCampaignLaunchedNotification($campaign, $managerItems->count()));
+                    try {
+                        $manager->notify(new AccessReviewCampaignLaunchedNotification($campaign, $managerItems->count()));
+                    } catch (\Throwable $e) {
+                        $emailFailed = true;
+                        \Log::warning('Access Review: launch notification email failed', [
+                            'campaign_id' => $campaign->id,
+                            'manager_id'  => $manager->id,
+                            'error'       => $e->getMessage(),
+                        ]);
+                    }
                 }
             });
 
-        return redirect()
+        $redirect = redirect()
             ->route('access-review.campaigns.index')
             ->with('success', trans('admin/access-review/general.launched', ['count' => $count]));
+
+        if ($emailFailed) {
+            $redirect->with('error', trans('admin/access-review/general.launch_email_failed'));
+        }
+
+        return $redirect;
     }
 
     public function close(AccessReviewCampaign $campaign): RedirectResponse
@@ -321,7 +341,19 @@ class CampaignsController extends Controller
             ], 422);
         }
 
-        $manager->notify(new AccessReviewReminderNotification($campaign, $itemCount));
+        try {
+            $manager->notify(new AccessReviewReminderNotification($campaign, $itemCount));
+        } catch (\Throwable $e) {
+            \Log::warning('Access Review: reminder notification email failed', [
+                'campaign_id' => $campaign->id,
+                'manager_id'  => $manager->id,
+                'error'       => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'error' => trans('admin/access-review/general.reminder_email_failed'),
+            ], 422);
+        }
 
         return response()->json([
             'success' => trans('admin/access-review/general.reminder_sent', ['name' => $manager->first_name]),
