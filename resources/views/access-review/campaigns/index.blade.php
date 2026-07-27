@@ -13,20 +13,26 @@
 @stop
 
 @section('content')
+    @php($showingDeleted = request('status') === 'deleted')
     <x-container>
         <x-box name="accessReviewCampaigns">
-            <x-slot:bulkactions>
-                <x-table.bulk-actions
-                    action_route="{{ route('access-review.campaigns.bulk-destroy') }}"
-                    model_name="access_review_campaign">
-                    <option value="delete">{{ trans('general.delete') }}</option>
-                </x-table.bulk-actions>
-            </x-slot:bulkactions>
+            @unless ($showingDeleted)
+                <x-slot:bulkactions>
+                    <x-table.bulk-actions
+                        action_route="{{ route('access-review.campaigns.bulk-destroy') }}"
+                        model_name="access_review_campaign">
+                        <option value="delete">{{ trans('general.delete') }}</option>
+                    </x-table.bulk-actions>
+                </x-slot:bulkactions>
+            @endunless
+            {{-- Show Deleted lives in the table toolbar (next to refresh/print) via
+                 the accessReviewCampaignsButtons function, matching the Users tab. --}}
             <x-table
                     show_column_search="false"
                     fixed_right_number="1"
                     fixed_number="1"
-                    api_url="{{ route('api.access-review.campaigns.index') }}"
+                    buttons="accessReviewCampaignsButtons"
+                    api_url="{{ route('api.access-review.campaigns.index', $showingDeleted ? ['status' => 'deleted'] : []) }}"
                     :presenter="\App\Presenters\AccessReviewCampaignPresenter::dataTableLayout()"
                     export_filename="export-access-review-campaigns-{{ date('Y-m-d') }}"
             />

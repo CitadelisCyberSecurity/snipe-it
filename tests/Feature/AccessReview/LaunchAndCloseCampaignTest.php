@@ -6,6 +6,8 @@ use App\Models\AccessReviewCampaign;
 use App\Models\License;
 use App\Models\LicenseSeat;
 use App\Models\User;
+use App\Notifications\AccessReviewCampaignLaunchedNotification;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class LaunchAndCloseCampaignTest extends TestCase
@@ -43,6 +45,35 @@ class LaunchAndCloseCampaignTest extends TestCase
             'manager_id' => $manager->id,
             'license_id' => $license->id,
         ]);
+    }
+
+    public function test_launch_dispatches_manager_notifications_without_blocking_the_request(): void
+    {
+        Notification::fake();
+
+        $campaign = AccessReviewCampaign::factory()->create();
+        $manager = User::factory()->create(['email' => 'manager@example.com']);
+        $reportee = User::factory()->create(['manager_id' => $manager->id]);
+        $license = License::factory()->create();
+        LicenseSeat::factory()->assignedToUser($reportee)->create(['license_id' => $license->id]);
+
+        $response = $this->actingAs(User::factory()->admin()->create())
+            ->post(route('access-review.campaigns.launch', $campaign));
+
+        // Launch returns immediately with success and no inline mail error — the
+        // notifications are sent after the response, so mail can never block it.
+        $response->assertRedirect(route('access-review.campaigns.index'));
+        $response->assertSessionHas('success');
+        $response->assertSessionMissing('error');
+
+        $this->assertDatabaseHas('access_review_campaigns', [
+            'id' => $campaign->id,
+            'status' => AccessReviewCampaign::STATUS_ACTIVE,
+        ]);
+
+        // The manager notification was dispatched (after the response) rather than
+        // sent inline during the request.
+        Notification::assertSentTo($manager, AccessReviewCampaignLaunchedNotification::class);
     }
 
     public function test_launching_a_non_draft_campaign_is_blocked(): void

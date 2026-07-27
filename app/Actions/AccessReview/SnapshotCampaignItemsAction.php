@@ -31,17 +31,22 @@ final class SnapshotCampaignItemsAction
                     ->whereIn('users.company_id', $campaign->company_ids);
             }
 
-            $rows = $query->select([
-                    'license_seats.id as license_seat_id',
-                    'license_seats.license_id',
-                    'users.id as user_id',
-                    'users.manager_id',
-                    'licenses.name as license_name_snapshot',
-                    'licenses.purchase_cost',
-                    'licenses.seats as total_seats',
-                ])
-                ->get()
-                ->map(function ($row) use ($campaign, $now) {
+            $query->select([
+                'license_seats.id as license_seat_id',
+                'license_seats.license_id',
+                'users.id as user_id',
+                'users.manager_id',
+                'licenses.name as license_name_snapshot',
+                'licenses.purchase_cost',
+                'licenses.seats as total_seats',
+            ]);
+
+            $campaign->items()->delete();
+
+            // Stream the eligible seats in batches so memory stays bounded regardless
+            // of how many seats a large org has, rather than loading them all at once.
+            $query->orderBy('license_seats.id')->chunk(500, function ($rows) use ($campaign, $now, &$count) {
+                $insert = $rows->map(function ($row) use ($campaign, $now) {
                     $totalSeats = (int) $row->total_seats;
                     $costPerSeat = null;
                     if ($row->purchase_cost !== null && $totalSeats > 0) {
@@ -59,15 +64,11 @@ final class SnapshotCampaignItemsAction
                         'created_at' => $now,
                         'updated_at' => $now,
                     ];
-                })
-                ->all();
+                })->all();
 
-            $campaign->items()->delete();
-            collect($rows)->chunk(500)->each(function ($chunk) {
-                AccessReviewItem::insert($chunk->all());
+                AccessReviewItem::insert($insert);
+                $count += count($insert);
             });
-
-            $count = count($rows);
         });
 
         return $count;

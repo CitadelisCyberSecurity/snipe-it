@@ -151,6 +151,10 @@ Route::group(['middleware' => 'auth'], function () {
             ->name('campaigns.update');
         Route::delete('campaigns/{campaign}', [App\Http\Controllers\AccessReview\CampaignsController::class, 'destroy'])
             ->name('campaigns.destroy');
+        // withTrashed() lets the {campaign} binding resolve a soft-deleted campaign so it can be restored.
+        Route::post('campaigns/{campaign}/restore', [App\Http\Controllers\AccessReview\CampaignsController::class, 'restore'])
+            ->name('campaigns.restore')
+            ->withTrashed();
 
         Route::prefix('my-reviews')->name('my-reviews.')->group(function () {
             Route::get('/', [App\Http\Controllers\AccessReview\ManagerReviewController::class, 'index'])

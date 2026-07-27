@@ -141,14 +141,10 @@ class CampaignsController extends Controller
                 ->with('error', trans('general.no_results_found'));
         }
 
-        AccessReviewCampaign::whereIn('id', $data['ids'])->each(function (AccessReviewCampaign $campaign) {
-            if ($campaign->isDraft()) {
-                DB::transaction(function () use ($campaign) {
-                    $campaign->items()->delete();
-                    $campaign->delete();
-                });
-            }
-        });
+        // Soft delete the selected campaigns regardless of status. Their items are
+        // left intact so a restore is lossless.
+        AccessReviewCampaign::whereIn('id', $data['ids'])
+            ->each(fn (AccessReviewCampaign $campaign) => $campaign->delete());
 
         return redirect()
             ->route('access-review.campaigns.index')
@@ -159,20 +155,30 @@ class CampaignsController extends Controller
     {
         $this->authorize('admin');
 
-        if (! $campaign->isDraft()) {
-            return redirect()
-                ->route('access-review.campaigns.index')
-                ->with('error', trans('admin/access-review/general.not_deletable_unless_draft'));
-        }
-
-        DB::transaction(function () use ($campaign) {
-            $campaign->items()->delete();
-            $campaign->delete();
-        });
+        // Soft delete only, for any status. The campaign's items are left intact so
+        // a restore is lossless; trashed records are only ever purged globally.
+        $campaign->delete();
 
         return redirect()
             ->route('access-review.campaigns.index')
             ->with('success', trans('admin/access-review/general.deleted'));
+    }
+
+    public function restore(AccessReviewCampaign $campaign): RedirectResponse
+    {
+        $this->authorize('admin');
+
+        if (! $campaign->trashed()) {
+            return redirect()
+                ->route('access-review.campaigns.index')
+                ->with('error', trans('admin/access-review/general.not_deleted'));
+        }
+
+        $campaign->restore();
+
+        return redirect()
+            ->route('access-review.campaigns.index')
+            ->with('success', trans('admin/access-review/general.restored'));
     }
 
     public function launch(AccessReviewCampaign $campaign): RedirectResponse
@@ -207,6 +213,10 @@ class CampaignsController extends Controller
                 ->with('error', trans('admin/access-review/general.not_launchable_unless_draft'));
         }
 
+        // The campaign is already launched (committed above). Send the manager
+        // notifications AFTER the HTTP response is flushed so a slow or unreachable
+        // mail server can never block or slow the launch request. Each send is
+        // isolated; failures are logged, never fatal.
         $campaign->items()
             ->with('manager')
             ->get()
@@ -214,7 +224,18 @@ class CampaignsController extends Controller
             ->each(function ($managerItems) use ($campaign) {
                 $manager = $managerItems->first()->manager;
                 if ($manager && $manager->email) {
-                    $manager->notify(new AccessReviewCampaignLaunchedNotification($campaign, $managerItems->count()));
+                    $itemCount = $managerItems->count();
+                    dispatch(function () use ($manager, $campaign, $itemCount) {
+                        try {
+                            $manager->notify(new AccessReviewCampaignLaunchedNotification($campaign, $itemCount));
+                        } catch (\Throwable $e) {
+                            \Log::warning('Access Review: launch notification email failed', [
+                                'campaign_id' => $campaign->id,
+                                'manager_id'  => $manager->id,
+                                'error'       => $e->getMessage(),
+                            ]);
+                        }
+                    })->afterResponse();
                 }
             });
 
@@ -315,7 +336,19 @@ class CampaignsController extends Controller
             ], 422);
         }
 
-        $manager->notify(new AccessReviewReminderNotification($campaign, $itemCount));
+        // Send after the response so a slow/unreachable mail server can't hang the
+        // request. Failures are logged; the click gets an immediate acknowledgement.
+        dispatch(function () use ($manager, $campaign, $itemCount) {
+            try {
+                $manager->notify(new AccessReviewReminderNotification($campaign, $itemCount));
+            } catch (\Throwable $e) {
+                \Log::warning('Access Review: reminder notification email failed', [
+                    'campaign_id' => $campaign->id,
+                    'manager_id'  => $manager->id,
+                    'error'       => $e->getMessage(),
+                ]);
+            }
+        })->afterResponse();
 
         return response()->json([
             'success' => trans('admin/access-review/general.reminder_sent', ['name' => $manager->first_name]),

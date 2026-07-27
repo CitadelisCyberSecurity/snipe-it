@@ -10,7 +10,10 @@ on:
       - master
       - develop
     tags:
-      - 'v**'
+      # Strict semver only. This filter IS the gate on the `latest` tag below:
+      # a loose 'v**' pattern let a typo tag (vtest, v-wip) publish `latest`
+      # straight to production consumers.
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   # Allows you to run this workflow manually from the Actions tab (any branch)
   workflow_dispatch:
 
@@ -166,7 +169,11 @@ jobs:
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            # Branch pushes only: on a tag ref {{branch}} expands to empty,
+            # yielding "-<sha>", which is not a valid Docker tag (must start
+            # alphanumeric) and would fail the release build. Tag pushes are
+            # already pinnable via the semver tags above.
+            type=sha,prefix={{branch}}-,enable=${{ github.ref_type == 'branch' }}
           flavor: |
             latest=false
             suffix=-alpine,onlatest=true

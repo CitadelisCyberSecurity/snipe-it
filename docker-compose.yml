@@ -1,4 +1,11 @@
 # Compose file for production.
+#
+# Run it on its own — do NOT rely on a bare `docker compose up -d`, which also
+# picks up any auto-loaded override file:
+#
+#   docker compose -f docker-compose.yml up -d --pull always
+#
+# Or set COMPOSE_FILE=docker-compose.yml once on the host.
 
 volumes:
   db_data:
@@ -6,7 +13,19 @@ volumes:
 
 services:
   app:
-    image: snipe/snipe-it:${APP_VERSION:-latest}
+    # This fork's image, built by .github/workflows/docker-ubuntu.yml. NOT
+    # upstream snipe/snipe-it — that one lacks this fork's custom commits.
+    #
+    # Defaults to `testing` (built from every push to master) because no
+    # vX.Y.Z release has been cut yet, so `latest` DOES NOT EXIST in the
+    # registry — defaulting to it made this file fail on pull. Once the first
+    # release is published, change this default to `latest`, which only ever
+    # comes from a release tag and so always means "newest reviewed production
+    # build" (see docs/UPDATING.md).
+    #
+    # Set APP_VERSION to pin a version (8.6.3) or use the slimmer alpine
+    # flavour (testing-alpine). For the staging tag use docker-compose.ghcr.yml.
+    image: ghcr.io/citadeliscybersecurity/snipe-it:${APP_VERSION:-testing}
     restart: unless-stopped
     volumes:
       - storage:/var/lib/snipeit
