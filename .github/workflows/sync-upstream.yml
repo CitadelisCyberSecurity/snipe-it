@@ -97,7 +97,10 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.rel.outputs.tag }}"
-          BRANCH="sync/upstream-${TAG}"
+          # Scope the sync branch to the target too, so a rehearsal run against a
+          # test branch can never collide with — or silently block — a real sync
+          # of the same release into develop.
+          BRANCH="sync/upstream-${TAG}-${TARGET_BRANCH//\//-}"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
           # 1) Already merged? Release commit already contained in target branch.
@@ -108,7 +111,7 @@ jobs:
           fi
 
           # 2) A sync PR for this exact release already open? Don't open a duplicate.
-          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+          if [ -n "$(gh pr list --head "$BRANCH" --base "$TARGET_BRANCH" --state open --json number --jq '.[].number')" ]; then
             echo "action=none" >> "$GITHUB_OUTPUT"
             echo "::notice::A sync PR for ${TAG} is already open — leaving it for review."
             exit 0
