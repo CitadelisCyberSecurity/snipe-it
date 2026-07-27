@@ -1,16 +1,16 @@
 # Run a NON-production tag of this fork's ghcr image.
 #
-# docker-compose.yml already points at this fork's `latest` (production). Use
-# this override to run the staging (`develop`) or pre-release (`testing`) image
-# instead, or — on a dev machine — to run a published image rather than the local
-# build from docker-compose.override.yml.
+# docker-compose.yml points at the production tag. Use this override to run the
+# staging (`develop`) or pre-release (`testing`) image instead, or — on a dev
+# machine — to run a published image rather than the local build from
+# docker-compose.dev.yml.
 #
 # The tag is switchable via SNIPE_TAG (defaults to develop):
 #   docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --pull always
 #   $env:SNIPE_TAG="testing"; docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --pull always
 #
-# Passing explicit -f files means docker-compose.override.yml (dev `build: .`) is
-# NOT auto-loaded, so there is no build stage to cancel here.
+# docker-compose.dev.yml (dev `build: .`) is never auto-loaded, so there is no
+# build stage to cancel here.
 services:
   app:
     image: ghcr.io/citadeliscybersecurity/snipe-it:${SNIPE_TAG:-develop}
