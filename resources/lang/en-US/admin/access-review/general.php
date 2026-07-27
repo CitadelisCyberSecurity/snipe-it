@@ -90,7 +90,7 @@ return [
     'item_no_decision'          => 'This seat has no manager decision yet.',
     'campaign_must_be_launched' => 'Campaign must be launched before actions can be executed.',
     'executed'                  => 'Executed',
-    'auto_executed'             => 'Auto (kept on review completion)',
+    'auto_executed'             => 'Done',
     'execute_success'           => 'Action executed.',
     'execute_error'             => 'Failed to execute action.',
     'seat_changed_since_snapshot' => 'The seat was no longer assigned to the reviewed user (it may have been reassigned or checked in since this campaign launched), so nothing was revoked. The item has been marked as executed.',
