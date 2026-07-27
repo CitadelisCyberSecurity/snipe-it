@@ -1,0 +1,20 @@
+# Local development overrides.
+#
+# NOT auto-loaded. This was previously docker-compose.override.yml, a name
+# `docker compose` merges in automatically — so a plain `docker compose up -d`
+# on a production host silently built the image from the local Dockerfile
+# instead of pulling the published one, and published MariaDB on host port
+# 3306. Loading it is now explicit:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# Builds the app image locally instead of pulling this fork's published ghcr
+# image, and exposes MariaDB on the host for direct DB access.
+# Never use this file on a production host.
+
+services:
+  app:
+    build: .
+  db:
+    ports:
+      - "3306:3306"
