@@ -16,16 +16,16 @@ services:
     # This fork's image, built by .github/workflows/docker-ubuntu.yml. NOT
     # upstream snipe/snipe-it — that one lacks this fork's custom commits.
     #
-    # Defaults to `testing` (built from every push to master) because no
-    # vX.Y.Z release has been cut yet, so `latest` DOES NOT EXIST in the
-    # registry — defaulting to it made this file fail on pull. Once the first
-    # release is published, change this default to `latest`, which only ever
-    # comes from a release tag and so always means "newest reviewed production
-    # build" (see docs/UPDATING.md).
+    # Defaults to `latest`, published on every push to master and so always the
+    # newest reviewed production build (see docs/UPDATING.md).
     #
     # Set APP_VERSION to pin a version (8.6.3) or use the slimmer alpine
-    # flavour (testing-alpine). For the staging tag use docker-compose.ghcr.yml.
-    image: ghcr.io/citadeliscybersecurity/snipe-it:${APP_VERSION:-testing}
+    # flavour (latest-alpine). For the staging tag use docker-compose.ghcr.yml.
+    # Published tags are develop/testing/latest plus the upstream version and
+    # its minor series (8.6.3, 8.6), each with an -alpine variant. All of them
+    # MOVE, including 8.6.3 — pin by @sha256:<digest> if you need one exact
+    # build. Per-commit tags are not published.
+    image: ghcr.io/citadeliscybersecurity/snipe-it:${APP_VERSION:-latest}
     restart: unless-stopped
     volumes:
       - storage:/var/lib/snipeit

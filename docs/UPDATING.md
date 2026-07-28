@@ -11,12 +11,18 @@ upstream release
   └─ sync workflow ▶ merge + npm run prod ▶ PR into develop   (staging)
                        └─ validate the develop image
                             └─ PR develop ▶ master             (production gate)
-                                 └─ tag vX.Y.Z ▶ latest image
+                                 └─ latest + 8.6.3 images, automatically
 ```
 
 - **`develop`** — integration/staging. Upstream lands here first.
 - **`master`** — production. Only reviewed, validated code arrives via a `develop → master` PR.
-- **`latest`** image — only ever from a `vX.Y.Z` release tag.
+- **`latest`** image — every push to `master`. Merging the production gate *is* the release; there is no separate tagging step.
+
+**Image versions track upstream, not the fork.** The version tags come from
+`app_version` in `config/version.php` — upstream's own version file, carried in
+by the sync — so an image containing upstream 8.6.3 is published as `8.6.3`.
+No git tag is involved, which is what previously caused an image containing
+upstream 8.6.3 to be published as `1.1.0`.
 
 ---
 
@@ -57,15 +63,15 @@ docker buildx imagetools inspect ghcr.io/citadeliscybersecurity/snipe-it:develop
 ```
 Smoke-test until satisfied.
 
-### 4. Promote `develop → master`
+### 4. Promote `develop → master` — this publishes the release
 Open a PR from `develop` into `master` (title e.g. `Release: upstream vX.Y.Z`),
-review, and merge. Merging builds the **`testing` / `testing-alpine`** image
-(final pre-release check).
+review, and merge. Merging publishes **`latest`**, **`X.Y.Z`**, **`X.Y`** and
+**`testing`** (+ `-alpine`), all pointing at the same manifest.
 
-### 5. Cut the release → `latest`
-*Releases → Draft a new release →* new tag `vX.Y.Z`, target `master`,
-**Generate release notes**, **Publish**. The `v*` tag builds and publishes
-**`latest`**, `X.Y.Z`, `X.Y` (+ `-alpine`).
+There is **no step 5** — no tag to push and no release to draft. The
+`develop → master` PR is the production gate, so merging it is the release. If
+you want a GitHub Release for the changelog, create one against `master`; it has
+no effect on the images.
 
 ---
 
@@ -91,17 +97,53 @@ git push
 | Action | Image tag(s) |
 |---|---|
 | Sync PR merged → `develop` | `develop` / `develop-alpine` (staging) |
-| `develop → master` PR merged | `testing` / `testing-alpine` |
-| `gh release create vX.Y.Z` (tag) | `latest`, `X.Y.Z`, `X.Y` (+ `-alpine`) |
+| `develop → master` PR merged | `latest`, `X.Y.Z`, `X.Y`, `testing` (+ `-alpine`) |
 
 Base image: `ghcr.io/citadeliscybersecurity/snipe-it`
+
+`X.Y.Z` is the **upstream** Snipe-IT version from `config/version.php` (today
+`8.6.3`), so `latest`, `8.6.3`, `8.6` and `testing` are four names for the same
+manifest. Those are the **only** tags published: no `vX.Y.Z` git tag is involved
+and there is no per-commit `<branch>-<sha>` tag.
+
+### Pinning and rollback
+
+Every published tag **moves**, including `8.6.3` — fork commits land on top of an
+upstream release, so successive `master` builds republish that same version. To
+hold a deployment on one exact build, pin the digest:
+
+```bash
+# read the digest of what you have validated
+docker buildx imagetools inspect ghcr.io/citadeliscybersecurity/snipe-it:latest
+
+APP_VERSION=8.6.3 docker compose up -d   # tracks the newest 8.6.3 build
+```
+
+```yaml
+# or pin exactly, in a compose override
+image: ghcr.io/citadeliscybersecurity/snipe-it@sha256:<digest>
+```
+
+Digests are immutable and survive cleanup as long as a live tag points at them.
+To roll back further, or to rebuild a specific commit, re-run the docker workflow
+on that ref (Actions → *Docker images (Ubuntu)* / *Docker images (Alpine)* →
+**Run workflow**) — note this republishes the moving tags from that commit.
+
+`GHCR Cleanup` (`.github/workflows/ghcr-cleanup.yml`) prunes untagged and
+orphaned versions weekly, so record the digest of anything you need to keep
+reachable.
 
 ---
 
 ## Golden rules
 
 - **Upstream always lands on `develop` first** — never merge a raw upstream drop straight to `master`.
-- **`latest` only ever comes from a `vX.Y.Z` tag** — routine commits never touch it.
+- **Every push to `master` publishes `latest`.** `master` is the release branch, so
+  validate on `develop` before promoting — there is no tagging step left to catch
+  a bad merge.
+- **Never hand-edit `app_version` in `config/version.php`** to change an image tag.
+  It is upstream's file, owned by the sync; editing it makes the image claim an
+  upstream release it does not contain.
 - Compiled assets stay committed (the Docker image copies them in; there is no
   in-image build step). The sync workflow rebuilds them for you on a clean merge;
   if you merge manually, run `npm run prod` yourself.
