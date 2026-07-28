@@ -62,24 +62,31 @@ jobs:
           # suffix, so this single run covers Ubuntu and Alpine together.
           package: snipe-it
 
-          # Anchored regexes rather than the default wildcard globs, because
-          # use-regex below is a GLOBAL switch (it reinterprets delete-tags and
-          # exclude-tags together, not one of them). Mixing the two syntaxes is
-          # how you get a silent no-op: as a regex the glob `[0-9]*.[0-9]*.[0-9]*`
-          # matches nearly any string, since `[0-9]*` matches empty and `.` is
-          # any character, so it would exclude the entire package from deletion.
-          # One syntax, anchored, everywhere.
+          # Two things about these patterns, both learned the hard way:
+          #
+          # 1. use-regex is a GLOBAL switch. It reinterprets delete-tags and
+          #    exclude-tags together, never just one, so both must use the same
+          #    syntax. Leaving a wildcard glob in regex mode is a silent no-op:
+          #    as a regex the glob `[0-9]*.[0-9]*.[0-9]*` matches nearly any
+          #    string, since `[0-9]*` matches empty and `.` is any character.
+          #
+          # 2. In regex mode each input is ONE regex, not a comma-separated list.
+          #    The action hands the whole value to validateUserRegex (config.ts),
+          #    so a comma is matched literally -- `^a$,^b$` compiles to a pattern
+          #    requiring a comma in the tag and therefore matches nothing, with
+          #    the run still reporting success. Use alternation, never commas.
+          #    A first attempt here did exactly that and matched 0 of 40 tags.
 
           # The moving pointers from docs/UPDATING.md, guarded against the delete
-          # patterns below. Comma-separated, so no pattern may contain a comma.
+          # pattern below.
           #
           # The version tags (8.6.3, 8.6, + -alpine) are deliberately absent: a
-          # tag matched by neither list is simply left alone, and exclude-tags
-          # WINS over delete-tags. Adding a generic semver pattern here would
+          # tag matched by neither pattern is simply left alone, and exclude-tags
+          # WINS over delete-tags. Adding a generic semver branch here would
           # therefore also shield the legacy 1.1.x tags below and make deleting
-          # them impossible. Keeping the delete patterns narrow is what protects
-          # the version tags, so do not "helpfully" broaden this list.
-          exclude-tags: '^latest(-alpine)?$,^testing(-alpine)?$,^develop(-alpine)?$'
+          # them impossible. Keeping the delete pattern narrow is what protects
+          # the version tags, so do not "helpfully" broaden this one.
+          exclude-tags: '^(latest|testing|develop)(-alpine)?$'
 
           # Two families of legacy tag, both from schemes this repo no longer uses:
           #
@@ -95,16 +102,17 @@ jobs:
           # neither shape is minted any more. Upstream Snipe-IT is on 8.x and will
           # not return to 1.1, so pattern 2 cannot catch a real version tag.
           #
-          # Anchored, not a `develop-*` glob — a glob would also match the live
-          # `develop-alpine` tag. exclude-tags would catch that, but relying on
-          # exclusion to undo an over-broad delete pattern is fragile.
+          # Anchored, and note `develop-[0-9a-f]{7}` cannot match the live
+          # `develop-alpine` tag ("alpine" is 6 chars and not all hex). A
+          # `develop-*` glob WOULD match it; exclude-tags would catch that, but
+          # relying on exclusion to undo an over-broad delete pattern is fragile.
           #
           # Safe even though these tags share a package version with a live one
           # (1.1.0 currently sits on the same version as `latest`, and the newest
           # pin tag on the same version as `testing`): the action untags rather
           # than deletes any version carrying more than one tag, and refuses to
           # remove an image's last tag, so the live tag survives.
-          delete-tags: '^(master|develop)-[0-9a-f]{7}(-alpine)?$,^1\.1(\.0)?(-alpine)?$'
+          delete-tags: '^((master|develop)-[0-9a-f]{7}|1\.1(\.0)?)(-alpine)?$'
           use-regex: true
 
           # Reclaim the per-arch children left by push-by-digest, plus the
