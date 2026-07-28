@@ -1,19 +1,20 @@
 # Snipe-IT (Alpine) Docker image build for GitHub Container Registry (ghcr.io)
 name: Docker images (Alpine)
 
-# Run this Build for all pushes to 'master' or develop branch, or tagged releases.
+# Run this Build for all pushes to 'master' or develop branch.
 # Also run for PRs to ensure PR doesn't break Docker build process.
 # Use the Actions tab ("Run workflow") to build any other branch on demand.
+#
+# Deliberately NOT triggered by git tags. The image version tracks the UPSTREAM
+# Snipe-IT release recorded in config/version.php, not a fork git tag, so
+# releases need no manual tagging. Leaving a tag trigger in place would let a
+# pushed vX.Y.Z mint version tags from the tag NAME instead, which is how the
+# image previously ended up published as 1.1.0 while containing upstream 8.6.3.
 on:
   push:
     branches:
       - master
       - develop
-    tags:
-      # Strict semver only. This filter IS the gate on the `latest` tag below:
-      # a loose 'v**' pattern let a typo tag (vtest, v-wip) publish `latest`
-      # straight to production consumers.
-      - 'v[0-9]+.[0-9]+.[0-9]+'
   # Allows you to run this workflow manually from the Actions tab (any branch)
   workflow_dispatch:
 
@@ -63,6 +64,9 @@ jobs:
       - name: Prepare image reference
         run: echo "IMAGE=${REGISTRY}/${IMAGE_NAME,,}" >> "$GITHUB_ENV"
 
+      - name: Derive upstream app version
+        run: bash .github/scripts/app-version.sh
+
       # https://github.com/docker/metadata-action
       # In the split build we only need the labels here; tags are applied to the
       # merged manifest in the merge job below.
@@ -71,6 +75,11 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
+          # Without this the version label is derived from the git ref, so a
+          # master build would self-report as "master". Point it at the upstream
+          # release the image actually contains.
+          labels: |
+            org.opencontainers.image.version=${{ env.APP_VERSION }}
 
       # https://github.com/docker/setup-buildx-action
       - name: Setup Docker Buildx
@@ -123,18 +132,26 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Combine the per-arch digests into ONE multi-arch manifest list and apply the
-  # tags. This is where the testing/latest promotion flow lives (inspired by
-  # vaultwarden's testing/latest split):
-  #   - Push to the default branch (master) -> "testing-alpine". This is the
-  #     candidate you pull and validate before promoting.
-  #   - Push to any other branch (e.g. develop) -> "<branch>-alpine", so it
-  #     never clobbers the "testing" candidate.
-  #   - Release tag (vX.Y.Z) -> "latest-alpine" + version tags. Only a real tag
-  #     promotes to latest; day-to-day commits never touch it.
-  #   - Every push also gets a "<branch>-<sha>-alpine" tag for exact,
-  #     reproducible pinning of a specific build.
+  # tags:
+  #   - Push to the default branch (master) -> "<upstream version>-alpine"
+  #     (8.6.3-alpine), "<minor series>-alpine" (8.6-alpine), "latest-alpine" and
+  #     "testing-alpine", all pointing at the same manifest. The version comes
+  #     from config/version.php, so it names the UPSTREAM Snipe-IT release this
+  #     fork is built from.
+  #   - Push to any other branch (e.g. develop) -> "<branch>-alpine" only, so
+  #     staging builds never touch the production pointers.
+  #
+  # Every one of these is a MOVING tag: fork commits land on top of an upstream
+  # release, so successive master builds republish the same 8.6.3-alpine. There is
+  # no immutable tag by design -- pin by digest (image@sha256:...) if you need
+  # one build exactly.
+  #
+  # Deliberately NO per-commit "<branch>-<sha>-alpine" tag either: it minted a
+  # permanent registry tag on every push, which is what grew this package to 266
+  # versions.
+  #
   # suffix=-alpine (flavor) appends to every tag, so this never clobbers the
-  # Ubuntu image's tags: latest -> latest-alpine, 1.2.3 -> 1.2.3-alpine, etc.
+  # Ubuntu image's tags: latest -> latest-alpine, 8.6.3 -> 8.6.3-alpine, etc.
   # ---------------------------------------------------------------------------
   merge:
     # No digests are produced on PRs, so there is nothing to merge.
@@ -150,8 +167,20 @@ jobs:
           pattern: digests-alpine-*
           merge-multiple: true
 
+      # Only config/version.php is needed here, to derive the version tags.
+      - name: Checkout version file
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            config/version.php
+            .github/scripts/app-version.sh
+          sparse-checkout-cone-mode: false
+
       - name: Prepare image reference
         run: echo "IMAGE=${REGISTRY}/${IMAGE_NAME,,}" >> "$GITHUB_ENV"
+
+      - name: Derive upstream app version
+        run: bash .github/scripts/app-version.sh
 
       # https://github.com/docker/setup-buildx-action
       - name: Setup Docker Buildx
@@ -163,17 +192,20 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
+          # Default branch (master) publishes the production set: the upstream
+          # version it contains, its minor series, plus the two moving pointers.
+          # Any other branch publishes only its own name (develop -> "develop").
+          # suffix=-alpine below appends to every one of these.
+          #
+          # Gated on the ref alone, not on `github.event_name == 'push'`: the old
+          # condition meant a manual "Run workflow" on master matched no tag rule
+          # at all and produced an untagged manifest.
           tags: |
-            type=raw,value=testing,enable=${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=raw,value=${{ env.APP_VERSION }},enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=raw,value=${{ env.APP_VERSION_MINOR }},enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=raw,value=testing,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
             type=ref,event=branch,enable=${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            # Branch pushes only: on a tag ref {{branch}} expands to empty,
-            # yielding "-<sha>", which is not a valid Docker tag (must start
-            # alphanumeric) and would fail the release build. Tag pushes are
-            # already pinnable via the semver tags above.
-            type=sha,prefix={{branch}}-,enable=${{ github.ref_type == 'branch' }}
           flavor: |
             latest=false
             suffix=-alpine,onlatest=true

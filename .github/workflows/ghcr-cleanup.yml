@@ -1,0 +1,119 @@
+# Prunes the ghcr.io/citadeliscybersecurity/snipe-it package so it only ever
+# contains the tags documented in docs/UPDATING.md: develop, testing, latest and
+# the X.Y.Z / X.Y release tags (each with its -alpine variant).
+#
+# Why this is needed at all: docker-ubuntu.yml and docker-alpine.yml build each
+# architecture separately and push it BY DIGEST, then assemble a manifest list in
+# their `merge` job. Every run therefore leaves the per-arch child manifests as
+# untagged package versions, and moving a tag (develop/testing) orphans the
+# previous index and its children. Nothing reclaims them, so the package grows
+# without bound. Build cache is NOT a factor here: both workflows use
+# cache-to: type=gha, so it lives in the Actions cache, not in GHCR.
+#
+# Shaped after vaultwarden's .github/workflows/releasecache-cleanup.yml (weekly
+# cron + manual dispatch, minimal permissions, pinned action).
+name: GHCR Cleanup
+
+# Least privilege by default; the one job that needs to delete opts in below.
+permissions: {}
+
+# Never let two prunes race over the same package.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+on:
+  schedule:
+    - cron: '0 1 * * FRI'
+
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Log what would be deleted without deleting it"
+        type: boolean
+        default: true
+
+jobs:
+  cleanup:
+    name: Prune GHCR package versions
+    # Deleting is irreversible, so never let a fork run this.
+    if: github.repository == 'CitadelisCyberSecurity/snipe-it'
+    permissions:
+      packages: write # To delete package versions
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      # https://github.com/dataaxiom/ghcr-cleanup-action
+      #
+      # Deliberately NOT actions/delete-package-versions (what vaultwarden uses).
+      # That action has no manifest awareness: it only sees a flat list of
+      # versions, so delete-only-untagged-versions would delete the per-arch and
+      # attestation child manifests that latest/develop/testing point AT, leaving
+      # those tags pulling to a missing-blob error. Only ~1/3 of this package's
+      # untagged versions are actually unreferenced. This action resolves each
+      # OCI index's children and attestation referrers first, so an untagged
+      # sweep cannot orphan a live tag.
+      - name: Prune untagged and orphaned versions
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Both flavours share one package, differing only by the -alpine tag
+          # suffix, so this single run covers Ubuntu and Alpine together.
+          package: snipe-it
+
+          # Anchored regexes rather than the default wildcard globs, because
+          # use-regex below is a GLOBAL switch (it reinterprets delete-tags and
+          # exclude-tags together, not one of them). Mixing the two syntaxes is
+          # how you get a silent no-op: as a regex the glob `[0-9]*.[0-9]*.[0-9]*`
+          # matches nearly any string, since `[0-9]*` matches empty and `.` is
+          # any character, so it would exclude the entire package from deletion.
+          # One syntax, anchored, everywhere.
+
+          # The moving pointers from docs/UPDATING.md, guarded against the delete
+          # patterns below. Comma-separated, so no pattern may contain a comma.
+          #
+          # The version tags (8.6.3, 8.6, + -alpine) are deliberately absent: a
+          # tag matched by neither list is simply left alone, and exclude-tags
+          # WINS over delete-tags. Adding a generic semver pattern here would
+          # therefore also shield the legacy 1.1.x tags below and make deleting
+          # them impossible. Keeping the delete patterns narrow is what protects
+          # the version tags, so do not "helpfully" broaden this list.
+          exclude-tags: '^latest(-alpine)?$,^testing(-alpine)?$,^develop(-alpine)?$'
+
+          # Two families of legacy tag, both from schemes this repo no longer uses:
+          #
+          #   1. <branch>-<sha> per-commit pins, from the type=sha entry that used
+          #      to be in the docker-*.yml metadata blocks (32 accumulated).
+          #   2. 1.1 / 1.1.0, from when the image was versioned off a fork git tag
+          #      instead of the upstream release in config/version.php. They label
+          #      an image that actually contains upstream 8.6.3, so they are
+          #      actively misleading.
+          #
+          # Left permanently enabled rather than gated behind a dispatch input:
+          # both clear on the first run and match nothing ever after, since
+          # neither shape is minted any more. Upstream Snipe-IT is on 8.x and will
+          # not return to 1.1, so pattern 2 cannot catch a real version tag.
+          #
+          # Anchored, not a `develop-*` glob — a glob would also match the live
+          # `develop-alpine` tag. exclude-tags would catch that, but relying on
+          # exclusion to undo an over-broad delete pattern is fragile.
+          #
+          # Safe even though these tags share a package version with a live one
+          # (1.1.0 currently sits on the same version as `latest`, and the newest
+          # pin tag on the same version as `testing`): the action untags rather
+          # than deletes any version carrying more than one tag, and refuses to
+          # remove an image's last tag, so the live tag survives.
+          delete-tags: '^(master|develop)-[0-9a-f]{7}(-alpine)?$,^1\.1(\.0)?(-alpine)?$'
+          use-regex: true
+
+          # Reclaim the per-arch children left by push-by-digest, plus the
+          # indexes orphaned when develop/testing moved.
+          delete-untagged: true
+          delete-orphaned-images: true
+
+          # Re-check afterwards that every retained manifest list still has all
+          # of its children, i.e. that nothing above broke a live tag.
+          validate: true
+
+          dry-run: ${{ inputs.dry-run || false }}
