@@ -5,11 +5,25 @@ name: Docker images (Alpine)
 # Also run for PRs to ensure PR doesn't break Docker build process.
 # Use the Actions tab ("Run workflow") to build any other branch on demand.
 #
-# Deliberately NOT triggered by git tags. The image version tracks the UPSTREAM
-# Snipe-IT release recorded in config/version.php, not a fork git tag, so
-# releases need no manual tagging. Leaving a tag trigger in place would let a
-# pushed vX.Y.Z mint version tags from the tag NAME instead, which is how the
-# image previously ended up published as 1.1.0 while containing upstream 8.6.3.
+# This workflow never publishes `latest-alpine` or a version tag. Master builds
+# the release candidate (`testing-alpine`); promote.yml retags that exact digest
+# as latest/X.Y.Z/X.Y (-alpine) when a human says so.
+#
+# Deliberately NOT triggered by git tags either, for two independent reasons:
+#
+#   1. The image version tracks the UPSTREAM Snipe-IT release recorded in
+#      config/version.php, not a fork git tag. A tag trigger lets a pushed vX.Y.Z
+#      mint version tags from the tag NAME instead, which is how the image
+#      previously ended up published as 1.1.0 while containing upstream 8.6.3.
+#   2. sync-upstream.yml mirrors UPSTREAM's tags into this fork (`git push origin
+#      --tags`), so v8.7.0 can appear here pointing at a commit that was never
+#      merged to master. A v* trigger would let upstream's commit publish
+#      `latest-alpine`. That is suppressed today only because tags pushed with
+#      GITHUB_TOKEN do not trigger workflows -- a load-bearing accident that a
+#      switch to a PAT (which sync-upstream already anticipates) would undo.
+#
+# So the promote gate lives in promote.yml as a manual dispatch, which no
+# mirrored tag can ever fire.
 on:
   push:
     branches:
@@ -132,14 +146,22 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Combine the per-arch digests into ONE multi-arch manifest list and apply the
-  # tags:
-  #   - Push to the default branch (master) -> "<upstream version>-alpine"
-  #     (8.6.3-alpine), "<minor series>-alpine" (8.6-alpine), "latest-alpine" and
-  #     "testing-alpine", all pointing at the same manifest. The version comes
-  #     from config/version.php, so it names the UPSTREAM Snipe-IT release this
-  #     fork is built from.
+  # tags. Which names get applied depends on WHAT TRIGGERED the run, the same
+  # split vaultwarden's release.yml makes between its branch and tag triggers:
+  #
+  #   - Push to the default branch (master) -> "testing-alpine" only. Release
+  #     candidate: master is the production gate, but merging it no longer moves
+  #     production.
   #   - Push to any other branch (e.g. develop) -> "<branch>-alpine" only, so
   #     staging builds never touch the production pointers.
+  #
+  # "<upstream version>-alpine" (8.6.3-alpine), "<minor series>-alpine" and
+  # "latest-alpine" are NOT published here. promote.yml retags the validated
+  # `testing-alpine` digest instead, so production ships the exact index that was
+  # smoke-tested rather than a rebuild of the same commit. The version it applies
+  # still originates here: the org.opencontainers.image.version label stamped
+  # from config/version.php in the build job below is what promote.yml reads
+  # back.
   #
   # Every one of these is a MOVING tag: fork commits land on top of an upstream
   # release, so successive master builds republish the same 8.6.3-alpine. There is
@@ -192,18 +214,16 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
-          # Default branch (master) publishes the production set: the upstream
-          # version it contains, its minor series, plus the two moving pointers.
-          # Any other branch publishes only its own name (develop -> "develop").
-          # suffix=-alpine below appends to every one of these.
+          # Master publishes the release candidate; any other branch publishes
+          # only its own name (develop -> "develop"). suffix=-alpine below appends
+          # to every one of these. Production tags come from promote.yml.
           #
-          # Gated on the ref alone, not on `github.event_name == 'push'`: the old
+          # Gated on the ref, not on `github.event_name == 'push'`: the old
           # condition meant a manual "Run workflow" on master matched no tag rule
-          # at all and produced an untagged manifest.
+          # at all and produced an untagged manifest. A dispatch on master
+          # therefore rebuilds `testing-alpine`, which is what you want for
+          # re-running a failed RC build.
           tags: |
-            type=raw,value=${{ env.APP_VERSION }},enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-            type=raw,value=${{ env.APP_VERSION_MINOR }},enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
             type=raw,value=testing,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
             type=ref,event=branch,enable=${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
           flavor: |

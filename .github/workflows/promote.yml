@@ -1,0 +1,198 @@
+# Promote the validated `testing` image to production by RETAGGING it.
+#
+# This does not build anything. `docker buildx imagetools create` copies a
+# manifest list registry-side, so `latest` ends up pointing at the exact index
+# that was smoke-tested -- same bytes, not merely the same source. That closes
+# two gaps a rebuild-on-promote leaves open:
+#
+#   - a rebuild of `master` is only as reproducible as the Dockerfile and its
+#     base images, so "we tested this" becomes "we tested something built from
+#     the same commit";
+#   - anything merged to `master` between validation and promotion silently ends
+#     up in the release.
+#
+# It is also seconds rather than a full multi-arch build, and needs no checkout:
+# the version comes from the image's own OCI label, not from the branch.
+#
+# Attestations and per-arch children ride along untouched -- the index digest is
+# unchanged, so referrers still resolve.
+name: Promote to production
+
+# Least privilege by default; the one job that needs to push tags opts in below.
+permissions: {}
+
+# Never let two promotes race over the same tags.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Resolve and print the plan without moving any tag"
+        type: boolean
+        default: false
+
+jobs:
+  promote:
+    name: Retag testing -> latest
+    # Moving production tags; never let a fork run this.
+    if: github.repository == 'CitadelisCyberSecurity/snipe-it'
+    permissions:
+      packages: write # To push the production tags
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # https://github.com/docker/setup-buildx-action
+      # imagetools talks to the registry directly and needs no builder instance,
+      # but the build workflows set buildx up the same way before calling it.
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # https://github.com/docker/login-action
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The version is read from org.opencontainers.image.version, which
+      # docker-ubuntu.yml / docker-alpine.yml stamp from config/version.php at
+      # BUILD time. Deriving it from the artifact rather than from master is the
+      # point: if master has since moved to 8.7.0, the image being promoted is
+      # still 8.6.3 and must be tagged as such.
+      #
+      # Both flavours are required to agree. A mismatch means one of them failed
+      # or was rebuilt independently, and promoting only half would leave
+      # latest and latest-alpine on different releases.
+      - name: Resolve version from the testing images
+        env:
+          IMG: ghcr.io/citadeliscybersecurity/snipe-it
+        run: |
+          set -euo pipefail
+
+          read_version() {
+            # .Image is a per-platform map for an index and a bare config for a
+            # single-platform image; a recursive search handles both shapes.
+            docker buildx imagetools inspect "$1" --format '{{json .Image}}' \
+              | jq -r '[.. | objects | select(has("org.opencontainers.image.version"))
+                        | .["org.opencontainers.image.version"]] | unique | first // empty'
+          }
+
+          ubuntu_version="$(read_version "${IMG}:testing")"
+          alpine_version="$(read_version "${IMG}:testing-alpine")"
+
+          if [[ -z "${ubuntu_version}" || -z "${alpine_version}" ]]; then
+            echo "::error::Could not read org.opencontainers.image.version from testing (ubuntu='${ubuntu_version}' alpine='${alpine_version}'). Was the image built before that label was added?"
+            exit 1
+          fi
+
+          if [[ "${ubuntu_version}" != "${alpine_version}" ]]; then
+            echo "::error::testing (${ubuntu_version}) and testing-alpine (${alpine_version}) are different releases. Rebuild both from the same master commit before promoting."
+            exit 1
+          fi
+
+          if [[ ! "${ubuntu_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Refusing to publish a malformed version tag: '${ubuntu_version}'"
+            exit 1
+          fi
+
+          {
+            echo "APP_VERSION=${ubuntu_version}"
+            echo "APP_VERSION_MINOR=${ubuntu_version%.*}"
+          } >> "$GITHUB_ENV"
+
+          echo "Promoting upstream ${ubuntu_version} (minor series ${ubuntu_version%.*})"
+
+      # Recorded BEFORE the retag so a rollback target survives in the run log.
+      # Every published tag moves, including X.Y.Z, so the digest is the only
+      # durable handle on the build being replaced.
+      - name: Record the outgoing digests
+        env:
+          IMG: ghcr.io/citadeliscybersecurity/snipe-it
+        run: |
+          set -euo pipefail
+
+          digest_of() {
+            docker buildx imagetools inspect "$1" --format '{{.Manifest.Digest}}' 2>/dev/null \
+              || echo 'none (tag does not exist yet)'
+          }
+
+          {
+            echo "OLD_LATEST=$(digest_of "${IMG}:latest")"
+            echo "OLD_LATEST_ALPINE=$(digest_of "${IMG}:latest-alpine")"
+            echo "NEW_LATEST=$(digest_of "${IMG}:testing")"
+            echo "NEW_LATEST_ALPINE=$(digest_of "${IMG}:testing-alpine")"
+          } >> "$GITHUB_ENV"
+
+      - name: Promote
+        env:
+          IMG: ghcr.io/citadeliscybersecurity/snipe-it
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+
+          echo "  testing        -> latest, ${APP_VERSION}, ${APP_VERSION_MINOR}"
+          echo "  testing-alpine -> latest-alpine, ${APP_VERSION}-alpine, ${APP_VERSION_MINOR}-alpine"
+
+          if [[ "${DRY_RUN}" == "true" ]]; then
+            echo "::notice::Dry run -- no tags were moved."
+            exit 0
+          fi
+
+          # Each create is atomic per invocation, but the two are not atomic
+          # together: if the second fails, latest and latest-alpine are on
+          # different releases until this is re-run. Re-running is safe and
+          # idempotent.
+          docker buildx imagetools create \
+            -t "${IMG}:latest" \
+            -t "${IMG}:${APP_VERSION}" \
+            -t "${IMG}:${APP_VERSION_MINOR}" \
+            "${IMG}:testing"
+
+          docker buildx imagetools create \
+            -t "${IMG}:latest-alpine" \
+            -t "${IMG}:${APP_VERSION}-alpine" \
+            -t "${IMG}:${APP_VERSION_MINOR}-alpine" \
+            "${IMG}:testing-alpine"
+
+      # Confirm the tags actually resolve, and that latest now matches the
+      # digest testing pointed at rather than whatever was there before.
+      - name: Verify
+        if: ${{ !inputs.dry-run }}
+        env:
+          IMG: ghcr.io/citadeliscybersecurity/snipe-it
+        run: |
+          set -euo pipefail
+
+          for tag in latest "${APP_VERSION}" "${APP_VERSION_MINOR}" \
+                     latest-alpine "${APP_VERSION}-alpine" "${APP_VERSION_MINOR}-alpine"; do
+            docker buildx imagetools inspect "${IMG}:${tag}" > /dev/null
+            echo "ok  ${IMG}:${tag}"
+          done
+
+          now="$(docker buildx imagetools inspect "${IMG}:latest" --format '{{.Manifest.Digest}}')"
+          if [[ "${now}" != "${NEW_LATEST}" ]]; then
+            echo "::error::latest resolved to ${now}, expected ${NEW_LATEST}"
+            exit 1
+          fi
+
+      # The audit trail a git tag would have given us: what moved, from which
+      # digest to which, and who ran it.
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Promote ${APP_VERSION:-(unresolved)}"
+            echo ""
+            echo "Triggered by @${GITHUB_ACTOR}${{ inputs.dry-run && ' (dry run)' || '' }}"
+            echo ""
+            echo "| Tag | Was | Now |"
+            echo "|---|---|---|"
+            echo "| \`latest\` | \`${OLD_LATEST:-?}\` | \`${NEW_LATEST:-?}\` |"
+            echo "| \`latest-alpine\` | \`${OLD_LATEST_ALPINE:-?}\` | \`${NEW_LATEST_ALPINE:-?}\` |"
+            echo ""
+            echo "Roll back by pinning the **Was** digest — see docs/RELEASING.md."
+          } >> "$GITHUB_STEP_SUMMARY"

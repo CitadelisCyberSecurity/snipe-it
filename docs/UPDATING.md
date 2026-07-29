@@ -65,13 +65,18 @@ Smoke-test until satisfied.
 
 ### 4. Promote `develop → master` — this publishes the release
 Open a PR from `develop` into `master` (title e.g. `Release: upstream vX.Y.Z`),
-review, and merge. Merging publishes **`latest`**, **`X.Y.Z`**, **`X.Y`** and
-**`testing`** (+ `-alpine`), all pointing at the same manifest.
+review, and merge. Merging publishes **`testing`** (+ `-alpine`) — the release
+candidate. It does **not** move `latest`.
 
-There is **no step 5** — no tag to push and no release to draft. The
-`develop → master` PR is the production gate, so merging it is the release. If
-you want a GitHub Release for the changelog, create one against `master`; it has
-no effect on the images.
+### 5. Promote to production
+
+Actions → **Promote to production** → Run workflow. That retags the validated
+`testing` digest as **`latest`**, **`X.Y.Z`** and **`X.Y`** (+ `-alpine`) —
+both flavours in one run, no rebuild.
+
+There is no tag to push and no release to draft. If you want a GitHub Release for
+the changelog, create one against `master`; it has no effect on the images. See
+[RELEASING.md](RELEASING.md) for why the gate is a dispatch and not a tag push.
 
 ---
 
@@ -97,14 +102,17 @@ git push
 | Action | Image tag(s) |
 |---|---|
 | Sync PR merged → `develop` | `develop` / `develop-alpine` (staging) |
-| `develop → master` PR merged | `latest`, `X.Y.Z`, `X.Y`, `testing` (+ `-alpine`) |
+| `develop → master` PR merged | `testing` (+ `-alpine`) — release candidate |
+| **Promote to production** dispatch | `latest`, `X.Y.Z`, `X.Y` (+ `-alpine`) — production |
 
 Base image: `ghcr.io/citadeliscybersecurity/snipe-it`
 
 `X.Y.Z` is the **upstream** Snipe-IT version from `config/version.php` (today
-`8.6.3`), so `latest`, `8.6.3`, `8.6` and `testing` are four names for the same
-manifest. Those are the **only** tags published: no `vX.Y.Z` git tag is involved
-and there is no per-commit `<branch>-<sha>` tag.
+`8.6.3`), so `latest`, `8.6.3` and `8.6` are three names for the same manifest.
+`testing` is the last build of `master`. Right after a promote it points at that
+same manifest — the promote is a retag, not a rebuild — and it diverges again on
+the next merge to `master`. Those are the **only** tags published: no `vX.Y.Z`
+git tag is involved and there is no per-commit `<branch>-<sha>` tag.
 
 ### Pinning and rollback
 
