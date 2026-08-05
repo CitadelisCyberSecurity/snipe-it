@@ -111,7 +111,7 @@ class SnapshotCampaignItemsActionTest extends TestCase
         $this->assertSame($originalManager->id, $item->manager_id);
     }
 
-    public function test_it_calculates_cost_per_seat_from_purchase_cost_and_seats(): void
+    public function test_it_snapshots_the_license_purchase_cost_as_the_seat_cost(): void
     {
         $campaign = AccessReviewCampaign::factory()->create();
         $manager = User::factory()->create();
@@ -122,7 +122,7 @@ class SnapshotCampaignItemsActionTest extends TestCase
         SnapshotCampaignItemsAction::run($campaign);
 
         $item = AccessReviewItem::where('campaign_id', $campaign->id)->first();
-        $this->assertSame('100.00', $item->cost_per_seat_snapshot);
+        $this->assertSame('400.00', $item->cost_per_seat_snapshot);
     }
 
     public function test_it_stores_null_cost_when_purchase_cost_is_null(): void
