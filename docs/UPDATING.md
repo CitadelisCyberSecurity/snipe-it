@@ -132,23 +132,30 @@ APP_VERSION=8.6.3 docker compose up -d   # tracks the newest 8.6.3 build
 image: ghcr.io/citadeliscybersecurity/snipe-it@sha256:<digest>
 ```
 
-Digests are immutable and survive cleanup as long as a live tag points at them.
+Digests are immutable, but they are not kept forever. A promote moves `latest`,
+`X.Y.Z` **and** `X.Y` onto the new build, which leaves the previous index with no
+tags at all — and `GHCR Cleanup` (`.github/workflows/ghcr-cleanup.yml`) reclaims
+untagged versions. It runs weekly but only considers versions older than the
+`older-than` window set there (**4 weeks**), so a superseded digest stays pullable
+for at least that long. That window is the rollback horizon: past it, pin
+something you still have.
+
 To roll back further, or to rebuild a specific commit, re-run the docker workflow
 on that ref (Actions → *Docker images (Ubuntu)* / *Docker images (Alpine)* →
-**Run workflow**) — note this republishes the moving tags from that commit.
-
-`GHCR Cleanup` (`.github/workflows/ghcr-cleanup.yml`) prunes untagged and
-orphaned versions weekly, so record the digest of anything you need to keep
-reachable.
+**Run workflow**) — note this republishes `testing` from that commit, and a
+subsequent promote is what would move production onto it.
 
 ---
 
 ## Golden rules
 
 - **Upstream always lands on `develop` first** — never merge a raw upstream drop straight to `master`.
-- **Every push to `master` publishes `latest`.** `master` is the release branch, so
-  validate on `develop` before promoting — there is no tagging step left to catch
-  a bad merge.
+- **Every push to `master` publishes `testing`, not `latest`.** Merging to `master`
+  cuts the release candidate; production moves only when someone runs **Promote to
+  production** (Stage 5), which requires approval on the `production` environment.
+- **Never name a branch `latest`, `testing`, or anything version-shaped** (`8.6.4`,
+  `v8.6.4`). A branch build is tagged with its own name, so those would collide
+  with the production pointers. The docker workflows refuse such branches outright.
 - **Never hand-edit `app_version` in `config/version.php`** to change an image tag.
   It is upstream's file, owned by the sync; editing it makes the image claim an
   upstream release it does not contain.
