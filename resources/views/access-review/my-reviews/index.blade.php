@@ -15,6 +15,7 @@
                     <thead>
                         <tr>
                             <th>{{ trans('admin/access-review/general.campaign') }}</th>
+                            <th>{{ trans('admin/access-review/general.launched_at') }}</th>
                             <th>{{ trans('admin/access-review/general.status') }}</th>
                             <th>{{ trans('admin/access-review/general.progress') }}</th>
                             <th></th>
@@ -30,6 +31,7 @@
                             @endphp
                             <tr>
                                 <td>{{ $campaign->name }}</td>
+                                <td>{{ Helper::getFormattedDateObject($campaign->launched_at, 'date', false) }}</td>
                                 <td>
                                     @if($isComplete)
                                         <span class="label label-success">
