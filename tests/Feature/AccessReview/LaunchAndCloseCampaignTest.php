@@ -51,7 +51,8 @@ class LaunchAndCloseCampaignTest extends TestCase
     {
         Notification::fake();
 
-        $campaign = AccessReviewCampaign::factory()->create();
+        // Notifications are opt-in per campaign, so this has to be asked for.
+        $campaign = AccessReviewCampaign::factory()->create(['notify_managers_on_launch' => true]);
         $manager = User::factory()->create(['email' => 'manager@example.com']);
         $reportee = User::factory()->create(['manager_id' => $manager->id]);
         $license = License::factory()->create();
@@ -74,6 +75,37 @@ class LaunchAndCloseCampaignTest extends TestCase
         // The manager notification was dispatched (after the response) rather than
         // sent inline during the request.
         Notification::assertSentTo($manager, AccessReviewCampaignLaunchedNotification::class);
+    }
+
+    public function test_launch_emails_nobody_when_notifications_are_not_enabled(): void
+    {
+        Notification::fake();
+
+        // The column defaults to false, so a campaign nobody thought about is silent.
+        $campaign = AccessReviewCampaign::factory()->create();
+        $manager = User::factory()->create(['email' => 'manager@example.com']);
+        $reportee = User::factory()->create(['manager_id' => $manager->id]);
+        $license = License::factory()->create();
+        LicenseSeat::factory()->assignedToUser($reportee)->create(['license_id' => $license->id]);
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->post(route('access-review.campaigns.launch', $campaign))
+            ->assertRedirect(route('access-review.campaigns.index'));
+
+        Notification::assertNothingSent();
+
+        // Silent, but otherwise a normal launch: the seats are still snapshotted so
+        // managers can review them in the UI.
+        $this->assertDatabaseHas('access_review_campaigns', [
+            'id' => $campaign->id,
+            'status' => AccessReviewCampaign::STATUS_ACTIVE,
+        ]);
+
+        $this->assertDatabaseHas('access_review_items', [
+            'campaign_id' => $campaign->id,
+            'user_id' => $reportee->id,
+            'manager_id' => $manager->id,
+        ]);
     }
 
     public function test_launching_a_non_draft_campaign_is_blocked(): void
