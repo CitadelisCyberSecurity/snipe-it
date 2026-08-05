@@ -65,13 +65,18 @@ Smoke-test until satisfied.
 
 ### 4. Promote `develop → master` — this publishes the release
 Open a PR from `develop` into `master` (title e.g. `Release: upstream vX.Y.Z`),
-review, and merge. Merging publishes **`latest`**, **`X.Y.Z`**, **`X.Y`** and
-**`testing`** (+ `-alpine`), all pointing at the same manifest.
+review, and merge. Merging publishes **`testing`** (+ `-alpine`) — the release
+candidate. It does **not** move `latest`.
 
-There is **no step 5** — no tag to push and no release to draft. The
-`develop → master` PR is the production gate, so merging it is the release. If
-you want a GitHub Release for the changelog, create one against `master`; it has
-no effect on the images.
+### 5. Promote to production
+
+Actions → **Promote to production** → Run workflow. That retags the validated
+`testing` digest as **`latest`**, **`X.Y.Z`** and **`X.Y`** (+ `-alpine`) —
+both flavours in one run, no rebuild.
+
+There is no tag to push and no release to draft. If you want a GitHub Release for
+the changelog, create one against `master`; it has no effect on the images. See
+[RELEASING.md](RELEASING.md) for why the gate is a dispatch and not a tag push.
 
 ---
 
@@ -97,14 +102,17 @@ git push
 | Action | Image tag(s) |
 |---|---|
 | Sync PR merged → `develop` | `develop` / `develop-alpine` (staging) |
-| `develop → master` PR merged | `latest`, `X.Y.Z`, `X.Y`, `testing` (+ `-alpine`) |
+| `develop → master` PR merged | `testing` (+ `-alpine`) — release candidate |
+| **Promote to production** dispatch | `latest`, `X.Y.Z`, `X.Y` (+ `-alpine`) — production |
 
 Base image: `ghcr.io/citadeliscybersecurity/snipe-it`
 
 `X.Y.Z` is the **upstream** Snipe-IT version from `config/version.php` (today
-`8.6.3`), so `latest`, `8.6.3`, `8.6` and `testing` are four names for the same
-manifest. Those are the **only** tags published: no `vX.Y.Z` git tag is involved
-and there is no per-commit `<branch>-<sha>` tag.
+`8.6.3`), so `latest`, `8.6.3` and `8.6` are three names for the same manifest.
+`testing` is the last build of `master`. Right after a promote it points at that
+same manifest — the promote is a retag, not a rebuild — and it diverges again on
+the next merge to `master`. Those are the **only** tags published: no `vX.Y.Z`
+git tag is involved and there is no per-commit `<branch>-<sha>` tag.
 
 ### Pinning and rollback
 
@@ -124,23 +132,30 @@ APP_VERSION=8.6.3 docker compose up -d   # tracks the newest 8.6.3 build
 image: ghcr.io/citadeliscybersecurity/snipe-it@sha256:<digest>
 ```
 
-Digests are immutable and survive cleanup as long as a live tag points at them.
+Digests are immutable, but they are not kept forever. A promote moves `latest`,
+`X.Y.Z` **and** `X.Y` onto the new build, which leaves the previous index with no
+tags at all — and `GHCR Cleanup` (`.github/workflows/ghcr-cleanup.yml`) reclaims
+untagged versions. It runs weekly but only considers versions older than the
+`older-than` window set there (**4 weeks**), so a superseded digest stays pullable
+for at least that long. That window is the rollback horizon: past it, pin
+something you still have.
+
 To roll back further, or to rebuild a specific commit, re-run the docker workflow
 on that ref (Actions → *Docker images (Ubuntu)* / *Docker images (Alpine)* →
-**Run workflow**) — note this republishes the moving tags from that commit.
-
-`GHCR Cleanup` (`.github/workflows/ghcr-cleanup.yml`) prunes untagged and
-orphaned versions weekly, so record the digest of anything you need to keep
-reachable.
+**Run workflow**) — note this republishes `testing` from that commit, and a
+subsequent promote is what would move production onto it.
 
 ---
 
 ## Golden rules
 
 - **Upstream always lands on `develop` first** — never merge a raw upstream drop straight to `master`.
-- **Every push to `master` publishes `latest`.** `master` is the release branch, so
-  validate on `develop` before promoting — there is no tagging step left to catch
-  a bad merge.
+- **Every push to `master` publishes `testing`, not `latest`.** Merging to `master`
+  cuts the release candidate; production moves only when someone runs **Promote to
+  production** (Stage 5), which requires approval on the `production` environment.
+- **Never name a branch `latest`, `testing`, or anything version-shaped** (`8.6.4`,
+  `v8.6.4`). A branch build is tagged with its own name, so those would collide
+  with the production pointers. The docker workflows refuse such branches outright.
 - **Never hand-edit `app_version` in `config/version.php`** to change an image tag.
   It is upstream's file, owned by the sync; editing it makes the image claim an
   upstream release it does not contain.

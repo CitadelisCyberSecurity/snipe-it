@@ -5,11 +5,25 @@ name: Docker images (Alpine)
 # Also run for PRs to ensure PR doesn't break Docker build process.
 # Use the Actions tab ("Run workflow") to build any other branch on demand.
 #
-# Deliberately NOT triggered by git tags. The image version tracks the UPSTREAM
-# Snipe-IT release recorded in config/version.php, not a fork git tag, so
-# releases need no manual tagging. Leaving a tag trigger in place would let a
-# pushed vX.Y.Z mint version tags from the tag NAME instead, which is how the
-# image previously ended up published as 1.1.0 while containing upstream 8.6.3.
+# This workflow never publishes `latest-alpine` or a version tag. Master builds
+# the release candidate (`testing-alpine`); promote.yml retags that exact digest
+# as latest/X.Y.Z/X.Y (-alpine) when a human says so.
+#
+# Deliberately NOT triggered by git tags either, for two independent reasons:
+#
+#   1. The image version tracks the UPSTREAM Snipe-IT release recorded in
+#      config/version.php, not a fork git tag. A tag trigger lets a pushed vX.Y.Z
+#      mint version tags from the tag NAME instead, which is how the image
+#      previously ended up published as 1.1.0 while containing upstream 8.6.3.
+#   2. sync-upstream.yml pushes UPSTREAM's release tag into this fork, so v8.7.0
+#      can appear here pointing at a commit that was never merged to master. A v*
+#      trigger would let upstream's commit publish `latest-alpine`. That is
+#      suppressed today only because tags pushed with GITHUB_TOKEN do not trigger
+#      workflows -- a load-bearing accident that a switch to a PAT (which
+#      sync-upstream already anticipates) would undo.
+#
+# So the promote gate lives in promote.yml as a manual dispatch, which no
+# mirrored tag can ever fire.
 on:
   push:
     branches:
@@ -20,10 +34,17 @@ on:
 
   pull_request:
 
-# GITHUB_TOKEN needs packages:write to push to ghcr.io
+# Least privilege by default; the jobs that push to ghcr.io opt in below.
 permissions:
   contents: read
-  packages: write
+
+# Serialise builds per ref. Without this, two merges to master in quick
+# succession race in the `merge` job and whichever finishes LAST owns
+# `testing-alpine` -- which can be the older commit, and that stale RC is then
+# what gets promoted. PR builds are throwaway, so superseded ones are cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   REGISTRY: ghcr.io
@@ -40,6 +61,9 @@ jobs:
   build:
     # Only run for this fork. Never executes on upstream or other forks.
     if: github.repository == 'CitadelisCyberSecurity/snipe-it'
+    permissions:
+      contents: read
+      packages: write # push-by-digest (skipped on PRs, which never log in)
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -56,7 +80,7 @@ jobs:
     steps:
       # https://github.com/actions/checkout
       - name: Checkout codebase
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # Compute the lowercase image reference used for push-by-digest, since a
       # raw image name pushed to a registry must be lowercase
@@ -72,7 +96,7 @@ jobs:
       # merged manifest in the merge job below.
       - name: Extract metadata (labels)
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.IMAGE }}
           # Without this the version label is derived from the git ref, so a
@@ -83,13 +107,13 @@ jobs:
 
       # https://github.com/docker/setup-buildx-action
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       # https://github.com/docker/login-action
       - name: Log in to Container Registry
         # Only login if not a PR, as PRs only trigger a Docker build and not a push
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -101,7 +125,7 @@ jobs:
       # the Dockerfile still works (type=cacheonly, nothing is pushed).
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: ./Dockerfile.alpine
@@ -123,7 +147,7 @@ jobs:
       # https://github.com/actions/upload-artifact
       - name: Upload digest
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: digests-alpine-${{ matrix.arch }}
           path: ${{ runner.temp }}/digests/*
@@ -132,14 +156,22 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Combine the per-arch digests into ONE multi-arch manifest list and apply the
-  # tags:
-  #   - Push to the default branch (master) -> "<upstream version>-alpine"
-  #     (8.6.3-alpine), "<minor series>-alpine" (8.6-alpine), "latest-alpine" and
-  #     "testing-alpine", all pointing at the same manifest. The version comes
-  #     from config/version.php, so it names the UPSTREAM Snipe-IT release this
-  #     fork is built from.
+  # tags. Which names get applied depends on WHAT TRIGGERED the run, the same
+  # split vaultwarden's release.yml makes between its branch and tag triggers:
+  #
+  #   - Push to the default branch (master) -> "testing-alpine" only. Release
+  #     candidate: master is the production gate, but merging it no longer moves
+  #     production.
   #   - Push to any other branch (e.g. develop) -> "<branch>-alpine" only, so
   #     staging builds never touch the production pointers.
+  #
+  # "<upstream version>-alpine" (8.6.3-alpine), "<minor series>-alpine" and
+  # "latest-alpine" are NOT published here. promote.yml retags the validated
+  # `testing-alpine` digest instead, so production ships the exact index that was
+  # smoke-tested rather than a rebuild of the same commit. The version it applies
+  # still originates here: the org.opencontainers.image.version label stamped
+  # from config/version.php in the build job below is what promote.yml reads
+  # back.
   #
   # Every one of these is a MOVING tag: fork commits land on top of an upstream
   # release, so successive master builds republish the same 8.6.3-alpine. There is
@@ -156,12 +188,43 @@ jobs:
   merge:
     # No digests are produced on PRs, so there is nothing to merge.
     if: github.repository == 'CitadelisCyberSecurity/snipe-it' && github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write # push the tagged manifest list
     runs-on: ubuntu-latest
     needs: build
     steps:
+      # A non-default branch is tagged with its own NAME (type=ref below), and
+      # workflow_dispatch accepts ANY ref. So a branch called `testing` could be
+      # dispatched to overwrite the release candidate that promote.yml ships, and
+      # one called `latest` or `8.6.4` could publish a production pointer
+      # directly -- skipping promote.yml's version and digest checks entirely.
+      # Neither needs more than push access to pull off, so refuse the names
+      # rather than trusting that nobody creates such a branch.
+      #
+      # Checked BEFORE the -alpine suffix is applied, so `latest` is caught here
+      # rather than after it has become `latest-alpine`.
+      - name: Refuse reserved image tag names
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          # The default branch is exempt: it gets `testing` from an explicit
+          # type=raw rule, not from its name.
+          if [[ "${REF_NAME}" == "${DEFAULT_BRANCH}" ]]; then
+            exit 0
+          fi
+
+          if [[ "${REF_NAME}" =~ ^(latest|testing)$ || "${REF_NAME}" =~ ^v?[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error::'${REF_NAME}' is a reserved image tag name. Production tags are published only by promote.yml; rename the branch to build it."
+            exit 1
+          fi
+
       # https://github.com/actions/download-artifact
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-alpine-*
@@ -169,7 +232,7 @@ jobs:
 
       # Only config/version.php is needed here, to derive the version tags.
       - name: Checkout version file
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           sparse-checkout: |
             config/version.php
@@ -184,26 +247,24 @@ jobs:
 
       # https://github.com/docker/setup-buildx-action
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       # https://github.com/docker/metadata-action
       - name: Extract metadata (tags, labels)
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.IMAGE }}
-          # Default branch (master) publishes the production set: the upstream
-          # version it contains, its minor series, plus the two moving pointers.
-          # Any other branch publishes only its own name (develop -> "develop").
-          # suffix=-alpine below appends to every one of these.
+          # Master publishes the release candidate; any other branch publishes
+          # only its own name (develop -> "develop"). suffix=-alpine below appends
+          # to every one of these. Production tags come from promote.yml.
           #
-          # Gated on the ref alone, not on `github.event_name == 'push'`: the old
+          # Gated on the ref, not on `github.event_name == 'push'`: the old
           # condition meant a manual "Run workflow" on master matched no tag rule
-          # at all and produced an untagged manifest.
+          # at all and produced an untagged manifest. A dispatch on master
+          # therefore rebuilds `testing-alpine`, which is what you want for
+          # re-running a failed RC build.
           tags: |
-            type=raw,value=${{ env.APP_VERSION }},enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-            type=raw,value=${{ env.APP_VERSION_MINOR }},enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
             type=raw,value=testing,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
             type=ref,event=branch,enable=${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
           flavor: |
@@ -212,7 +273,7 @@ jobs:
 
       # https://github.com/docker/login-action
       - name: Log in to Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}

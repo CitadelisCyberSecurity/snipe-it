@@ -41,7 +41,10 @@ jobs:
     permissions:
       packages: write # To delete package versions
     runs-on: ubuntu-latest
-    continue-on-error: true
+    # No continue-on-error. `validate: true` below exists to catch "did this prune
+    # break a live tag", and swallowing the exit code turned a failed validation
+    # into a GREEN run -- the same silent-success trap as the regex that matched 0
+    # of 40 tags while reporting success. A broken package must page someone.
     timeout-minutes: 30
     steps:
       # https://github.com/dataaxiom/ghcr-cleanup-action
@@ -62,24 +65,31 @@ jobs:
           # suffix, so this single run covers Ubuntu and Alpine together.
           package: snipe-it
 
-          # Anchored regexes rather than the default wildcard globs, because
-          # use-regex below is a GLOBAL switch (it reinterprets delete-tags and
-          # exclude-tags together, not one of them). Mixing the two syntaxes is
-          # how you get a silent no-op: as a regex the glob `[0-9]*.[0-9]*.[0-9]*`
-          # matches nearly any string, since `[0-9]*` matches empty and `.` is
-          # any character, so it would exclude the entire package from deletion.
-          # One syntax, anchored, everywhere.
+          # Two things about these patterns, both learned the hard way:
+          #
+          # 1. use-regex is a GLOBAL switch. It reinterprets delete-tags and
+          #    exclude-tags together, never just one, so both must use the same
+          #    syntax. Leaving a wildcard glob in regex mode is a silent no-op:
+          #    as a regex the glob `[0-9]*.[0-9]*.[0-9]*` matches nearly any
+          #    string, since `[0-9]*` matches empty and `.` is any character.
+          #
+          # 2. In regex mode each input is ONE regex, not a comma-separated list.
+          #    The action hands the whole value to validateUserRegex (config.ts),
+          #    so a comma is matched literally -- `^a$,^b$` compiles to a pattern
+          #    requiring a comma in the tag and therefore matches nothing, with
+          #    the run still reporting success. Use alternation, never commas.
+          #    A first attempt here did exactly that and matched 0 of 40 tags.
 
           # The moving pointers from docs/UPDATING.md, guarded against the delete
-          # patterns below. Comma-separated, so no pattern may contain a comma.
+          # pattern below.
           #
           # The version tags (8.6.3, 8.6, + -alpine) are deliberately absent: a
-          # tag matched by neither list is simply left alone, and exclude-tags
-          # WINS over delete-tags. Adding a generic semver pattern here would
+          # tag matched by neither pattern is simply left alone, and exclude-tags
+          # WINS over delete-tags. Adding a generic semver branch here would
           # therefore also shield the legacy 1.1.x tags below and make deleting
-          # them impossible. Keeping the delete patterns narrow is what protects
-          # the version tags, so do not "helpfully" broaden this list.
-          exclude-tags: '^latest(-alpine)?$,^testing(-alpine)?$,^develop(-alpine)?$'
+          # them impossible. Keeping the delete pattern narrow is what protects
+          # the version tags, so do not "helpfully" broaden this one.
+          exclude-tags: '^(latest|testing|develop)(-alpine)?$'
 
           # Two families of legacy tag, both from schemes this repo no longer uses:
           #
@@ -95,22 +105,46 @@ jobs:
           # neither shape is minted any more. Upstream Snipe-IT is on 8.x and will
           # not return to 1.1, so pattern 2 cannot catch a real version tag.
           #
-          # Anchored, not a `develop-*` glob — a glob would also match the live
-          # `develop-alpine` tag. exclude-tags would catch that, but relying on
-          # exclusion to undo an over-broad delete pattern is fragile.
+          # Anchored, and note `develop-[0-9a-f]{7}` cannot match the live
+          # `develop-alpine` tag ("alpine" is 6 chars and not all hex). A
+          # `develop-*` glob WOULD match it; exclude-tags would catch that, but
+          # relying on exclusion to undo an over-broad delete pattern is fragile.
           #
           # Safe even though these tags share a package version with a live one
           # (1.1.0 currently sits on the same version as `latest`, and the newest
           # pin tag on the same version as `testing`): the action untags rather
           # than deletes any version carrying more than one tag, and refuses to
           # remove an image's last tag, so the live tag survives.
-          delete-tags: '^(master|develop)-[0-9a-f]{7}(-alpine)?$,^1\.1(\.0)?(-alpine)?$'
+          delete-tags: '^((master|develop)-[0-9a-f]{7}|1\.1(\.0)?)(-alpine)?$'
           use-regex: true
 
           # Reclaim the per-arch children left by push-by-digest, plus the
           # indexes orphaned when develop/testing moved.
           delete-untagged: true
           delete-orphaned-images: true
+
+          # RETENTION WINDOW -- this is what makes rollback-by-digest real.
+          #
+          # promote.yml records the outgoing digests as the rollback target, and
+          # docs/UPDATING.md tells you to pin them. But every tag here moves, so
+          # the moment `latest`/X.Y.Z/X.Y advance, the index they *used* to point
+          # at carries no tags at all. It is therefore untagged, and
+          # delete-untagged above would reclaim it on the next Friday run --
+          # silently deleting the exact digest the release summary just handed you
+          # as your way back. exclude-tags cannot protect it: there is no tag left
+          # to match on.
+          #
+          # older-than restricts processing to versions older than this, so
+          # nothing younger than the window is ever a deletion candidate. The
+          # window must stay >= the rollback horizon documented in
+          # docs/UPDATING.md ("Pinning and rollback"); the cost is that build
+          # detritus lingers this long before being reclaimed, which is the
+          # intended trade. Change one and change the other.
+          #
+          # Do NOT swap this for keep-n-untagged: the action throws if that is set
+          # alongside delete-untagged, and a count-based limit is the wrong shape
+          # anyway -- a busy week of builds would evict a three-day-old digest.
+          older-than: 4 weeks
 
           # Re-check afterwards that every retained manifest list still has all
           # of its children, i.e. that nothing above broke a live tag.
