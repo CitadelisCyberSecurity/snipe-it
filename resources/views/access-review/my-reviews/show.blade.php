@@ -40,6 +40,14 @@
                         ]) }}
                     </small>
                 </div>
+                @if($campaign->launched_at)
+                    <div class="col-md-6 text-right">
+                        <span class="text-muted">
+                            {{ trans('admin/access-review/general.launched_at') }}:
+                            {{ Helper::getFormattedDateObject($campaign->launched_at, 'date', false) }}
+                        </span>
+                    </div>
+                @endif
             </div>
 
             {{-- Review table --}}
