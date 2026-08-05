@@ -65,10 +65,11 @@ class CampaignsController extends Controller
         $this->authorize('admin');
 
         $data = $request->validate([
-            'name'          => 'required|string|max:255',
-            'description'   => 'nullable|string|max:65535',
-            'company_ids'   => 'nullable|array',
-            'company_ids.*' => 'integer|exists:companies,id',
+            'name'                      => 'required|string|max:255',
+            'description'               => 'nullable|string|max:65535',
+            'notify_managers_on_launch' => 'nullable|boolean',
+            'company_ids'               => 'nullable|array',
+            'company_ids.*'             => 'integer|exists:companies,id',
         ]);
 
         $companyIds = $this->sanitizeCompanyIds($data['company_ids'] ?? []);
@@ -79,6 +80,8 @@ class CampaignsController extends Controller
         $campaign->company_ids = $companyIds;
         $campaign->status      = AccessReviewCampaign::STATUS_DRAFT;
         $campaign->created_by  = auth()->id();
+        // Absent checkbox means false, so this is opt-in by construction.
+        $campaign->notify_managers_on_launch = $request->boolean('notify_managers_on_launch');
         $campaign->save();
 
         return redirect()
@@ -111,15 +114,17 @@ class CampaignsController extends Controller
         }
 
         $data = $request->validate([
-            'name'          => 'required|string|max:255',
-            'description'   => 'nullable|string|max:65535',
-            'company_ids'   => 'nullable|array',
-            'company_ids.*' => 'integer|exists:companies,id',
+            'name'                      => 'required|string|max:255',
+            'description'               => 'nullable|string|max:65535',
+            'notify_managers_on_launch' => 'nullable|boolean',
+            'company_ids'               => 'nullable|array',
+            'company_ids.*'             => 'integer|exists:companies,id',
         ]);
 
         $campaign->name        = $data['name'];
         $campaign->description = $data['description'] ?? null;
         $campaign->company_ids = $this->sanitizeCompanyIds($data['company_ids'] ?? []);
+        $campaign->notify_managers_on_launch = $request->boolean('notify_managers_on_launch');
         $campaign->save();
 
         return redirect()
@@ -217,27 +222,35 @@ class CampaignsController extends Controller
         // notifications AFTER the HTTP response is flushed so a slow or unreachable
         // mail server can never block or slow the launch request. Each send is
         // isolated; failures are logged, never fatal.
-        $campaign->items()
-            ->with('manager')
-            ->get()
-            ->groupBy('manager_id')
-            ->each(function ($managerItems) use ($campaign) {
-                $manager = $managerItems->first()->manager;
-                if ($manager && $manager->email) {
-                    $itemCount = $managerItems->count();
-                    dispatch(function () use ($manager, $campaign, $itemCount) {
-                        try {
-                            $manager->notify(new AccessReviewCampaignLaunchedNotification($campaign, $itemCount));
-                        } catch (\Throwable $e) {
-                            \Log::warning('Access Review: launch notification email failed', [
-                                'campaign_id' => $campaign->id,
-                                'manager_id'  => $manager->id,
-                                'error'       => $e->getMessage(),
-                            ]);
-                        }
-                    })->afterResponse();
-                }
-            });
+        //
+        // Opt-in per campaign: a campaign launched with the box unticked mails
+        // nobody, which is what makes a test campaign safe to launch against real
+        // license data. Checked BEFORE the items query so a silent launch does no
+        // work at all. Reminders are deliberately NOT gated on this -- pressing
+        // "send reminder" is an explicit, per-manager act.
+        if ($campaign->notify_managers_on_launch) {
+            $campaign->items()
+                ->with('manager')
+                ->get()
+                ->groupBy('manager_id')
+                ->each(function ($managerItems) use ($campaign) {
+                    $manager = $managerItems->first()->manager;
+                    if ($manager && $manager->email) {
+                        $itemCount = $managerItems->count();
+                        dispatch(function () use ($manager, $campaign, $itemCount) {
+                            try {
+                                $manager->notify(new AccessReviewCampaignLaunchedNotification($campaign, $itemCount));
+                            } catch (\Throwable $e) {
+                                \Log::warning('Access Review: launch notification email failed', [
+                                    'campaign_id' => $campaign->id,
+                                    'manager_id'  => $manager->id,
+                                    'error'       => $e->getMessage(),
+                                ]);
+                            }
+                        })->afterResponse();
+                    }
+                });
+        }
 
         return redirect()
             ->route('access-review.campaigns.index')

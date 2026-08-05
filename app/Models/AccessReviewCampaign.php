@@ -31,6 +31,7 @@ class AccessReviewCampaign extends SnipeModel
         'name',
         'description',
         'company_ids',
+        'notify_managers_on_launch',
     ];
 
     protected $casts = [
@@ -38,6 +39,7 @@ class AccessReviewCampaign extends SnipeModel
         'closed_at'    => 'datetime',
         'created_by'   => 'integer',
         'company_ids'  => 'array',
+        'notify_managers_on_launch' => 'boolean',
     ];
 
     public function items(): HasMany

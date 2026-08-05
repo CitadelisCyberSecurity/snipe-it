@@ -9,6 +9,8 @@ return [
     'name'      => 'Name',
     'companies' => 'Companies',
     'description' => 'Description',
+    'notify_managers_on_launch' => 'Email managers on launch',
+    'notify_managers_on_launch_help' => 'When launched, email every manager who has seats to review. Leave this off for test campaigns — the campaign still snapshots seats and managers can still review, but no launch email is sent. Reminder emails are sent regardless.',
     'status' => 'Status',
     'status_draft' => 'Draft',
     'status_active' => 'Active',

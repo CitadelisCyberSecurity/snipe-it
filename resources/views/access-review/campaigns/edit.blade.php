@@ -24,6 +24,24 @@
         </div>
     </div>
 
+    {{-- Opt-in: unchecked means launching this campaign mails nobody. See the
+         guard in CampaignsController::launch(). Reminders are unaffected. --}}
+    <div class="form-group {{ $errors->has('notify_managers_on_launch') ? ' has-error' : '' }}">
+        <label for="notify_managers_on_launch" class="col-md-3 control-label">{{ trans('admin/access-review/general.notify_managers_on_launch') }}</label>
+        <div class="col-md-8 col-sm-12">
+            <label class="form-control">
+                {{-- Paired hidden field so an unchecked box still submits a value. Without
+                     it, old() has no key on a validation redisplay and falls back to the
+                     stored value, silently re-ticking a box the user had just cleared. --}}
+                <input type="hidden" name="notify_managers_on_launch" value="0">
+                <input type="checkbox" name="notify_managers_on_launch" value="1" id="notify_managers_on_launch" aria-label="notify_managers_on_launch" @checked(old('notify_managers_on_launch', $item->notify_managers_on_launch))>
+                {{ trans('general.yes') }}
+            </label>
+            <p class="help-block">{{ trans('admin/access-review/general.notify_managers_on_launch_help') }}</p>
+            {!! $errors->first('notify_managers_on_launch', '<span class="alert-msg" aria-hidden="true"><i class="fas fa-times" aria-hidden="true"></i> :message</span>') !!}
+        </div>
+    </div>
+
     @include('partials.forms.edit.company-select', [
         'translated_name' => trans('admin/access-review/general.companies'),
         'fieldname'       => 'company_ids',
