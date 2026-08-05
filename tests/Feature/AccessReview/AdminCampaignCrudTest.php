@@ -63,6 +63,47 @@ class AdminCampaignCrudTest extends TestCase
         ]);
     }
 
+    public function test_campaign_is_created_without_launch_notifications_unless_asked_for(): void
+    {
+        $this->actingAs(User::factory()->admin()->create())
+            ->post(route('access-review.campaigns.store'), [
+                'name' => 'Silent By Default',
+            ]);
+
+        $this->assertFalse(
+            AccessReviewCampaign::where('name', 'Silent By Default')->sole()->notify_managers_on_launch,
+        );
+    }
+
+    public function test_admin_can_opt_a_campaign_into_launch_notifications(): void
+    {
+        $this->actingAs(User::factory()->admin()->create())
+            ->post(route('access-review.campaigns.store'), [
+                'name' => 'Noisy',
+                'notify_managers_on_launch' => '1',
+            ]);
+
+        $this->assertTrue(
+            AccessReviewCampaign::where('name', 'Noisy')->sole()->notify_managers_on_launch,
+        );
+    }
+
+    public function test_launch_notifications_can_be_toggled_back_off_while_draft(): void
+    {
+        $campaign = AccessReviewCampaign::factory()->create(['notify_managers_on_launch' => true]);
+
+        // The paired hidden field in the form submits "0" for an unticked box, so
+        // clearing the checkbox has to actually clear the stored value.
+        $this->actingAs(User::factory()->admin()->create())
+            ->put(route('access-review.campaigns.update', $campaign), [
+                'name' => $campaign->name,
+                'notify_managers_on_launch' => '0',
+            ])
+            ->assertRedirect(route('access-review.campaigns.index'));
+
+        $this->assertFalse($campaign->fresh()->notify_managers_on_launch);
+    }
+
     public function test_non_admin_cannot_create_a_campaign(): void
     {
         $this->actingAs(User::factory()->create())

@@ -9,6 +9,8 @@ return [
     'name'      => 'Name',
     'companies' => 'Companies',
     'description' => 'Description',
+    'notify_managers_on_launch' => 'Email managers on launch',
+    'notify_managers_on_launch_help' => 'When launched, email every manager who has seats to review. Reminder emails are sent regardless.',
     'status' => 'Status',
     'status_draft' => 'Draft',
     'status_active' => 'Active',
