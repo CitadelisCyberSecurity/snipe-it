@@ -8,92 +8,137 @@ production — it flows through a staging branch first.
 
 ```
 upstream release
-  └─ sync workflow ▶ merge + npm run prod ▶ PR into develop   (staging)
+  └─ you: git merge + npm run prod ▶ push develop      (staging)
                        └─ validate the develop image
-                            └─ PR develop ▶ master             (production gate)
-                                 └─ latest + 8.6.3 images, automatically
+                            └─ PR develop ▶ master     (production gate)
+                                 └─ testing image (release candidate)
+                                      └─ push tag X.Y.Z ▶ release
 ```
 
+**Every step is manual.** There is no workflow watching upstream — the automated
+sync was removed, along with its daily cron, its `contents:write` token and its
+unattended build of third-party code. Nothing will notify you that a release
+exists, security releases included.
+
 - **`develop`** — integration/staging. Upstream lands here first.
-- **`master`** — production. Only reviewed, validated code arrives via a `develop → master` PR.
-- **`latest`** image — every push to `master`. Merging the production gate *is* the release; there is no separate tagging step.
+- **`master`** — production gate. Only reviewed, validated code arrives via a `develop → master` PR. Merging publishes `testing`, not `latest`.
+- **git tag `X.Y.Z`** — the release. Pushing it builds that commit and publishes `X.Y.Z` + `latest`.
 
-**Image versions track upstream, not the fork.** The version tags come from
-`app_version` in `config/version.php` — upstream's own version file, carried in
-by the sync — so an image containing upstream 8.6.3 is published as `8.6.3`.
-No git tag is involved, which is what previously caused an image containing
-upstream 8.6.3 to be published as `1.1.0`.
-
----
-
-## One-time prerequisites
-
-1. **Merge the CI PRs** that introduce the sync workflow and the multi-arch
-   Docker builds. The sync workflow only becomes active once it is on `master`.
-2. **Allow Actions to open PRs:** *Settings → Actions → General → Workflow
-   permissions →* enable **"Allow GitHub Actions to create and approve pull requests."**
-3. *(Only if you ever merge locally)* register the compiled-asset merge driver
-   once per clone:
-   ```bash
-   git config merge.ours.driver true
-   ```
+**Image versions are the FORK's, not upstream's.** `X.Y.Z` is the number *you*
+pick when pushing the tag. It has no relationship to the upstream Snipe-IT
+version, and cannot: several fork releases legitimately sit on top of one upstream
+release, so upstream's number can't name them apart. The upstream version stays
+visible at runtime in the app footer and at `/api/v1/version`, both of which read
+`config/version.php`.
 
 ---
 
-## Normal update — no clone required
+## One-time setup, per clone
 
-Everything below is done from the GitHub UI.
+Both of these are required. The second one is not optional housekeeping — without
+it, every upstream merge conflicts on the committed compiled assets.
 
-### 1. A new upstream stable release is detected
-The **Sync upstream release** workflow runs daily and opens a PR
-(`Sync upstream release vX.Y.Z`) **into `develop`** automatically. To run it
-immediately: *Actions → Sync upstream release → Run workflow*.
+```bash
+git remote add upstream https://github.com/grokability/snipe-it.git
+git config merge.ours.driver true      # see .gitattributes:15
+```
 
-On a clean merge the workflow also **rebuilds the compiled assets**
-(`npm ci && npm run prod`) and commits them, so the PR already contains new PHP
-plus matching CSS/JS.
+`merge.ours.driver` registers the driver `.gitattributes` refers to, which makes a
+merge **keep our committed copy** of `public/js`, `public/css` and
+`public/mix-manifest.json` instead of conflicting on them.
 
-### 2. Review and merge the sync PR into `develop`
-Merging builds the **`develop` / `develop-alpine`** image — your staging artifact.
+---
 
-### 3. Validate the staging image
+## Syncing an upstream release
+
+**This is a manual process.** There is no workflow watching upstream and no
+notification — the automated sync was removed deliberately. Nothing will tell you
+a new release exists, including a security release. Check when you think to.
+
+### 1. Is there a new stable release?
+
+```bash
+gh release view --repo grokability/snipe-it
+```
+
+`gh release view` with no tag returns the **latest published, non-draft,
+non-prerelease** release — which is the gate you want. Do not sync a prerelease.
+
+### 2. Merge it into `develop` — never `master`
+
+```bash
+git fetch upstream --tags
+git checkout develop && git pull
+git merge v8.7.0                       # assets auto-resolve via merge=ours
+```
+
+**The merge must happen locally.** `merge=ours` is only honoured by a local
+`git merge` — GitHub's PR-merge machinery ignores it entirely, so merging upstream
+through the GitHub UI produces asset conflicts every time. This is why the old
+workflow performed the merge in CI rather than letting GitHub do it.
+
+If real (non-asset) conflicts remain, resolve them now.
+
+### 3. Rebuild the compiled assets — always
+
+```bash
+npm ci && npm run prod
+git add public/js public/css public/mix-manifest.json
+git commit -m "sync upstream v8.7.0 + rebuild assets"
+```
+
+**Do not skip this even if the merge was clean.** The Docker images copy the
+committed assets in and have no in-image build step, so stale assets ship silently
+— no error, no failing build, just a UI built against the previous release's PHP.
+
+Build on Linux/WSL if you can. Building on Windows rewrites these files with CRLF
+line endings and produces a large, noisy diff.
+
+### 4. Push
+
+```bash
+git push
+```
+
+**Never `git push --tags`.** With no automation writing refs, that command is now
+the only way upstream's ~300 mirrored tags reach origin. Most are `v`-prefixed and
+harmless, but it is a habit worth not having — see
+[Golden rules](#golden-rules).
+
+Pushing `develop` builds the **`develop` / `develop-alpine`** image — your staging
+artifact.
+
+### 5. Validate the staging image
 ```bash
 docker pull ghcr.io/citadeliscybersecurity/snipe-it:develop
 docker buildx imagetools inspect ghcr.io/citadeliscybersecurity/snipe-it:develop   # confirm amd64 + arm64
 ```
 Smoke-test until satisfied.
 
-### 4. Promote `develop → master` — this publishes the release
+### 6. Promote `develop → master`
 Open a PR from `develop` into `master` (title e.g. `Release: upstream vX.Y.Z`),
 review, and merge. Merging publishes **`testing`** (+ `-alpine`) — the release
 candidate. It does **not** move `latest`.
 
-### 5. Promote to production
+### 7. Release — push a version tag
 
-Actions → **Promote to production** → Run workflow. That retags the validated
-`testing` digest as **`latest`**, **`X.Y.Z`** and **`X.Y`** (+ `-alpine`) —
-both flavours in one run, no rebuild.
-
-There is no tag to push and no release to draft. If you want a GitHub Release for
-the changelog, create one against `master`; it has no effect on the images. See
-[RELEASING.md](RELEASING.md) for why the gate is a dispatch and not a tag push.
-
----
-
-## When a clone IS needed
-
-Only if a sync hits **real (non-asset) code conflicts** — the sync PR is flagged
-for manual resolution. Resolve locally:
+Pick the next fork release number and push it from `master`:
 
 ```bash
-git fetch upstream --tags
-git checkout develop && git pull
-git merge vX.Y.Z          # compiled assets auto-resolve via merge=ours
-# resolve the remaining conflicts, then:
-npm ci && npm run prod    # rebuild assets from the merged source
-git commit -am "sync upstream vX.Y.Z + rebuild assets"
-git push
+git checkout master && git pull
+git tag 2.0.0 && git push origin 2.0.0
 ```
+
+That builds the tagged commit and publishes **`X.Y.Z`**, **`latest`** and
+**`alpine`** (+ their `-alpine` variants).
+
+The tag must be **unprefixed**. `v2.0.0` matches no trigger and builds nothing —
+deliberately, so that upstream's `v*` tags can never fire a release.
+
+Note this **rebuilds** the tagged commit rather than retagging the `testing`
+digest you validated in step 5. Same source, fresh build, so a base image that
+moved in the meantime lands in the release. See [RELEASING.md](RELEASING.md) for
+the full release path, the `guard` ancestry check, and rollback.
 
 ---
 
@@ -101,64 +146,82 @@ git push
 
 | Action | Image tag(s) |
 |---|---|
-| Sync PR merged → `develop` | `develop` / `develop-alpine` (staging) |
+| `develop` pushed (after a manual sync) | `develop` / `develop-alpine` (staging) |
 | `develop → master` PR merged | `testing` (+ `-alpine`) — release candidate |
-| **Promote to production** dispatch | `latest`, `X.Y.Z`, `X.Y` (+ `-alpine`) — production |
+| **git tag `X.Y.Z` pushed** | `X.Y.Z`, `latest`, `alpine` (+ `-alpine`) — production |
 
 Base image: `ghcr.io/citadeliscybersecurity/snipe-it`
 
-`X.Y.Z` is the **upstream** Snipe-IT version from `config/version.php` (today
-`8.6.3`), so `latest`, `8.6.3` and `8.6` are three names for the same manifest.
-`testing` is the last build of `master`. Right after a promote it points at that
-same manifest — the promote is a retag, not a rebuild — and it diverges again on
-the next merge to `master`. Those are the **only** tags published: no `vX.Y.Z`
-git tag is involved and there is no per-commit `<branch>-<sha>` tag.
+`X.Y.Z` is the **fork's** release number, chosen by whoever pushes the tag — not
+upstream's version. It is also the only **immutable** tag: `latest`, `alpine`,
+`testing` and the branch pointers all move, and `X.Y.Z` never does. That is
+precisely what makes the version tags a release history rather than a label.
+
+`testing` is the last build of `master`; it diverges from `latest` on the next
+merge. Those are the only tags published — no minor-series pointer (`2.0`) and no
+per-commit `<branch>-<sha>` tag.
 
 ### Pinning and rollback
 
-Every published tag **moves**, including `8.6.3` — fork commits land on top of an
-upstream release, so successive `master` builds republish that same version. To
-hold a deployment on one exact build, pin the digest:
+**Version tags never move, so every release ever published is still pullable.**
+Roll back by naming the version:
 
 ```bash
-# read the digest of what you have validated
-docker buildx imagetools inspect ghcr.io/citadeliscybersecurity/snipe-it:latest
+APP_VERSION=1.9.3 docker compose up -d   # exactly that release, indefinitely
+```
 
-APP_VERSION=8.6.3 docker compose up -d   # tracks the newest 8.6.3 build
+`ghcr-cleanup.yml` excludes version tags from its weekly prune, so there is no
+expiry window on this.
+
+`latest`, `testing` and `develop` **do** move, so pin a digest if you need to hold
+on a build that was never released:
+
+```bash
+docker buildx imagetools inspect ghcr.io/citadeliscybersecurity/snipe-it:testing
 ```
 
 ```yaml
-# or pin exactly, in a compose override
+# in a compose override
 image: ghcr.io/citadeliscybersecurity/snipe-it@sha256:<digest>
 ```
 
-Digests are immutable, but they are not kept forever. A promote moves `latest`,
-`X.Y.Z` **and** `X.Y` onto the new build, which leaves the previous index with no
-tags at all — and `GHCR Cleanup` (`.github/workflows/ghcr-cleanup.yml`) reclaims
-untagged versions. It runs weekly but only considers versions older than the
-`older-than` window set there (**4 weeks**), so a superseded digest stays pullable
-for at least that long. That window is the rollback horizon: past it, pin
-something you still have.
+Untagged digests survive only while they are newer than `ghcr-cleanup.yml`'s
+`older-than` window (**4 weeks**). Past that an unreleased build is gone — which is
+a reason to cut a real release rather than pin a candidate long-term.
 
-To roll back further, or to rebuild a specific commit, re-run the docker workflow
-on that ref (Actions → *Docker images (Ubuntu)* / *Docker images (Alpine)* →
-**Run workflow**) — note this republishes `testing` from that commit, and a
-subsequent promote is what would move production onto it.
+To rebuild a specific commit, re-run the docker workflow on that ref (Actions →
+*Docker images (Ubuntu)* / *Docker images (Alpine)* → **Run workflow**). That
+republishes only that ref's own pointer and never touches `latest`.
 
 ---
 
 ## Golden rules
 
 - **Upstream always lands on `develop` first** — never merge a raw upstream drop straight to `master`.
+- **Merge upstream locally, never through the GitHub UI.** `merge=ours` — the thing
+  that stops committed assets conflicting — is only honoured by a local `git merge`.
+- **Always `npm run prod` after an upstream merge, even a clean one.** The images
+  copy committed assets in and never build them, so stale assets ship silently.
+- **Never `git push --tags`.** Nothing automated writes refs any more, so that is
+  the only way upstream's ~300 mirrored tags reach origin. Two of them — `3.2.0`
+  and `5.1.7` — are version-shaped *and* ancestors of `master`, so they would pass
+  the `guard` check; the docker workflows exclude them by name for exactly that
+  reason. Push branches and release tags explicitly, one at a time.
 - **Every push to `master` publishes `testing`, not `latest`.** Merging to `master`
-  cuts the release candidate; production moves only when someone runs **Promote to
-  production** (Stage 5), which requires approval on the `production` environment.
-- **Never name a branch `latest`, `testing`, or anything version-shaped** (`8.6.4`,
-  `v8.6.4`). A branch build is tagged with its own name, so those would collide
-  with the production pointers. The docker workflows refuse such branches outright.
-- **Never hand-edit `app_version` in `config/version.php`** to change an image tag.
-  It is upstream's file, owned by the sync; editing it makes the image claim an
-  upstream release it does not contain.
-- Compiled assets stay committed (the Docker image copies them in; there is no
-  in-image build step). The sync workflow rebuilds them for you on a clean merge;
-  if you merge manually, run `npm run prod` yourself.
+  cuts the release candidate; production moves only when someone pushes an `X.Y.Z`
+  git tag, and only if that commit is already an ancestor of `master`.
+- **Release tags are unprefixed, and a number is never reused.** `2.0.0`, not
+  `v2.0.0` — a `v` matches no trigger. And once published, a number names one build
+  forever; re-pushing it over a different build destroys the rollback guarantee
+  that the whole scheme rests on.
+- **Never name a branch `latest`, `testing`, `alpine`, or anything version-shaped**
+  (`8.6.4`, `v8.6.4`). A branch build is tagged with its own name, so those would
+  collide with the production pointers. The docker workflows refuse such branches
+  outright.
+- **Never hand-edit `app_version` in `config/version.php`.** It is upstream's file
+  and arrives with the upstream merge. Nothing in CI reads it any more, but the app
+  footer and `/api/v1/version` do — editing it makes the running app misreport
+  which Snipe-IT it is.
+- **Compiled assets stay committed.** The Docker image copies them in and there is
+  no in-image build step, so `npm run prod` after every upstream merge is on you —
+  see step 3.

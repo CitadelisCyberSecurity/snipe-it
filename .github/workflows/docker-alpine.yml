@@ -5,30 +5,48 @@ name: Docker images (Alpine)
 # Also run for PRs to ensure PR doesn't break Docker build process.
 # Use the Actions tab ("Run workflow") to build any other branch on demand.
 #
-# This workflow never publishes `latest-alpine` or a version tag. Master builds
-# the release candidate (`testing-alpine`); promote.yml retags that exact digest
-# as latest/X.Y.Z/X.Y (-alpine) when a human says so.
+# Pushing an X.Y.Z tag cuts a RELEASE: this builds that commit and publishes
+# `latest-alpine` and the bare `alpine` pointer alongside an immutable
+# `X.Y.Z-alpine`. X.Y.Z-alpine is never moved again, which is what makes it the
+# release history -- roll back with `docker pull ...:1.9.3-alpine` instead of
+# hunting a digest out of an expired run log. Branch pushes still publish only
+# moving pointers (`testing-alpine` for master, `<branch>-alpine` otherwise).
 #
-# Deliberately NOT triggered by git tags either, for two independent reasons:
+# NOTHING AUTOMATED PUSHES A TAG TO THIS REPO. The upstream sync workflow that
+# used to mirror UPSTREAM's release tags here was deleted; upstream releases are
+# now merged in by hand (see docs/UPDATING.md). So every tag that reaches origin
+# was pushed deliberately by a person.
 #
-#   1. The image version tracks the UPSTREAM Snipe-IT release recorded in
-#      config/version.php, not a fork git tag. A tag trigger lets a pushed vX.Y.Z
-#      mint version tags from the tag NAME instead, which is how the image
-#      previously ended up published as 1.1.0 while containing upstream 8.6.3.
-#   2. sync-upstream.yml pushes UPSTREAM's release tag into this fork, so v8.7.0
-#      can appear here pointing at a commit that was never merged to master. A v*
-#      trigger would let upstream's commit publish `latest-alpine`. That is
-#      suppressed today only because tags pushed with GITHUB_TOKEN do not trigger
-#      workflows -- a load-bearing accident that a switch to a PAT (which
-#      sync-upstream already anticipates) would undo.
+# The pattern is still UNPREFIXED, which keeps the two tag namespaces disjoint:
+# fork releases are bare X.Y.Z, upstream's are v-prefixed. A `v*` tag fires
+# nothing, so a `git push --tags` that drags upstream's ~300 mirrored refs into
+# origin cannot publish anything.
 #
-# So the promote gate lives in promote.yml as a manual dispatch, which no
-# mirrored tag can ever fire.
+# The two negations are not decoration. `3.2.0` (2016) and `5.1.7` (2021) are
+# ancient UPSTREAM tags that match this shape AND are genuine ancestors of
+# master, so the `guard` job below would happily accept them. They are inert only
+# because they already exist in origin and a tag fires on PUSH -- delete and
+# re-push one and it would publish an image and repoint `latest` at a 2016 build.
+# Excluding them by name makes that a property of this file instead.
+#
+# A tag can still point at ANY commit, and a tag push runs the workflow file as
+# it exists on that ref -- so a tag placed on a commit that rewrote this file
+# would run the rewritten version. The `guard` job below closes that: it refuses
+# to build a tag whose commit is not an ancestor of master.
 on:
   push:
     branches:
       - master
       - develop
+
+    # Negations must follow a positive pattern; `!` is not valid as the first
+    # element, and a negation only excludes refs an earlier pattern matched.
+    # https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '!3.2.0'
+      - '!5.1.7'
+
   # Allows you to run this workflow manually from the Actions tab (any branch)
   workflow_dispatch:
 
@@ -54,13 +72,69 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Release gate. A git tag is not a review: it can be pushed at ANY commit,
+  # including one on an unmerged branch that rewrote this workflow, and a tag
+  # push runs the workflow file from the tag's own ref. So before a tag is
+  # allowed to publish `latest-alpine`, require that its commit is reachable from
+  # master -- i.e. that it went through the master PR gate.
+  #
+  # This replaces the `github.ref == 'refs/heads/master'` pin that the old
+  # promote.yml dispatch relied on for the same purpose.
+  #
+  # Runs first so a bad tag costs seconds rather than a full multi-arch build.
+  # Skipped entirely on branch and PR builds, which publish no production tag.
+  # ---------------------------------------------------------------------------
+  guard:
+    name: Verify tag is on master
+    if: github.ref_type == 'tag' && github.repository == 'CitadelisCyberSecurity/snipe-it'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # https://github.com/actions/checkout
+      # fetch-depth: 0 -- the ancestry check needs real history, not a shallow
+      # single-commit clone. persist-credentials: false because nothing here
+      # pushes; leaving the token in .git/config would only widen the blast
+      # radius of anything that runs afterwards.
+      - name: Checkout codebase
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Refuse a tag that is not an ancestor of master
+        run: |
+          set -euo pipefail
+
+          # Compare against FETCH_HEAD, not origin/master: it is exactly the ref
+          # just fetched, with no dependence on how the remote-tracking refspec
+          # happens to be configured in the checked-out clone.
+          git fetch --no-tags origin master
+
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" FETCH_HEAD; then
+            echo "::error::Tag ${GITHUB_REF_NAME} points at ${GITHUB_SHA}, which is not an ancestor of master. Merge to master first, then tag the merged commit."
+            exit 1
+          fi
+
+          echo "${GITHUB_REF_NAME} -> ${GITHUB_SHA} is on master. Proceeding."
+
+  # ---------------------------------------------------------------------------
   # Build one image per architecture, each on its own native runner (no QEMU
   # emulation), and push it to the registry BY DIGEST only (no tags yet). The
   # per-arch digests are uploaded as artifacts for the merge job to assemble.
   # ---------------------------------------------------------------------------
   build:
     # Only run for this fork. Never executes on upstream or other forks.
-    if: github.repository == 'CitadelisCyberSecurity/snipe-it'
+    #
+    # The needs.guard.result test is load-bearing: `guard` is SKIPPED on every
+    # branch and PR build, and a skipped `needs` dependency would otherwise take
+    # this job down with it. Listing success-or-skipped keeps branch builds
+    # working while still letting a FAILED guard stop a release.
+    needs: [guard]
+    if: >-
+      github.repository == 'CitadelisCyberSecurity/snipe-it' &&
+      (needs.guard.result == 'success' || needs.guard.result == 'skipped')
     permissions:
       contents: read
       packages: write # push-by-digest (skipped on PRs, which never log in)
@@ -88,22 +162,27 @@ jobs:
       - name: Prepare image reference
         run: echo "IMAGE=${REGISTRY}/${IMAGE_NAME,,}" >> "$GITHUB_ENV"
 
-      - name: Derive upstream app version
-        run: bash .github/scripts/app-version.sh
-
       # https://github.com/docker/metadata-action
       # In the split build we only need the labels here; tags are applied to the
       # merged manifest in the merge job below.
+      #
+      # org.opencontainers.image.version is left to metadata-action's own ref
+      # derivation, which is now exactly what we want: a tag build self-reports
+      # as `2.0.0`, a branch build as `develop`/`master`. It used to be
+      # overridden with the UPSTREAM Snipe-IT version parsed out of
+      # config/version.php, because promote.yml read that label back to decide
+      # which version tag to publish. Nothing reads it back any more -- the
+      # release version IS the pushed tag -- so the override and the script that
+      # produced it (.github/scripts/app-version.sh) are both gone.
+      #
+      # Consequence worth knowing: the upstream Snipe-IT version is no longer
+      # discoverable from the registry. It is still reported at runtime in the
+      # app footer and by /api/v1/version, both of which read config/version.php.
       - name: Extract metadata (labels)
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.IMAGE }}
-          # Without this the version label is derived from the git ref, so a
-          # master build would self-report as "master". Point it at the upstream
-          # release the image actually contains.
-          labels: |
-            org.opencontainers.image.version=${{ env.APP_VERSION }}
 
       # https://github.com/docker/setup-buildx-action
       - name: Setup Docker Buildx
@@ -159,51 +238,66 @@ jobs:
   # tags. Which names get applied depends on WHAT TRIGGERED the run, the same
   # split vaultwarden's release.yml makes between its branch and tag triggers:
   #
+  #   - Push of an X.Y.Z tag -> "X.Y.Z-alpine" + "latest-alpine" + "alpine".
+  #     This is a release.
   #   - Push to the default branch (master) -> "testing-alpine" only. Release
-  #     candidate: master is the production gate, but merging it no longer moves
-  #     production.
+  #     candidate: master is the production gate, but merging it does not ship.
   #   - Push to any other branch (e.g. develop) -> "<branch>-alpine" only, so
   #     staging builds never touch the production pointers.
   #
-  # "<upstream version>-alpine" (8.6.3-alpine), "<minor series>-alpine" and
-  # "latest-alpine" are NOT published here. promote.yml retags the validated
-  # `testing-alpine` digest instead, so production ships the exact index that was
-  # smoke-tested rather than a rebuild of the same commit. The version it applies
-  # still originates here: the org.opencontainers.image.version label stamped
-  # from config/version.php in the build job below is what promote.yml reads
-  # back.
-  #
-  # Every one of these is a MOVING tag: fork commits land on top of an upstream
-  # release, so successive master builds republish the same 8.6.3-alpine. There is
-  # no immutable tag by design -- pin by digest (image@sha256:...) if you need
-  # one build exactly.
+  # X.Y.Z-alpine is the ONLY immutable tag published anywhere in this repo, and
+  # that is the entire point of it. `latest-alpine`, `alpine`, `testing-alpine`
+  # and the branch pointers all move, so a superseded build ends up carrying no
+  # tag at all and ghcr-cleanup.yml eventually reclaims it. The version tag is the
+  # only thing keeping past releases pullable -- so never move one by hand, and
+  # never reuse a number.
   #
   # Deliberately NO per-commit "<branch>-<sha>-alpine" tag either: it minted a
   # permanent registry tag on every push, which is what grew this package to 266
   # versions.
   #
-  # suffix=-alpine (flavor) appends to every tag, so this never clobbers the
-  # Ubuntu image's tags: latest -> latest-alpine, 8.6.3 -> 8.6.3-alpine, etc.
+  # suffix=-alpine (flavor) appends to every tag metadata-action emits, so this
+  # never clobbers the Ubuntu image's tags: latest -> latest-alpine,
+  # 2.0.0 -> 2.0.0-alpine. The bare `alpine` pointer is the one exception and
+  # cannot come from metadata-action for exactly that reason -- see the create
+  # step below.
   # ---------------------------------------------------------------------------
   merge:
     # No digests are produced on PRs, so there is nothing to merge.
-    if: github.repository == 'CitadelisCyberSecurity/snipe-it' && github.event_name != 'pull_request'
+    #
+    # needs.build.result is tested explicitly because this job HAS an `if`, which
+    # suppresses the default "skip me if a dependency was skipped" propagation.
+    # Without it, a skipped or failed build could let this job run and try to
+    # assemble a manifest from artifacts that were never uploaded.
+    if: >-
+      github.repository == 'CitadelisCyberSecurity/snipe-it' &&
+      github.event_name != 'pull_request' &&
+      needs.build.result == 'success'
     permissions:
       contents: read
       packages: write # push the tagged manifest list
+      # The last two are for the release attestation at the end of this job.
+      # Job-level permissions cannot be conditional, so they are granted on every
+      # run while the attest STEP is gated on a tag build. Both are narrow:
+      # id-token mints a short-lived OIDC token scoped to this repo and workflow,
+      # and attestations only writes to the attestation store.
+      id-token: write
+      attestations: write
     runs-on: ubuntu-latest
     needs: build
     steps:
       # A non-default branch is tagged with its own NAME (type=ref below), and
       # workflow_dispatch accepts ANY ref. So a branch called `testing` could be
-      # dispatched to overwrite the release candidate that promote.yml ships, and
-      # one called `latest` or `8.6.4` could publish a production pointer
-      # directly -- skipping promote.yml's version and digest checks entirely.
+      # dispatched to overwrite the release candidate, and one called `latest`,
+      # `alpine` or `8.6.4` could publish a production pointer
+      # directly -- skipping the release path and its ancestry check entirely.
       # Neither needs more than push access to pull off, so refuse the names
       # rather than trusting that nobody creates such a branch.
       #
       # Checked BEFORE the -alpine suffix is applied, so `latest` is caught here
-      # rather than after it has become `latest-alpine`.
+      # rather than after it has become `latest-alpine`. `alpine` is reserved too:
+      # a branch of that name would suffix to `alpine-alpine`, but it would also
+      # collide with the bare flavour pointer once stripped, so refuse it outright.
       - name: Refuse reserved image tag names
         env:
           REF_NAME: ${{ github.ref_name }}
@@ -211,14 +305,22 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Tag refs are exempt, and MUST be: a release tag is literally named
+          # `2.0.0`, which matches the version-shaped pattern below. Without this
+          # branch every release would fail on this step. Tags get their own,
+          # stricter vetting in the `guard` job -- the commit has to be on master.
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            exit 0
+          fi
+
           # The default branch is exempt: it gets `testing` from an explicit
           # type=raw rule, not from its name.
           if [[ "${REF_NAME}" == "${DEFAULT_BRANCH}" ]]; then
             exit 0
           fi
 
-          if [[ "${REF_NAME}" =~ ^(latest|testing)$ || "${REF_NAME}" =~ ^v?[0-9]+(\.[0-9]+)*$ ]]; then
-            echo "::error::'${REF_NAME}' is a reserved image tag name. Production tags are published only by promote.yml; rename the branch to build it."
+          if [[ "${REF_NAME}" =~ ^(latest|testing|alpine)$ || "${REF_NAME}" =~ ^v?[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error::'${REF_NAME}' is a reserved image tag name. Releases are published only by pushing an X.Y.Z git tag; rename the branch to build it."
             exit 1
           fi
 
@@ -230,20 +332,11 @@ jobs:
           pattern: digests-alpine-*
           merge-multiple: true
 
-      # Only config/version.php is needed here, to derive the version tags.
-      - name: Checkout version file
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          sparse-checkout: |
-            config/version.php
-            .github/scripts/app-version.sh
-          sparse-checkout-cone-mode: false
-
+      # No checkout at all in this job any more. It used to sparse-checkout
+      # config/version.php to derive the version tags; the version now comes from
+      # the tag name, which arrives in the event payload.
       - name: Prepare image reference
         run: echo "IMAGE=${REGISTRY}/${IMAGE_NAME,,}" >> "$GITHUB_ENV"
-
-      - name: Derive upstream app version
-        run: bash .github/scripts/app-version.sh
 
       # https://github.com/docker/setup-buildx-action
       - name: Setup Docker Buildx
@@ -255,18 +348,32 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.IMAGE }}
-          # Master publishes the release candidate; any other branch publishes
-          # only its own name (develop -> "develop"). suffix=-alpine below appends
-          # to every one of these. Production tags come from promote.yml.
+          # An X.Y.Z tag publishes the release pair; master publishes the release
+          # candidate; any other branch publishes only its own name
+          # (develop -> "develop"). suffix=-alpine below appends to every one.
           #
-          # Gated on the ref, not on `github.event_name == 'push'`: the old
-          # condition meant a manual "Run workflow" on master matched no tag rule
-          # at all and produced an untagged manifest. A dispatch on master
-          # therefore rebuilds `testing-alpine`, which is what you want for
-          # re-running a failed RC build.
+          # type=ref,event=tag rather than type=semver: the tag is already a bare
+          # X.Y.Z, so there is nothing to normalise, and type=semver would also
+          # happily mint a version tag from a `v`-prefixed or pre-release ref that
+          # the trigger pattern is specifically shaped to exclude.
+          #
+          # Every rule is gated on the REF, not on github.event_name: a manual
+          # "Run workflow" on master used to match no rule at all and produced an
+          # untagged manifest. A dispatch on master therefore rebuilds
+          # `testing-alpine`, which is what you want for re-running a failed RC.
           tags: |
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
             type=raw,value=testing,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
             type=ref,event=branch,enable=${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+          # latest=false disables metadata-action's own auto-latest heuristic,
+          # which would attach `latest` on any tag-shaped ref. `latest` is
+          # published by the explicit type=raw rule above instead, so the ref-type
+          # gate is visible in one place rather than inferred from a flavor.
+          #
+          # onlatest=true makes the suffix apply to `latest` as well, so the rule
+          # above yields `latest-alpine` rather than a bare `latest` that would
+          # overwrite the Ubuntu image's production pointer.
           flavor: |
             latest=false
             suffix=-alpine,onlatest=true
@@ -280,15 +387,86 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Assemble one manifest list from every per-arch digest and tag it with all
-      # the tags metadata-action computed above.
+      # the tags metadata-action computed above, plus the bare `alpine` pointer on
+      # a release.
+      #
+      # `alpine` has to be appended HERE rather than added as a type=raw rule,
+      # because the suffix=-alpine flavor applies to every tag metadata-action
+      # emits -- a rule for `alpine` would come out as `alpine-alpine`. Adding it
+      # after the fact is the only way to get a bare flavour pointer out of a
+      # suffixed metadata block.
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
+          set -euo pipefail
+
+          extra=()
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            extra=(-t "${IMAGE}:alpine")
+          fi
+
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            "${extra[@]}" \
             $(printf '${{ env.IMAGE }}@sha256:%s ' *)
 
+      # Resolve the index digest by INSPECTING the tag just pushed, rather than by
+      # scraping it out of the create output. It becomes the attestation subject
+      # below, so a wrong value here would sign something other than what shipped.
       - name: Inspect pushed image
         run: |
-          docker buildx imagetools inspect \
-            "${IMAGE}:$(jq -cr '.tags[0] | split(":")[-1]' <<< "$DOCKER_METADATA_OUTPUT_JSON")"
+          set -euo pipefail
+
+          tag="$(jq -cr '.tags[0] | split(":")[-1]' <<< "$DOCKER_METADATA_OUTPUT_JSON")"
+          docker buildx imagetools inspect "${IMAGE}:${tag}"
+
+          digest="$(docker buildx imagetools inspect "${IMAGE}:${tag}" --format '{{.Manifest.Digest}}')"
+          if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Could not resolve a manifest digest for ${IMAGE}:${tag} (got '${digest}')"
+            exit 1
+          fi
+
+          echo "DIGEST_SHA=${digest}" >> "$GITHUB_ENV"
+
+      # https://github.com/actions/attest
+      #
+      # Releases only -- branch builds are rebuilt constantly and attesting each
+      # one would add a referrer manifest to the package on every push.
+      #
+      # What it buys: proof the index was produced by THIS workflow in THIS repo
+      # at a known commit, rather than pushed by someone holding a leaked token.
+      #
+      #   gh attestation verify oci://ghcr.io/citadeliscybersecurity/snipe-it:2.0.0-alpine \
+      #     -R CitadelisCyberSecurity/snipe-it
+      #
+      # push-to-registry stores it as an OCI referrer beside the index so it
+      # travels with the image. ghcr-cleanup.yml resolves referrers before
+      # pruning, so the weekly run cannot orphan it.
+      - name: Attest release manifest
+        if: github.ref_type == 'tag'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ env.DIGEST_SHA }}
+          push-to-registry: true
+
+      - name: Summary
+        run: |
+          {
+            echo "### ${IMAGE} (alpine)"
+            echo ""
+            if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+              echo "**Release ${GITHUB_REF_NAME}** from \`${GITHUB_SHA}\`"
+            else
+              echo "Branch build of \`${GITHUB_REF_NAME}\` (\`${GITHUB_SHA}\`)"
+            fi
+            echo ""
+            echo "\`${DIGEST_SHA}\`"
+            echo ""
+            echo "| Tag |"
+            echo "|---|"
+            jq -r '.tags[] | "| `" + . + "` |"' <<< "$DOCKER_METADATA_OUTPUT_JSON"
+            if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+              echo "| \`${IMAGE}:alpine\` |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

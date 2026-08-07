@@ -16,15 +16,17 @@ services:
     # This fork's image, built by .github/workflows/docker-ubuntu.yml. NOT
     # upstream snipe/snipe-it — that one lacks this fork's custom commits.
     #
-    # Defaults to `latest`, published on every push to master and so always the
-    # newest reviewed production build (see docs/UPDATING.md).
+    # Defaults to `latest`, which moves onto each release when an X.Y.Z git tag
+    # is pushed — so it is always the newest release (see docs/RELEASING.md).
     #
-    # Set APP_VERSION to pin a version (8.6.3) or use the slimmer alpine
+    # Set APP_VERSION to pin a release (1.9.3) or to use the slimmer alpine
     # flavour (latest-alpine). For the staging tag use docker-compose.ghcr.yml.
-    # Published tags are develop/testing/latest plus the upstream version and
-    # its minor series (8.6.3, 8.6), each with an -alpine variant. All of them
-    # MOVE, including 8.6.3 — pin by @sha256:<digest> if you need one exact
-    # build. Per-commit tags are not published.
+    #
+    # Published tags: develop / testing / latest / alpine, plus one immutable
+    # X.Y.Z per release, each with an -alpine variant. Only X.Y.Z is immutable;
+    # every other tag MOVES. So pin APP_VERSION to an X.Y.Z for a reproducible
+    # deployment, and use @sha256:<digest> only for a build that was never
+    # released. Per-commit tags are not published.
     image: ghcr.io/citadeliscybersecurity/snipe-it:${APP_VERSION:-latest}
     restart: unless-stopped
     volumes:
