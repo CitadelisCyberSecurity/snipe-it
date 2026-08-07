@@ -126,12 +126,23 @@ jobs:
   build:
     # Only run for this fork. Never executes on upstream or other forks.
     #
-    # The needs.guard.result test is load-bearing: `guard` is SKIPPED on every
-    # branch and PR build, and a skipped `needs` dependency would otherwise take
-    # this job down with it. Listing success-or-skipped keeps branch builds
-    # working while still letting a FAILED guard stop a release.
+    # `guard` is SKIPPED on every branch and PR build, and a skipped `needs`
+    # dependency takes its dependents down with it.
+    #
+    # `!cancelled()` is what stops that, and it is not decoration: a job with
+    # `needs` carries an IMPLICIT success() requirement, and an `if` only
+    # overrides it when the expression contains a status check function
+    # (always(), cancelled(), success(), failure()). Without one, GitHub skips
+    # this job before the needs.guard.result test below is ever evaluated --
+    # which is exactly what happened, and it silently disabled PR build
+    # verification. `!cancelled()` rather than `always()` so a cancelled run
+    # still stops here.
+    #
+    # The result test then does the real gating: success-or-skipped keeps branch
+    # and PR builds working, while a FAILED guard still stops a release.
     needs: [guard]
     if: >-
+      !cancelled() &&
       github.repository == 'CitadelisCyberSecurity/snipe-it' &&
       (needs.guard.result == 'success' || needs.guard.result == 'skipped')
     permissions:
