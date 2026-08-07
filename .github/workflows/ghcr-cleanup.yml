@@ -1,6 +1,6 @@
 # Prunes the ghcr.io/citadeliscybersecurity/snipe-it package so it only ever
-# contains the tags documented in docs/UPDATING.md: develop, testing, latest and
-# the X.Y.Z / X.Y release tags (each with its -alpine variant).
+# contains the tags documented in docs/UPDATING.md: develop, testing, latest,
+# alpine and the immutable X.Y.Z release tags (each with its -alpine variant).
 #
 # Why this is needed at all: docker-ubuntu.yml and docker-alpine.yml build each
 # architecture separately and push it BY DIGEST, then assemble a manifest list in
@@ -80,42 +80,44 @@ jobs:
           #    the run still reporting success. Use alternation, never commas.
           #    A first attempt here did exactly that and matched 0 of 40 tags.
 
-          # The moving pointers from docs/UPDATING.md, guarded against the delete
-          # pattern below.
+          # Everything that must survive a prune: the moving pointers, plus the
+          # immutable X.Y.Z release tags that ARE the release history.
           #
-          # The version tags (8.6.3, 8.6, + -alpine) are deliberately absent: a
-          # tag matched by neither pattern is simply left alone, and exclude-tags
-          # WINS over delete-tags. Adding a generic semver branch here would
-          # therefore also shield the legacy 1.1.x tags below and make deleting
-          # them impossible. Keeping the delete pattern narrow is what protects
-          # the version tags, so do not "helpfully" broaden this one.
-          exclude-tags: '^(latest|testing|develop)(-alpine)?$'
+          # The semver branch is the load-bearing part of this file. Release tags
+          # are the only immutable tags the package has, and pruning one destroys
+          # a rollback target permanently -- so they are named explicitly rather
+          # than left to "a tag matched by neither pattern is left alone". That
+          # earlier reasoning held only while the delete pattern below also
+          # targeted legacy 1.1.x tags. It no longer does, so there is nothing
+          # left for a semver exclusion to shield by accident.
+          #
+          # exclude-tags WINS over delete-tags, so anything listed here is safe
+          # regardless of what the pattern below says.
+          exclude-tags: '^(latest|testing|develop|alpine)(-alpine)?$|^[0-9]+\.[0-9]+\.[0-9]+(-alpine)?$'
 
-          # Two families of legacy tag, both from schemes this repo no longer uses:
+          # One legacy family: <branch>-<sha> per-commit pins, from the type=sha
+          # entry that used to be in the docker-*.yml metadata blocks (32
+          # accumulated). Nothing mints that shape any more, so this clears on the
+          # first run and matches nothing ever after.
           #
-          #   1. <branch>-<sha> per-commit pins, from the type=sha entry that used
-          #      to be in the docker-*.yml metadata blocks (32 accumulated).
-          #   2. 1.1 / 1.1.0, from when the image was versioned off a fork git tag
-          #      instead of the upstream release in config/version.php. They label
-          #      an image that actually contains upstream 8.6.3, so they are
-          #      actively misleading.
-          #
-          # Left permanently enabled rather than gated behind a dispatch input:
-          # both clear on the first run and match nothing ever after, since
-          # neither shape is minted any more. Upstream Snipe-IT is on 8.x and will
-          # not return to 1.1, so pattern 2 cannot catch a real version tag.
+          # A `1\.1(\.0)?` branch used to sit here too, aimed at image tags from
+          # when the version came off a fork git tag rather than config/version.php.
+          # It is GONE deliberately, and must not come back: the release number is
+          # now chosen by hand when a tag is pushed, so 1.1.4 is a perfectly
+          # possible future release and a pattern that eats it would delete a live
+          # release every Friday. Legacy 1.1 / 1.1.0 tags still in the registry
+          # have to be removed by hand -- see docs/RELEASING.md.
           #
           # Anchored, and note `develop-[0-9a-f]{7}` cannot match the live
           # `develop-alpine` tag ("alpine" is 6 chars and not all hex). A
           # `develop-*` glob WOULD match it; exclude-tags would catch that, but
           # relying on exclusion to undo an over-broad delete pattern is fragile.
           #
-          # Safe even though these tags share a package version with a live one
-          # (1.1.0 currently sits on the same version as `latest`, and the newest
-          # pin tag on the same version as `testing`): the action untags rather
-          # than deletes any version carrying more than one tag, and refuses to
-          # remove an image's last tag, so the live tag survives.
-          delete-tags: '^((master|develop)-[0-9a-f]{7}|1\.1(\.0)?)(-alpine)?$'
+          # Safe even where a matched tag shares a package version with a live one
+          # (the newest pin tag sits on the same version as `testing`): the action
+          # untags rather than deletes any version carrying more than one tag, and
+          # refuses to remove an image's last tag, so the live tag survives.
+          delete-tags: '^(master|develop)-[0-9a-f]{7}(-alpine)?$'
           use-regex: true
 
           # Reclaim the per-arch children left by push-by-digest, plus the
@@ -123,23 +125,23 @@ jobs:
           delete-untagged: true
           delete-orphaned-images: true
 
-          # RETENTION WINDOW -- this is what makes rollback-by-digest real.
+          # RETENTION WINDOW for UNTAGGED versions.
           #
-          # promote.yml records the outgoing digests as the rollback target, and
-          # docs/UPDATING.md tells you to pin them. But every tag here moves, so
-          # the moment `latest`/X.Y.Z/X.Y advance, the index they *used* to point
-          # at carries no tags at all. It is therefore untagged, and
-          # delete-untagged above would reclaim it on the next Friday run --
-          # silently deleting the exact digest the release summary just handed you
-          # as your way back. exclude-tags cannot protect it: there is no tag left
-          # to match on.
+          # This used to BE the rollback horizon. Every published tag moved, so a
+          # superseded release ended up carrying no tags at all, and this window
+          # was the only thing keeping it pullable. That is no longer the case:
+          # X.Y.Z release tags are immutable and excluded above, so release
+          # history now lives in the tag namespace and survives indefinitely.
+          #
+          # What the window still covers is builds that never became a release --
+          # a `testing` digest superseded by the next merge to master, or a branch
+          # pointer that moved. Four weeks is long enough to return to one of
+          # those by digest.
           #
           # older-than restricts processing to versions older than this, so
-          # nothing younger than the window is ever a deletion candidate. The
-          # window must stay >= the rollback horizon documented in
-          # docs/UPDATING.md ("Pinning and rollback"); the cost is that build
+          # nothing younger is ever a deletion candidate. The cost is that build
           # detritus lingers this long before being reclaimed, which is the
-          # intended trade. Change one and change the other.
+          # intended trade.
           #
           # Do NOT swap this for keep-n-untagged: the action throws if that is set
           # alongside delete-untagged, and a count-based limit is the wrong shape
