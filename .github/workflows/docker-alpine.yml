@@ -85,25 +85,47 @@ jobs:
   # Skipped entirely on branch and PR builds, which publish no production tag.
   # ---------------------------------------------------------------------------
   guard:
-    name: Verify tag is on master
-    if: github.ref_type == 'tag' && github.repository == 'CitadelisCyberSecurity/snipe-it'
+    name: Release gate
+    # Runs on EVERY event, and the work is gated per-STEP rather than on the job.
+    #
+    # That is deliberate and was learned twice. Gating the job itself on
+    # `github.ref_type == 'tag'` made it SKIP on branch and PR builds -- and a
+    # skipped job skips everything downstream of it in the `needs` graph,
+    # TRANSITIVELY. A dependent only escapes that by including a status check
+    # function (always(), !cancelled(), ...) in its own `if`, and adding one to
+    # `build` was not enough because `merge` sits downstream of `build`.
+    #
+    # The cost of that pattern, in one afternoon: PR image builds silently
+    # disabled, then the `develop` image not republished on merge. Both showed
+    # up as GREEN skipped runs. A job that runs for a few seconds and does
+    # nothing is far cheaper than a dependency graph whose correctness depends
+    # on remembering this rule at every new edge.
+    if: github.repository == 'CitadelisCyberSecurity/snipe-it'
     permissions:
       contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Nothing to gate
+        if: github.ref_type != 'tag'
+        run: echo "::notice::Branch build -- no release tag to verify."
+
       # https://github.com/actions/checkout
       # fetch-depth: 0 -- the ancestry check needs real history, not a shallow
       # single-commit clone. persist-credentials: false because nothing here
       # pushes; leaving the token in .git/config would only widen the blast
       # radius of anything that runs afterwards.
+      #
+      # Skipped entirely on branch builds, so they pay job startup and nothing else.
       - name: Checkout codebase
+        if: github.ref_type == 'tag'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Refuse a tag that is not an ancestor of master
+        if: github.ref_type == 'tag'
         run: |
           set -euo pipefail
 
@@ -127,25 +149,11 @@ jobs:
   build:
     # Only run for this fork. Never executes on upstream or other forks.
     #
-    # `guard` is SKIPPED on every branch and PR build, and a skipped `needs`
-    # dependency takes its dependents down with it.
-    #
-    # `!cancelled()` is what stops that, and it is not decoration: a job with
-    # `needs` carries an IMPLICIT success() requirement, and an `if` only
-    # overrides it when the expression contains a status check function
-    # (always(), cancelled(), success(), failure()). Without one, GitHub skips
-    # this job before the needs.guard.result test below is ever evaluated --
-    # which is exactly what happened, and it silently disabled PR build
-    # verification. `!cancelled()` rather than `always()` so a cancelled run
-    # still stops here.
-    #
-    # The result test then does the real gating: success-or-skipped keeps branch
-    # and PR builds working, while a FAILED guard still stops a release.
+    # Plain `needs` semantics, no status check function required: `guard` now
+    # always runs and always succeeds unless it actively rejects a tag, so there
+    # is no skip to propagate and nothing here has to know about that rule.
     needs: [guard]
-    if: >-
-      !cancelled() &&
-      github.repository == 'CitadelisCyberSecurity/snipe-it' &&
-      (needs.guard.result == 'success' || needs.guard.result == 'skipped')
+    if: github.repository == 'CitadelisCyberSecurity/snipe-it'
     permissions:
       contents: read
       packages: write # push-by-digest (skipped on PRs, which never log in)
@@ -274,16 +282,10 @@ jobs:
   # step below.
   # ---------------------------------------------------------------------------
   merge:
-    # No digests are produced on PRs, so there is nothing to merge.
-    #
-    # needs.build.result is tested explicitly because this job HAS an `if`, which
-    # suppresses the default "skip me if a dependency was skipped" propagation.
-    # Without it, a skipped or failed build could let this job run and try to
-    # assemble a manifest from artifacts that were never uploaded.
-    if: >-
-      github.repository == 'CitadelisCyberSecurity/snipe-it' &&
-      github.event_name != 'pull_request' &&
-      needs.build.result == 'success'
+    # No digests are produced on PRs, so there is nothing to merge. `needs: build`
+    # already requires every matrix leg to have succeeded, so no explicit result
+    # test is needed on top of it.
+    if: github.repository == 'CitadelisCyberSecurity/snipe-it' && github.event_name != 'pull_request'
     permissions:
       contents: read
       packages: write # push the tagged manifest list
