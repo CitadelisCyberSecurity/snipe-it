@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Accessory;
+use App\Models\AccessReviewCampaign;
 use App\Models\Actionlog;
 use App\Models\Asset;
 use App\Models\AssetModel;
@@ -178,6 +179,17 @@ class Purge extends Command
                 $this->info('- Status Label "'.$status_label->name.'" deleted.');
                 $status_label->forceDelete();
             }
+
+            $campaigns = AccessReviewCampaign::whereNotNull('deleted_at')->withTrashed()->get();
+            $this->info($campaigns->count().' access review campaigns purged.');
+            $campaign_items = 0;
+            foreach ($campaigns as $campaign) {
+                $this->info('- Access Review Campaign "'.$campaign->name.'" deleted.');
+                $campaign_items += $campaign->items()->count();
+                $campaign->items()->forceDelete();
+                $campaign->forceDelete();
+            }
+            $this->info($campaign_items.' corresponding access review item records purged.');
         } else {
             $this->info('Action canceled. Nothing was purged.');
         }
