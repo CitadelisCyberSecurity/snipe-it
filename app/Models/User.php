@@ -32,6 +32,18 @@ use Illuminate\Support\Str;
 use Laravel\Passport\HasApiTokens;
 use Watson\Validating\ValidatingTrait;
 
+/**
+ * PHPStan discovers model columns by statically parsing the migrations, and
+ * it only reads `$table->...` calls sitting directly in the Schema closure
+ * body. `users.display_name` is added inside an `if (! Schema::hasColumn())`
+ * guard (2025_08_19_114742_add_display_name_to_users), so the scanner walks
+ * straight past it and every `$user->display_name` read is reported as an
+ * undefined property. The column is real; only the static view of it is
+ * missing, so declare it here rather than restructuring a shipped migration
+ * whose guard exists to keep re-runs idempotent for upgraders.
+ *
+ * @property string|null $display_name
+ */
 class User extends SnipeModel implements AuthenticatableContract, AuthorizableContract, CanResetPasswordContract, HasLocalePreference
 {
     use CompanyableTrait;
