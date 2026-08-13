@@ -9,6 +9,8 @@ use App\Models\Accessory;
 use App\Models\Actionlog;
 use App\Models\Asset;
 use App\Models\Company;
+use App\Models\Component;
+use App\Models\Consumable;
 use App\Models\ConsumableAssignment;
 use App\Models\Group;
 use App\Models\License;
@@ -106,26 +108,23 @@ class BulkUsersController extends Controller
                 return redirect()->back()->with('success', trans('admin/users/message.password_resets_sent'));
 
             } elseif ($request->input('bulk_actions') == 'print') {
-                $users = User::query()
-                    ->with([
-                        'assets.assetlog',
-                        'assets.assignedAssets.assetlog',
-                        'assets.assignedAssets.defaultLoc',
-                        'assets.assignedAssets.location',
-                        'assets.assignedAssets.model.category',
-                        'assets.defaultLoc',
-                        'assets.location',
-                        'assets.model.category',
-                        'accessories.assetlog',
-                        'accessories.category',
-                        'accessories.manufacturer',
-                        'consumables.assetlog',
-                        'consumables.category',
-                        'consumables.manufacturer',
-                        'licenses.category',
-                    ])
-                    ->withTrashed()
-                    ->findMany($request->input('ids'));
+                $actor = auth()->user();
+                $canViewAssets = $actor->can('view', Asset::class);
+                $canViewLicenses = $actor->can('view', License::class);
+                $canViewAccessories = $actor->can('view', Accessory::class);
+                $canViewConsumables = $actor->can('view', Consumable::class);
+                $canViewComponents = $actor->can('view', Component::class);
+
+                $users = collect($request->input('ids'))
+                    ->map(fn ($id) => User::withInventoryRelations(
+                        (int) $id,
+                        $canViewAssets,
+                        $canViewLicenses,
+                        $canViewAccessories,
+                        $canViewConsumables,
+                        $canViewComponents,
+                    )->first())
+                    ->filter();
 
                 $users->each(fn ($user) => $this->authorize('view', $user));
 
@@ -208,10 +207,6 @@ class BulkUsersController extends Controller
             $this->update_array['manager_id'] = null;
         }
 
-        if ($request->input('null_company_ids') == '1') {
-            $this->update_array['company_id'] = null;
-        }
-
         if ($request->input('null_start_date') == '1') {
             $this->update_array['start_date'] = null;
         }
@@ -271,15 +266,36 @@ class BulkUsersController extends Controller
         if (! $manager_conflict) {
             $this->conditionallyAddItem('manager_id');
         }
-        // Prepare company pivot changes upfront so we can include company_id in the per-user save.
         $bulkCompanyIds = array_filter(array_map('intval', (array) $request->input('company_ids', [])));
         $clearCompanies = $request->input('null_company_ids') == '1';
         $allowedIds = [];
 
         if ($bulkCompanyIds || $clearCompanies) {
             $allowedIds = Company::getIdsForCurrentUser($bulkCompanyIds);
-            // Include scalar company_id in the update array for display/backward compat.
-            $this->update_array['company_id'] = $allowedIds[0] ?? null;
+        }
+
+        $wouldClear = $clearCompanies || ($bulkCompanyIds && empty($allowedIds));
+
+        // Strict-FMCS #19192 gate — mirrors the branch in SaveUserRequest
+        // so bulk-editing a batch to clear all company memberships in
+        // strict mode is blocked for companied non-superusers. Fires
+        // before the older floater-mode gate so its more specific error
+        // wins when both apply. Skips uncompanied actors because they
+        // legitimately operate in the null pseudo-company namespace in
+        // strict mode; nulling pivots there is their normal workflow,
+        // not a self-escalation attempt.
+        $settings = Setting::getSettings();
+        $strictFmcs = $settings->full_multiple_companies_support && ! $settings->null_company_is_floater;
+        $actor = auth()->user();
+        if ($wouldClear && $strictFmcs && ! $actor->isSuperUser() && $actor->companies()->exists()) {
+            return redirect()->route('users.index')
+                ->with('error', trans('validation.fmcs_company', ['attribute' => trans('general.company')]));
+        }
+
+        // Floater-mode self-elevation guard (#19200). See User::canGrantFloaterStatus.
+        if ($wouldClear && ! auth()->user()->canGrantFloaterStatus()) {
+            return redirect()->route('users.index')
+                ->with('error', trans('admin/users/general.cannot_make_floater'));
         }
 
         // Save per-user so UserObserver::updating() fires and all field changes are written
@@ -319,6 +335,7 @@ class BulkUsersController extends Controller
                     $user->companies()->detach(Company::getIdsForCurrentUser(
                         $user->companies()->pluck('companies.id')->toArray()
                     ));
+                    $user->syncLegacyCompanyIdMirror();
                 } else {
                     $user->syncCompaniesWithLogging($allowedIds);
                 }
@@ -585,6 +602,7 @@ class BulkUsersController extends Controller
             $mergedCompanyIds = $user_to_merge->companies()->pluck('companies.id')->toArray();
             if (! empty($mergedCompanyIds)) {
                 $merge_into_user->companies()->syncWithoutDetaching($mergedCompanyIds);
+                $merge_into_user->syncLegacyCompanyIdMirror();
             }
 
             $user_to_merge->delete();

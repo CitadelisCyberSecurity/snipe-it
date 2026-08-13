@@ -20,12 +20,15 @@ enum ActionType: string
     case Declined = 'declined';
     case Audit = 'audit';
     case NoteAdded = 'note added';
+    case QuantityAdjust = 'adjusted quantity';
 
     // Users
     case TwoFactorReset = '2FA reset';
     case Merged = 'merged';
     case TokenRevoked = 'token revoked';
     case TokenUnrevoked = 'token unrevoked';
+    case Impersonated = 'impersonated';
+    case StoppedImpersonating = 'stopped impersonating';
 
     // Licenses
     case DeleteSeats = 'delete seats';
