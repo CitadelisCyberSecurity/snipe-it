@@ -10,6 +10,9 @@ use App\Http\Middleware\CheckLocale;
 use App\Http\Middleware\CheckPermissions;
 use App\Http\Middleware\CheckUserIsActivated;
 use App\Http\Middleware\EncryptCookies;
+use App\Http\Middleware\EnforceApiTwoFactorEnrollment;
+use App\Http\Middleware\EnforceApiUserAgent;
+use App\Http\Middleware\IssueFreshApiTokenIfTwoFactorComplete;
 use App\Http\Middleware\LogAuthedUserHeader;
 use App\Http\Middleware\NoSessionStore;
 use App\Http\Middleware\PreventBackHistory;
@@ -33,7 +36,6 @@ use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
-use Laravel\Passport\Http\Middleware\CreateFreshApiToken;
 
 class Kernel extends HttpKernel
 {
@@ -73,7 +75,7 @@ class Kernel extends HttpKernel
             CheckLocale::class,
             CheckUserIsActivated::class,
             CheckForTwoFactor::class,
-            CreateFreshApiToken::class,
+            IssueFreshApiTokenIfTwoFactorComplete::class,
             CheckColorSettings::class,
             AuthenticateSession::class,
             SubstituteBindings::class,
@@ -81,6 +83,9 @@ class Kernel extends HttpKernel
 
         'api' => [
             'auth:api',
+            CheckUserIsActivated::class,
+            EnforceApiTwoFactorEnrollment::class,
+            EnforceApiUserAgent::class,
             CheckLocale::class,
             LogAuthedUserHeader::class,
             SetPaginationDefaults::class,

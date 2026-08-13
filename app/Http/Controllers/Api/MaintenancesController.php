@@ -14,6 +14,7 @@ use App\Models\Asset;
 use App\Models\Company;
 use App\Models\Maintenance;
 use App\Models\Setting;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -52,6 +53,18 @@ class MaintenancesController extends Controller
 
         if ($request->filled('asset_id')) {
             $maintenances->where('asset_id', '=', $request->input('asset_id'));
+        }
+
+        // Polymorphic filter — used by the user detail Maintenances tab to
+        // pull every maintenance where the underlying asset was checked out
+        // to a specific user. Defaults to type=User when only the id is
+        // supplied; pass `checked_out_to_type=<fqcn>` to target locations
+        // or assets if/when those tabs land.
+        if ($request->filled('checked_out_to_id')) {
+            $type = $request->input('checked_out_to_type', User::class);
+            $maintenances
+                ->where('maintenances.checked_out_to_id', $request->input('checked_out_to_id'))
+                ->where('maintenances.checked_out_to_type', $type);
         }
 
         if ($request->filled('supplier_id')) {
@@ -102,7 +115,8 @@ class MaintenancesController extends Controller
         }
 
         // Make sure the offset and limit are actually integers and do not exceed system limits
-        $offset = ($request->input('offset') > $maintenances->count()) ? $maintenances->count() : app('api_offset_value');
+        $total = $maintenances->count();
+        $offset = ($request->input('offset') > $total) ? $total : app('api_offset_value');
         $limit = app('api_limit_value');
 
         $allowed_columns = [
@@ -111,6 +125,10 @@ class MaintenancesController extends Controller
             'asset_maintenance_time',
             'cost',
             'start_date',
+            'expected_completion_date',
+            // Legacy alias: API v1 callers passed sort=completion_date
+            // against the pre-rename column. Kept in the allow-list and
+            // mapped below so those callers keep sorting the same rows.
             'completion_date',
             'completed_at',
             'notes',
@@ -164,12 +182,16 @@ class MaintenancesController extends Controller
             case 'completed_at':
                 $maintenances = $maintenances->orderByCompletedAt($order);
                 break;
+            case 'completion_date':
+                // Legacy alias for the renamed expected_completion_date
+                // column; keep API v1 sort= callers working.
+                $maintenances = $maintenances->orderBy('expected_completion_date', $order);
+                break;
             default:
                 $maintenances = $maintenances->orderBy($sort, $order);
                 break;
         }
 
-        $total = $maintenances->count();
         $maintenances = $maintenances->skip($offset)->take($limit)->get();
 
         if (request()->input('format') == 'flat') {

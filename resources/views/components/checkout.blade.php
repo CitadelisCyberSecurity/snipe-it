@@ -9,11 +9,12 @@
 {{-- Page content --}}
 @section('content')
 
-<x-container class="col-md-8">
+<x-container columns="2">
+    <x-page-column class="col-md-7">
 
-    <x-form route="{{ route('components.checkout.store', $snipe_component->id) }}" id="checkout_form">
+        <x-form route="{{ route('components.checkout.store', $snipe_component->id) }}" id="checkout_form">
 
-        <x-box header="{{ $snipe_component->name }} ({{ $snipe_component->numRemaining() }} {{ trans('admin/components/general.remaining') }})">
+            <x-box header="{{ $snipe_component->name }} ({{ $snipe_component->numRemaining() }} {{ trans('admin/components/general.remaining') }})">
 
             @if ($snipe_component->company)
                 <x-form.static :label="trans('general.company')">{!! $snipe_component->company->present()->formattedNameLink !!}</x-form.static>
@@ -36,20 +37,29 @@
             @if ($snipe_component->requireAcceptance() || $snipe_component->getEula() || ($snipeSettings->webhook_endpoint != ''))
                 <div class="form-group notification-callout">
                     <div class="col-md-8 col-md-offset-3">
-                        <div class="callout callout-info">
+                        <x-callout type="info" role="status">
+                            {{-- Components can only be checked out to assets (see
+                                 ComponentCheckoutController::store, which forces
+                                 checkout_to_type=asset). CheckoutableListener then
+                                 resolves the notifiable user by walking to the
+                                 target asset's assignee. Use the component-scoped
+                                 copy that reflects the "if the asset is assigned
+                                 to a user" chain, rather than the generic
+                                 user-target copy used by the accessory / consumable
+                                 / license / user-scoped checkout screens. --}}
                             @if ($snipe_component->category->require_acceptance == '1')
-                                <i class="far fa-envelope" aria-hidden="true"></i>
-                                {{ trans('admin/categories/general.required_acceptance') }}<br>
+                                <i class="far fa-envelope fa-fw" aria-hidden="true"></i>
+                                {{ trans('admin/categories/general.required_acceptance_component') }}<br>
                             @endif
                             @if ($snipe_component->getEula())
-                                <i class="far fa-envelope" aria-hidden="true"></i>
-                                {{ trans('admin/categories/general.required_eula') }}<br>
+                                <i class="far fa-envelope fa-fw" aria-hidden="true"></i>
+                                {{ trans('admin/categories/general.required_eula_component') }}<br>
                             @endif
                             @if ($snipeSettings->webhook_endpoint != '')
-                                <i class="fab fa-slack" aria-hidden="true"></i>
+                                <i class="fab fa-slack fa-fw" aria-hidden="true"></i>
                                 {{ trans('general.webhook_msg_note') }}
                             @endif
-                        </div>
+                        </x-callout>
                     </div>
                 </div>
             @endif
@@ -73,9 +83,15 @@
                 />
             </x-slot:customfooter>
 
-        </x-box>
+            </x-box>
 
-    </x-form>
+        </x-form>
+
+    </x-page-column>
+
+    <x-page-column class="col-md-5">
+        <livewire:checkout-target-panel type="components" defaultTargetType="asset" />
+    </x-page-column>
 
 </x-container>
 

@@ -63,7 +63,8 @@ class StatuslabelsController extends Controller
         }
 
         // Make sure the offset and limit are actually integers and do not exceed system limits
-        $offset = ($request->input('offset') > $statuslabels->count()) ? $statuslabels->count() : app('api_offset_value');
+        $total = $statuslabels->count();
+        $offset = ($request->input('offset') > $total) ? $total : app('api_offset_value');
         $limit = app('api_limit_value');
         $order = $request->input('order') === 'asc' ? 'asc' : 'desc';
         $sort_override = $request->input('sort');
@@ -78,7 +79,6 @@ class StatuslabelsController extends Controller
                 break;
         }
 
-        $total = $statuslabels->count();
         $statuslabels = $statuslabels->skip($offset)->take($limit)->get();
 
         return (new StatuslabelsTransformer)->transformStatuslabels($statuslabels, $total);
@@ -132,7 +132,10 @@ class StatuslabelsController extends Controller
     public function show($id): array
     {
         $this->authorize('view', Statuslabel::class);
-        $statuslabel = Statuslabel::findOrFail($id);
+        // Match index()'s eager load so isDeletable() (via available_actions.delete
+        // and bulk_selectable.delete) reads the preloaded count instead of firing
+        // a fallback assets()->count() query.
+        $statuslabel = Statuslabel::withCount('assets as assets_count')->findOrFail($id);
 
         return (new StatuslabelsTransformer)->transformStatuslabel($statuslabel);
     }

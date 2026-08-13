@@ -20,6 +20,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class LicensesController extends Controller
 {
@@ -34,6 +35,12 @@ class LicensesController extends Controller
     {
         $this->authorize('view', License::class);
 
+        // Callers without viewKeys must not be able to filter or search on
+        // licenses.serial. The transformer masks the value in the response
+        // body, but a filter/search hit still leaks key existence through
+        // the row count and result presence.
+        $canViewKeys = Gate::allows('viewKeys', License::class);
+
         $licenses = License::with('company', 'manufacturer', 'supplier', 'category', 'adminuser', 'licenseSeatsRelation', 'assignedCount')
             ->withCount([
                 'freeSeats as free_seats_count',
@@ -45,19 +52,25 @@ class LicensesController extends Controller
             $licenses->ExpiredLicenses();
         } elseif ($request->input('status') == 'expiring') {
             $licenses->ExpiringLicenses($settings->alert_interval);
-        } elseif ($request->input('status') == 'active') {
+        } else {
             $licenses->ActiveLicenses();
         }
 
         if ($request->filled('company_id')) {
-            $licenses->where('licenses.company_id', '=', $request->input('company_id'));
+            // expand_company_hierarchy=1 opts the company show-page tabs into the
+            // parent/child rollup so a child shows items inherited from its parent.
+            if ($request->boolean('expand_company_hierarchy')) {
+                $licenses->whereIn('licenses.company_id', Company::reachableCompanyIds($request->input('company_id')));
+            } else {
+                $licenses->where('licenses.company_id', '=', $request->input('company_id'));
+            }
         }
 
         if ($request->filled('name')) {
             $licenses->where('licenses.name', '=', $request->input('name'));
         }
 
-        if ($request->filled('product_key')) {
+        if ($request->filled('product_key') && $canViewKeys) {
             $licenses->where('licenses.serial', '=', $request->input('product_key'));
         }
 
@@ -109,9 +122,14 @@ class LicensesController extends Controller
             $licenses->whereNull('expiration_date');
         }
 
-        // This invokes the Searchable model trait and will handle input by search or by advanced search filter
+        // This invokes the Searchable model trait and will handle input by search or by advanced search filter.
+        // Callers without viewKeys go through TextSearchWithoutSerial, which strips
+        // licenses.serial out of the searchable attribute set for the duration of the call.
         if ($request->filled('filter') || $request->filled('search')) {
-            $licenses->TextSearch($request->input('filter') ? $request->input('filter') : $request->input('search'));
+            $searchTerm = $request->input('filter') ? $request->input('filter') : $request->input('search');
+            $canViewKeys
+                ? $licenses->TextSearch($searchTerm)
+                : $licenses->TextSearchWithoutSerial($searchTerm);
         }
 
         if ($request->input('deleted') == 'true') {
@@ -147,6 +165,9 @@ class LicensesController extends Controller
                 break;
             case 'product_key':
                 $licenses = $licenses->orderBy('licenses.serial', $order);
+                break;
+            case 'percent_remaining':
+                $licenses = $licenses->OrderPercentRemaining($order);
                 break;
             default:
                 $allowed_columns =
