@@ -368,7 +368,7 @@ class CampaignsController extends Controller
         ]);
     }
 
-    public function executeItem(Request $request, AccessReviewCampaign $campaign, AccessReviewItem $item): JsonResponse
+    public function executeItem(AccessReviewCampaign $campaign, AccessReviewItem $item): JsonResponse
     {
         $this->authorize('admin');
 
