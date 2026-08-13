@@ -16,15 +16,23 @@
     @php($showingDeleted = request('status') === 'deleted')
     <x-container>
         <x-box name="accessReviewCampaigns">
-            @unless ($showingDeleted)
-                <x-slot:bulkactions>
-                    <x-table.bulk-actions
-                        action_route="{{ route('access-review.campaigns.bulk-destroy') }}"
-                        model_name="access_review_campaign">
-                        <option value="delete">{{ trans('general.delete') }}</option>
-                    </x-table.bulk-actions>
-                </x-slot:bulkactions>
-            @endunless
+            {{-- Titled rather than given a bulk-actions dropdown, matching the
+                 Consumables and Licenses tables.
+
+                 The dropdown could never do anything: bulk actions operate on
+                 checked rows, but AccessReviewCampaignPresenter defines no
+                 checkbox column, so nothing was ever selectable and the Go
+                 button stayed permanently disabled. Its single action, Delete,
+                 is in any case already on every row as its own button (see
+                 AccessReviewCampaignsTransformer). All it contributed was a
+                 500px-wide dead control above the table.
+
+                 The POST route and CampaignsController::bulkDestroy are left
+                 in place — they are covered by AdminCampaignCrudTest and are
+                 reachable by other callers. --}}
+            <x-slot:table_header>
+                {{ trans('admin/access-review/general.campaigns') }}
+            </x-slot:table_header>
             {{-- Show Deleted lives in the table toolbar (next to refresh/print) via
                  the accessReviewCampaignsButtons function, matching the Users tab. --}}
             <x-table
