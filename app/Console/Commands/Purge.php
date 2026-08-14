@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Enums\ActionType;
+use App\Models\AccessReviewCampaign;
 use App\Models\Accessory;
 use App\Models\Asset;
 use App\Models\AssetModel;
@@ -213,7 +214,13 @@ class Purge extends Command
         // soft-deletable models, but a trashed License with live
         // LicenseSeats or a trashed Asset with live Maintenances would
         // leave orphans behind if we only nuked soft-deleted rows.
+        //
+        // AccessReviewItem does not use SoftDeletes, so it is never
+        // reached by the auto-discovery above; its rows only go away
+        // via this registry. There are no DB-level foreign keys on
+        // access_review_items.campaign_id either, so nothing cascades.
         $childTables = [
+            AccessReviewCampaign::class => ['access_review_items' => 'campaign_id'],
             Asset::class => ['maintenances' => 'asset_id'],
             License::class => ['license_seats' => 'license_id'],
         ];

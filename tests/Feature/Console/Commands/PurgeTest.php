@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Console\Commands;
 
+use App\Models\AccessReviewCampaign;
+use App\Models\AccessReviewItem;
 use App\Models\Accessory;
 use App\Models\Actionlog;
 use App\Models\Asset;
@@ -99,6 +101,33 @@ class PurgeTest extends TestCase
 
         $this->assertDatabaseMissing('licenses', ['id' => $license->id]);
         $this->assertDatabaseMissing('license_seats', ['license_id' => $license->id]);
+    }
+
+    public function test_soft_deleted_access_review_campaign_and_its_items_are_purged(): void
+    {
+        // AccessReviewItem has no SoftDeletes trait and no DB-level FK on
+        // campaign_id, so nothing reaches its rows except the explicit
+        // child-table registry in the command. A trashed campaign whose
+        // items survived would leave rows pointing at a missing campaign.
+        $campaign = AccessReviewCampaign::factory()->create();
+        $item = AccessReviewItem::factory()->create(['campaign_id' => $campaign->id]);
+        $campaign->delete();
+
+        $this->artisan('snipeit:purge', ['--force' => 'true'])->assertExitCode(0);
+
+        $this->assertDatabaseMissing('access_review_campaigns', ['id' => $campaign->id]);
+        $this->assertDatabaseMissing('access_review_items', ['id' => $item->id]);
+    }
+
+    public function test_live_access_review_campaign_and_its_items_are_not_purged(): void
+    {
+        $campaign = AccessReviewCampaign::factory()->create();
+        $item = AccessReviewItem::factory()->create(['campaign_id' => $campaign->id]);
+
+        $this->artisan('snipeit:purge', ['--force' => 'true'])->assertExitCode(0);
+
+        $this->assertDatabaseHas('access_review_campaigns', ['id' => $campaign->id, 'deleted_at' => null]);
+        $this->assertDatabaseHas('access_review_items', ['id' => $item->id]);
     }
 
     public function test_user_action_logs_use_target_type_target_id_not_item_type_item_id(): void
