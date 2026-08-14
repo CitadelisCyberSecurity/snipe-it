@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'app_version' => 'v8.7.0',
+    'app_version' => 'v8.7.3-pre',
     'full_app_version' => 'v8.7.3-pre - build 24424-gd3be770f25',
     'build_version' => '24424',
     'prerelease_version' => '',
