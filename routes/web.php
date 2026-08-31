@@ -207,9 +207,18 @@ Route::group(['middleware' => 'auth'], function () {
                 ->push($campaign->name));
         Route::post('campaigns/{campaign}/items/{item}/execute', [App\Http\Controllers\AccessReview\CampaignsController::class, 'executeItem'])
             ->name('campaigns.items.execute');
+        // withTrashed() lets the {manager} binding resolve a soft-deleted user. The results page
+        // lists managers through a withTrashed() relation, so it can render a Send Reminder button
+        // for a manager deleted after launch; without this the POST 404s and the page reports only
+        // a generic "Failed to send."
+        //
+        // 30/60 rather than 3/60: an unnamed throttle keys on the user ID alone, with no campaign or
+        // manager in the key, so a low cap applies to an admin's reminders across every campaign at
+        // once and a normal pass over a campaign's managers dies partway through.
         Route::post('campaigns/{campaign}/remind/{manager}', [App\Http\Controllers\AccessReview\CampaignsController::class, 'remindManager'])
-            ->middleware('throttle:3,60')
-            ->name('campaigns.remind-manager');
+            ->middleware('throttle:30,60')
+            ->name('campaigns.remind-manager')
+            ->withTrashed();
         Route::post('campaigns/bulk-destroy', [App\Http\Controllers\AccessReview\CampaignsController::class, 'bulkDestroy'])
             ->name('campaigns.bulk-destroy');
         Route::post('campaigns', [App\Http\Controllers\AccessReview\CampaignsController::class, 'store'])

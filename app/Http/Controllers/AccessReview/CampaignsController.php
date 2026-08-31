@@ -333,6 +333,12 @@ class CampaignsController extends Controller
     {
         $this->authorize('admin');
 
+        // The route has to allow a trashed {manager}, which also lets a trashed {campaign} bind.
+        // A deleted campaign has no reachable results page, so keep 404ing hand-made requests.
+        if ($campaign->trashed()) {
+            abort(404);
+        }
+
         if (! $manager->email) {
             return response()->json([
                 'error' => trans('admin/access-review/general.reminder_no_email'),
