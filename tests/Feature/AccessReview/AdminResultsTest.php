@@ -190,8 +190,10 @@ class AdminResultsTest extends TestCase
 
         $url = route('access-review.campaigns.remind-manager', [$campaign, $manager]);
 
-        // throttle:3,60 — first three go through, the fourth is rejected.
-        for ($i = 0; $i < 3; $i++) {
+        // throttle:30,60 — the first thirty go through, the thirty-first is rejected. The cap has to
+        // clear a campaign's worth of managers in one pass, since the throttle keys on the admin's
+        // user ID alone and so counts reminders across every campaign together.
+        for ($i = 0; $i < 30; $i++) {
             $this->actingAs($admin)->postJson($url)->assertOk();
         }
 
