@@ -21,6 +21,23 @@
     <env name="APP_ENV" value="testing"/>
     <env name="BCRYPT_ROUNDS" value="4"/>
     <env name="CACHE_DRIVER" value="array"/>
+    <!--
+      The importer and LDAP sync set their own memory ceiling at runtime:
+      ItemImportRequest::import(), ObjectImportCommand and LdapSync all call
+      ini_set('memory_limit', env(..., '500M')). PHP lets ini_set LOWER the
+      limit, and the whole suite shares one process, so the first importing
+      test drops the ceiling to 500M for every test that follows it —
+      overriding whatever the runner was launched with. `php -d
+      memory_limit=1G artisan test` therefore does not do what it looks like
+      it does: it caps at 500M from that point on, and the suite passes only
+      while cumulative usage happens to stay under it.
+
+      Setting these in the test env makes the ini_set calls a no-op instead of
+      a clamp. 2G is deliberately above the 1G the CI workflows pass, so the
+      runner's limit stays the effective one.
+    -->
+    <env name="IMPORT_MEMORY_LIMIT" value="2G"/>
+    <env name="LDAP_MEM_LIM" value="2G"/>
     <env name="MAIL_FROM_ADDR" value="app@example.com"/>
     <env name="MAIL_MAILER" value="array"/>
     <env name="QUEUE_CONNECTION" value="sync"/>
