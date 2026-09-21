@@ -21,6 +21,9 @@ class SnipeModel extends Model
         $this->attributes['purchase_date'] = $value;
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function purchaseDateFormatted(): Attribute
     {
         return Attribute::make(
@@ -28,6 +31,9 @@ class SnipeModel extends Model
         );
     }
 
+    /**
+     * @return Attribute<float|null, never>
+     */
     protected function expiresDiffInDays(): Attribute
     {
         return Attribute::make(
@@ -35,6 +41,9 @@ class SnipeModel extends Model
         );
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function expiresDiffForHumans(): Attribute
     {
         return Attribute::make(
@@ -42,6 +51,9 @@ class SnipeModel extends Model
         );
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function expiresFormattedDate(): Attribute
     {
         return Attribute::make(
@@ -197,6 +209,9 @@ class SnipeModel extends Model
         $query->skip($offset)->take($limit);
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function displayName(): Attribute
     {
         return Attribute::make(

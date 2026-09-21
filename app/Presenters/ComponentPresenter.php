@@ -129,7 +129,7 @@ class ComponentPresenter extends Presenter
                 'field' => 'remaining',
                 'scope' => 'col',
                 'searchable' => false,
-                'sortable' => false,
+                'sortable' => true,
                 'title' => trans('admin/components/general.remaining'),
                 'visible' => true,
                 'class' => 'text-right text-padding-number-cell',
@@ -152,6 +152,16 @@ class ComponentPresenter extends Presenter
                 'visible' => true,
                 'class' => 'text-right',
                 'footerFormatter' => 'sumFormatter',
+            ], [
+                // Field name matches transformer key + HasOrders relation).
+                'field' => 'orders',
+                'scope' => 'col',
+                'searchable' => true,
+                'sortable' => false,
+                'switchable' => true,
+                'visible' => true,
+                'title' => trans('general.order_number'),
+                'formatter' => 'ordersSummaryFormatter',
             ], [
                 'field' => 'total_cost',
                 'scope' => 'col',

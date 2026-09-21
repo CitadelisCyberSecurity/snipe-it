@@ -117,7 +117,11 @@ class AccessoryPresenter extends Presenter
                 'field' => 'remaining',
                 'scope' => 'col',
                 'searchable' => false,
-                'sortable' => false,
+                'sortable' => true,
+                // Kept hidden by default so the primary "% Remaining"
+                // progress bar column stays the headline signal; users
+                // who want raw-count sorting can toggle this on via
+                // the bootstrap-table column picker (issue #18505).
                 'visible' => false,
                 'title' => trans('admin/accessories/general.remaining'),
                 'footerFormatter' => 'qtySumFormatter',
@@ -161,6 +165,18 @@ class AccessoryPresenter extends Presenter
                 'sortable' => true,
                 'title' => trans('general.last_unit_cost'),
                 'class' => 'text-right text-padding-number-cell',
+            ], [
+                // Field name matches the transformer key
+                // ('orders') and the HasOrders relation name so advanced
+                // search resolves straight through $searchableRelations.
+                'field' => 'orders',
+                'scope' => 'col',
+                'searchable' => true,
+                'sortable' => false,
+                'switchable' => true,
+                'visible' => true,
+                'title' => trans('general.order_number'),
+                'formatter' => 'ordersSummaryFormatter',
             ], [
                 'field' => 'total_cost',
                 'scope' => 'col',

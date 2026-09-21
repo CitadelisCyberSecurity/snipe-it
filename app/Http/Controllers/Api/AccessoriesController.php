@@ -113,6 +113,10 @@ class AccessoriesController extends Controller
             $accessories->where('accessories.manufacturer_id', '=', $request->input('manufacturer_id'));
         }
 
+        if ($request->input('requestable') == 'true') {
+            $accessories->where('accessories.requestable', '=', '1');
+        }
+
         if ($request->filled('supplier_id')) {
             $accessories->where('accessories.default_supplier_id', '=', $request->input('supplier_id'));
         }
@@ -170,6 +174,9 @@ class AccessoriesController extends Controller
                 break;
             case 'percent_remaining':
                 $accessories = $accessories->OrderPercentRemaining($order);
+                break;
+            case 'remaining':
+                $accessories = $accessories->OrderRemaining($order);
                 break;
             default:
                 $accessories = $accessories->orderBy($column_sort, $order);

@@ -118,6 +118,8 @@ class Asset extends Depreciable
      * NULL and 0 as different. `set` normalizes on write, `get`
      * normalizes on read so legacy rows already storing 0 present as
      * null at the model boundary until they're re-saved.
+     *
+     * @return Attribute<int|null, int|null>
      */
     protected function locationId(): Attribute
     {
@@ -127,6 +129,9 @@ class Asset extends Depreciable
         );
     }
 
+    /**
+     * @return Attribute<int|null, int|null>
+     */
     protected function companyId(): Attribute
     {
         return Attribute::make(
@@ -329,7 +334,7 @@ class Asset extends Depreciable
     /**
      * Returns the warranty expiration date as Carbon object
      *
-     * @return Carbon|null
+     * @return Attribute<Carbon|null, never>
      */
     protected function warrantyExpires(): Attribute
     {
@@ -338,6 +343,9 @@ class Asset extends Depreciable
         );
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function warrantyExpiresFormattedDate(): Attribute
     {
 
@@ -346,6 +354,9 @@ class Asset extends Depreciable
         );
     }
 
+    /**
+     * @return Attribute<float|null, never>
+     */
     protected function warrantyExpiresDiff(): Attribute
     {
         return Attribute::make(
@@ -354,6 +365,9 @@ class Asset extends Depreciable
 
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function warrantyExpiresDiffForHumans(): Attribute
     {
         return Attribute::make(
@@ -362,6 +376,9 @@ class Asset extends Depreciable
 
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function lastAuditFormattedDate(): Attribute
     {
 
@@ -370,6 +387,9 @@ class Asset extends Depreciable
         );
     }
 
+    /**
+     * @return Attribute<float|null, never>
+     */
     protected function lastAuditDiff(): Attribute
     {
         return Attribute::make(
@@ -378,6 +398,9 @@ class Asset extends Depreciable
 
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function lastAuditDiffForHumans(): Attribute
     {
         return Attribute::make(
@@ -386,6 +409,9 @@ class Asset extends Depreciable
 
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function nextAuditFormattedDate(): Attribute
     {
 
@@ -394,6 +420,9 @@ class Asset extends Depreciable
         );
     }
 
+    /**
+     * @return Attribute<float|null, never>
+     */
     protected function nextAuditDiffInDays(): Attribute
     {
         return Attribute::make(
@@ -401,6 +430,9 @@ class Asset extends Depreciable
         );
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function nextAuditDiffForHumans(): Attribute
     {
         return Attribute::make(
@@ -409,6 +441,9 @@ class Asset extends Depreciable
 
     }
 
+    /**
+     * @return Attribute<Carbon|null, never>
+     */
     protected function eolDate(): Attribute
     {
 
@@ -426,6 +461,9 @@ class Asset extends Depreciable
 
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function eolFormattedDate(): Attribute
     {
         return Attribute::make(
@@ -433,6 +471,9 @@ class Asset extends Depreciable
         );
     }
 
+    /**
+     * @return Attribute<float|null, never>
+     */
     protected function eolDiffInDays(): Attribute
     {
         return Attribute::make(
@@ -441,6 +482,9 @@ class Asset extends Depreciable
 
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function eolDiffForHumans(): Attribute
     {
 
@@ -450,6 +494,9 @@ class Asset extends Depreciable
 
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function expectedCheckinFormattedDate(): Attribute
     {
         return Attribute::make(
@@ -457,6 +504,9 @@ class Asset extends Depreciable
         );
     }
 
+    /**
+     * @return Attribute<string|null, never>
+     */
     protected function expectedCheckinDiffForHumans(): Attribute
     {
         return Attribute::make(
@@ -1032,7 +1082,7 @@ class Asset extends Depreciable
      */
     public function maintenances()
     {
-        return $this->hasMany(Maintenance::class, 'asset_id')
+        return $this->morphMany(Maintenance::class, 'item')
             ->orderBy('created_at', 'desc');
     }
 
@@ -1359,7 +1409,7 @@ class Asset extends Depreciable
      * in the database, but here we are.
      *
      * @param  $value
-     * @return void
+     * @return Attribute<string|null, string|null>
      */
     protected function nextAuditDate(): Attribute
     {
@@ -1369,6 +1419,9 @@ class Asset extends Depreciable
         );
     }
 
+    /**
+     * @return Attribute<string|null, string|null>
+     */
     protected function lastAuditDate(): Attribute
     {
         return Attribute::make(
@@ -1377,6 +1430,9 @@ class Asset extends Depreciable
         );
     }
 
+    /**
+     * @return Attribute<string|null, string|null>
+     */
     protected function lastCheckout(): Attribute
     {
         return Attribute::make(
@@ -1385,6 +1441,9 @@ class Asset extends Depreciable
         );
     }
 
+    /**
+     * @return Attribute<string|null, string|null>
+     */
     protected function lastCheckin(): Attribute
     {
         return Attribute::make(
@@ -1393,6 +1452,9 @@ class Asset extends Depreciable
         );
     }
 
+    /**
+     * @return Attribute<string|null, string|null>
+     */
     protected function assetEolDate(): Attribute
     {
         return Attribute::make(
@@ -1408,7 +1470,7 @@ class Asset extends Depreciable
      * This will also correctly parse a 1/0 if "true"/"false" is passed.
      *
      * @param  $value
-     * @return void
+     * @return Attribute<int, mixed>
      */
     protected function requestable(): Attribute
     {

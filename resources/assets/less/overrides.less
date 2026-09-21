@@ -697,9 +697,11 @@ h4 {
     padding-bottom: 15px;
   }
 
-  .firstnav {
-    padding-top: 120px !important;
-  }
+  // .firstnav { padding-top: 120px !important } used to live here as
+  // another static compensation for the wrapped-header-covers-first-item
+  // bug at narrow widths. Superseded by the dynamic
+  // .main-sidebar padding-top: var(--main-header-height) rule; leaving
+  // it would double-count on top of the runtime-measured header height.
 
   .product {
     width: 400px;
@@ -919,14 +921,8 @@ thead th.css-history > .th-inner::before {
   .tab-content .tab-pane .alert-block {
     margin-top: 120px
   }
-  .sidebar-menu{
-    margin-top:160px;
-  }
 }
 @media screen and (max-width: 912px) and (min-width: 512px){
-  .sidebar-menu {
-    margin-top:100px
-  }
   .navbar-custom-menu > .navbar-nav > li.dropdown.user.user-menu {
     float:right;
   }
@@ -935,11 +931,17 @@ thead th.css-history > .th-inner::before {
   }
 }
 
-@media screen and (max-width: 1268px) and (min-width: 912px){
-  .sidebar-menu {
-    margin-top:50px
-  }
-}
+// Legacy .sidebar-menu { margin-top: Npx } rules at 912-1268px,
+// 512-912px, and <=511px used to live here as hardcoded compensation
+// for the "header wraps at intermediate widths and covers the first
+// sidebar item" bug (#5085, #11868, #19482). Same story for the
+// .firstnav { padding-top: 120px !important } that used to be inside
+// the max-width: 520px block below. All three were double-counted on
+// top of the dynamic .main-sidebar padding-top: var(--main-header-height)
+// rule further down that measures the actual header height at runtime,
+// producing 200px+ visual gaps above Dashboard at those breakpoints.
+// The dynamic measurement covers all these cases correctly, so the
+// static compensation is deleted.
 @media screen and (max-width: 992px){
   .info-stack-container {
     flex-direction: column;
@@ -2556,16 +2558,70 @@ table rows
 // -----------------------------------------------------------------------------
 
 .snipe-top-scrollbar {
-    overflow-x: auto;
+    // scroll (not auto) so the scrollbar thumb stays visible whenever
+    // the container is displayed. auto lets macOS's trackpad-scrollbar
+    // auto-hide take over on trackpad users even with the WebKit
+    // pseudo-element styling below, which read as "top scrollbar fades
+    // faster than the bottom one" (#19484 follow-up). Whole container
+    // gets display: none from updateTopScrollbar() when the underlying
+    // table doesn't actually overflow, so persistent scroll doesn't
+    // produce a floating stub on tables that fit in the viewport.
+    overflow-x: scroll;
     overflow-y: hidden;
-    // Sized to match the WebKit thumb below so the scrollbar reads as a
-    // deliberate chrome element rather than an OS-native accident.
-    height: 10px;
-    margin-bottom: 4px;
-    // Firefox scrollbar styling — spec-standard. `thin` gives us a
-    // ~thin-thumb, `color` is `thumb track` order.
-    scrollbar-width: thin;
+    // 14px scrollbar sized to match the WebKit thumb below so it
+    // reads as a deliberate chrome element rather than an OS-native
+    // accident. Bumped from 10px so the thumb is easier to grab and
+    // drag on trackpads / small screens.
+    //
+    // Outer height is 18px (border-box) = 14px scrollbar content +
+    // 4px padding-bottom acting as a visual spacer between the
+    // scrollbar thumb and the thead below it. Total 18px matches
+    // the stickyHeaderOffsetY: 18 in bootstrap-table.blade.php so
+    // the pinned scrollbar band + the sticky-clone thead just below
+    // it stack seamlessly with no bleed-through gap between them
+    // (#19484 follow-up: 4px gap of tbody rows visible between the
+    // scrollbar and the sticky thead).
+    box-sizing: border-box;
+    height: 18px;
+    padding-bottom: 4px;
+    background-color: var(--box-bg);
+    // Firefox scrollbar styling — spec-standard. `auto` uses the
+    // OS-default thickness (matches the bumped-up 14px WebKit height
+    // below so the thumb is easy to grab on trackpads / small screens).
+    scrollbar-width: auto;
     scrollbar-color: rgba(0, 0, 0, 0.35) rgba(0, 0, 0, 0.06);
+
+    // Stay visible while the user scrolls the page down past the
+    // natural table header. Bootstrap-table's own stickyHeader
+    // (position: fixed via the .fix-sticky class) floats the thead
+    // clone at viewport top; we mirror that positioning via JS
+    // (updateTopScrollbarSticky in bootstrap-table.blade.php) so
+    // the scrollbar sits ABOVE the sticky-clone thead - matching
+    // the natural (unscrolled) order where the scrollbar reads
+    // immediately above the thead. Bootstrap-table config pushes
+    // .fix-sticky down by (this mirror's height + padding-bottom)
+    // via stickyHeaderOffsetY so the two don't overlap. Sticky
+    // positioning would have been simpler than the JS toggle but
+    // didn't engage reliably against page scroll from inside the
+    // .bootstrap-table nesting depth; falling back to position:
+    // fixed set by the scroll listener. Reported in #19484 as
+    // "none of scrollbars are visible when list is scrolled to
+    // the point where header starts floating" plus follow-up
+    // "top scrollbar used to be above the table headers, which
+    // seems a little better".
+    z-index: 101;
+
+    // When the scroll listener detects the natural position has
+    // gone above viewport top, this class flips the element to
+    // position: fixed via inline style. The class itself just
+    // marks "currently pinned" so callers can style pinned vs
+    // unpinned states differently if needed.
+    &.is-pinned {
+        // Inline top/left/width comes from JS. Keeping the box
+        // shadow drop off here so pinned state visually separates
+        // the mirror from the sticky-clone thead below it.
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+    }
 
     // WebKit / Blink scrollbar pseudo-elements. Both the track and the
     // thumb get border-radius so the container reads as rounded even
@@ -2574,15 +2630,15 @@ table rows
     // had no visible background to round). Track carries a subtle tint
     // so the rounded shape is actually visible rather than shape-of-nothing.
     &::-webkit-scrollbar {
-        height: 10px;
+        height: 14px;
     }
     &::-webkit-scrollbar-track {
         background-color: rgba(0, 0, 0, 0.06);
-        border-radius: 6px;
+        border-radius: 7px;
     }
     &::-webkit-scrollbar-thumb {
         background-color: rgba(0, 0, 0, 0.35);
-        border-radius: 6px;
+        border-radius: 7px;
     }
     &::-webkit-scrollbar-thumb:hover {
         background-color: rgba(0, 0, 0, 0.5);
@@ -2593,6 +2649,34 @@ table rows
     // Height just enough to make the parent scrollable; width is set by
     // JS to match the underlying table's scrollWidth.
     height: 1px;
+}
+
+// Match the native bottom scrollbar on the table body to the styled
+// top mirror above so the two horizontal scroll handles read as a
+// consistent pair. Without this, the top uses our thin-with-rounded-
+// thumb chrome while the bottom uses the OS default and the two look
+// mismatched when both are visible on wide tables. scrollbar-width
+// bumped from `thin` to `auto` and the WebKit height matched to the
+// top mirror's 14px so the two scrollbars are the same easy-to-grab
+// size on trackpads / small screens (#19484 follow-up).
+.bootstrap-table .fixed-table-body {
+    scrollbar-width: auto;
+    scrollbar-color: rgba(0, 0, 0, 0.35) rgba(0, 0, 0, 0.06);
+
+    &::-webkit-scrollbar {
+        height: 14px;
+    }
+    &::-webkit-scrollbar-track {
+        background-color: rgba(0, 0, 0, 0.06);
+        border-radius: 7px;
+    }
+    &::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.35);
+        border-radius: 7px;
+    }
+    &::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(0, 0, 0, 0.5);
+    }
 }
 
 
@@ -2733,6 +2817,55 @@ Active and hover for top tier sidenav items
 
 .main-sidebar {
   background-color: #1e282c;
+}
+
+// Shift .main-header's BOX (not just its inner .navbar) so the header
+// occupies only the horizontal space past the sidebar's column. Base
+// AdminLTE 2 leaves .main-header full-width and only offsets the
+// .navbar's contents via margin-left: 230px, which fixes visual
+// alignment but not click alignment: the header's own <div> (z-index
+// 1030) still extends across the sidebar column above the sidebar
+// (z-index 810), so at intermediate widths where the navbar wraps to
+// two or three rows the header's empty second/third-row area sits on
+// top of the first sidebar item and eats clicks. Reported repeatedly
+// on the tracker (#19482, #11868, #5085) and previously papered over
+// with hardcoded .sidebar-menu { margin-top: Npx } offsets at
+// specific breakpoints - since removed above in favor of this
+// structural fix.
+//
+// Shift values track the sidebar's rendered width per body class:
+//  - default (.sidebar-mini, sidebar open): 230px
+//  - .sidebar-mini.sidebar-collapse (menu closed, mini icons): 50px
+//  - mobile (<=767px): 0 (sidebar is translated off-screen)
+//
+// The navbar's own margin-left is zeroed at each state so the navbar
+// content doesn't get double-shifted after the header itself moves.
+// Transition on .main-header matches the navbar's existing 0.3s
+// margin-left transition so the header and its content animate
+// together when the sidebar toggles.
+@media (min-width: 768px) {
+  .main-header {
+    margin-left: 230px;
+    transition: margin-left 0.3s ease-in-out;
+  }
+  .main-header .navbar {
+    margin-left: 0;
+  }
+  .sidebar-mini.sidebar-collapse .main-header {
+    margin-left: 50px;
+  }
+  // AdminLTE has a higher-specificity rule at min-width: 768px:
+  //   .sidebar-mini.sidebar-collapse .main-header .navbar { margin-left: 50px }
+  // that overrides our plain .main-header .navbar reset above. Without
+  // matching its specificity here, the mini-collapsed state ends up
+  // double-shifting the navbar (header shifted 50px + navbar shifted
+  // 50px = navbar starts at x=100). That pushed the .sidebar-toggle
+  // hamburger past the sidebar column and into the header instead of
+  // sitting over the mini-icon column at the top-left (where its
+  // -48px margin-left is designed to place it).
+  .sidebar-mini.sidebar-collapse .main-header .navbar {
+    margin-left: 0;
+  }
 }
 
 
@@ -3317,9 +3450,19 @@ dl.table-display {
 // container went flex. Floats are ignored by flex, so the first
 // pull-right child gets margin-left: auto to consume the remaining
 // space and shove itself right. Anything after it clusters next to
-// it. This preserves the "danger zone on the right" grouping in the
-// wide layout and keeps them grouped together when they wrap to
-// their own line.
+// it.
+//
+// pull-right children also get order:1 so they visually move to the
+// end of the row regardless of their DOM position. Without this,
+// pull-right buttons that appear BEFORE non-pull-right buttons in
+// markup (checkin is emitted before edit/clone/audit on the asset
+// view, and only when the asset is currently checked out - which is
+// why the misalignment only showed up on checked-out assets) end up
+// dragging every subsequent sibling right along with them via the
+// auto margin, leaving only the first non-pull-right button alone on
+// the left. order:1 corrects the visual grouping so pull-right ends
+// up on the right and the non-pull-right stack stays left, matching
+// the behavior the old floats used to give.
 .info-panel-actions {
   display: flex;
   flex-wrap: wrap;
@@ -3330,6 +3473,7 @@ dl.table-display {
   margin: 0 -10px;
 
   > .pull-right {
+    order: 1;
     margin-left: auto;
   }
 

@@ -182,6 +182,8 @@ class Component extends SnipeModel
      * Per-pivot line cost for components-assets. Pulls the per-unit
      * price from the last acquisition (with the same default_* fallback
      * that lastOrderDefaults() applies) and multiplies by pivot qty.
+     *
+     * @return Attribute<float|null, never>
      */
     protected function calculatedPurchaseCost(): Attribute
     {
@@ -531,5 +533,20 @@ class Component extends SnipeModel
         $direction = strtolower($order) === 'asc' ? 'asc' : 'desc';
 
         return $query->orderByRaw('CASE WHEN components.qty = 0 THEN 0 ELSE ((components.qty - COALESCE(sum_unconstrained_assets, 0)) * 100.0 / components.qty) END '.$direction);
+    }
+
+    /**
+     * Query builder scope to sort by the raw `remaining` column
+     * (qty minus current checkouts). Same sum_unconstrained_assets
+     * alias as scopeOrderPercentRemaining above; the difference is
+     * that this one sorts by absolute count rather than percentage,
+     * so items with the same absolute stock left group together
+     * regardless of their total qty.
+     */
+    public function scopeOrderRemaining($query, $order)
+    {
+        $direction = strtolower($order) === 'asc' ? 'asc' : 'desc';
+
+        return $query->orderByRaw('(components.qty - COALESCE(sum_unconstrained_assets, 0)) ' . $direction);
     }
 }

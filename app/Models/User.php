@@ -337,6 +337,8 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
      * This overrides the SnipeModel displayName accessor to return the full name if display_name is not set
      *
      * @see SnipeModel::displayName()
+     *
+     * @return Attribute<string|null, mixed>
      */
     protected function displayName(): Attribute
     {
@@ -918,6 +920,9 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
         return $this->last_name ? $this->first_name.' '.$this->last_name : $this->first_name;
     }
 
+    /**
+     * @return Attribute<string, never>
+     */
     protected function linkLightColor(): Attribute
     {
         return Attribute::make(
@@ -937,6 +942,9 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
         );
     }
 
+    /**
+     * @return Attribute<string, never>
+     */
     protected function linkDarkColor(): Attribute
     {
         return Attribute::make(
@@ -956,6 +964,9 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
         );
     }
 
+    /**
+     * @return Attribute<string, never>
+     */
     protected function navLinkColor(): Attribute
     {
         return Attribute::make(
