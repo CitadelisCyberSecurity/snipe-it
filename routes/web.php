@@ -212,11 +212,12 @@ Route::group(['middleware' => 'auth'], function () {
         // for a manager deleted after launch; without this the POST 404s and the page reports only
         // a generic "Failed to send."
         //
-        // 30/60 rather than 3/60: an unnamed throttle keys on the user ID alone, with no campaign or
-        // manager in the key, so a low cap applies to an admin's reminders across every campaign at
-        // once and a normal pass over a campaign's managers dies partway through.
+        // The named limiter keys on the admin, the campaign and the manager, so the cap is three
+        // reminders per manager per hour rather than three across every campaign at once (see
+        // RouteServiceProvider::configureRateLimiting). An unnamed throttle keys on the user ID
+        // alone, which killed a pass over a campaign with more than a few managers.
         Route::post('campaigns/{campaign}/remind/{manager}', [App\Http\Controllers\AccessReview\CampaignsController::class, 'remindManager'])
-            ->middleware('throttle:30,60')
+            ->middleware('throttle:access_review_reminder')
             ->name('campaigns.remind-manager')
             ->withTrashed();
         Route::post('campaigns/bulk-destroy', [App\Http\Controllers\AccessReview\CampaignsController::class, 'bulkDestroy'])

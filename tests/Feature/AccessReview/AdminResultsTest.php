@@ -190,13 +190,39 @@ class AdminResultsTest extends TestCase
 
         $url = route('access-review.campaigns.remind-manager', [$campaign, $manager]);
 
-        // throttle:30,60 — the first thirty go through, the thirty-first is rejected. The cap has to
-        // clear a campaign's worth of managers in one pass, since the throttle keys on the admin's
-        // user ID alone and so counts reminders across every campaign together.
-        for ($i = 0; $i < 30; $i++) {
+        // Three per manager per hour: the first three go through, the fourth is rejected.
+        for ($i = 0; $i < 3; $i++) {
             $this->actingAs($admin)->postJson($url)->assertOk();
         }
 
         $this->actingAs($admin)->postJson($url)->assertStatus(429);
+    }
+
+    public function test_remind_manager_rate_limit_is_per_manager(): void
+    {
+        Notification::fake();
+
+        $admin    = User::factory()->admin()->create();
+        $manager  = User::factory()->create();
+        $other    = User::factory()->create();
+        $campaign = AccessReviewCampaign::factory()->active()->create();
+        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
+        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_id' => $other->id]);
+
+        // Exhausting one manager's allowance must not spend another's — a pass over a campaign's
+        // managers has to get all the way through however many managers it has.
+        for ($i = 0; $i < 3; $i++) {
+            $this->actingAs($admin)
+                ->postJson(route('access-review.campaigns.remind-manager', [$campaign, $manager]))
+                ->assertOk();
+        }
+
+        $this->actingAs($admin)
+            ->postJson(route('access-review.campaigns.remind-manager', [$campaign, $manager]))
+            ->assertStatus(429);
+
+        $this->actingAs($admin)
+            ->postJson(route('access-review.campaigns.remind-manager', [$campaign, $other]))
+            ->assertOk();
     }
 }

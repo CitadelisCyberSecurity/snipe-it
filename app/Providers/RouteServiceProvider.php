@@ -109,5 +109,24 @@ class RouteServiceProvider extends ServiceProvider
             return Limit::perMinute(config('auth.two_factor.max_attempts_per_min'))->by(optional($request->user())->id ?: $request->ip());
         });
 
+        // Rate limiter for access review manager reminders. An unnamed throttle keys on the
+        // authenticated user's ID alone, so a cap meant as "per manager" ends up spanning every
+        // campaign at once and a pass over a campaign's managers dies partway through. Keying on
+        // the admin, the campaign and the manager makes the cap what it reads as: three reminders
+        // per manager per campaign per hour, however many managers a campaign has.
+        //
+        // originalParameter() reads the raw route segment, so the key is stable whether or not
+        // model binding has already substituted a (possibly trashed) model.
+        RateLimiter::for('access_review_reminder', function (Request $request) {
+            $route = $request->route();
+
+            return Limit::perHour(3)->by(implode('|', [
+                'access_review_reminder',
+                optional($request->user())->id ?: $request->ip(),
+                $route?->originalParameter('campaign'),
+                $route?->originalParameter('manager'),
+            ]));
+        });
+
     }
 }
