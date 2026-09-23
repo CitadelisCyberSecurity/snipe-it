@@ -37,6 +37,10 @@ jobs:
         with:
           php-version: "${{ matrix.php-version }}"
           coverage: none
+          # See comment in tests-sqlite.yml: set in php.ini so every --parallel
+          # worker inherits it. A `php -d` flag on artisan test does not reach
+          # the child processes that actually run the tests.
+          ini-values: memory_limit=1G
 
       - uses: actions/checkout@v7
         with:
@@ -81,9 +85,9 @@ jobs:
           DB_USERNAME: root
           LOG_CHANNEL: single
           LOG_LEVEL: debug
-        # -d memory_limit=1G: see comment in tests-sqlite.yml. Same reason,
-        # same headroom.
-        run: php -d memory_limit=1G artisan test
+        # --parallel: see comment in tests-sqlite.yml. Same reason, same
+        # headroom, memory ceiling now set via ini-values above.
+        run: php artisan test --parallel
 
       - name: Upload Laravel logs as artifacts
         if: always()

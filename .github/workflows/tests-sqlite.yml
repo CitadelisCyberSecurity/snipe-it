@@ -24,6 +24,12 @@ jobs:
         with:
           php-version: "${{ matrix.php-version }}"
           coverage: none
+          # Set in php.ini rather than as a `php -d` flag on the test command:
+          # `artisan test` runs the actual test runner in a CHILD process, and
+          # CLI -d flags do not cross that boundary, so the child silently fell
+          # back to the ini default. Under --parallel there is a child per
+          # worker, which makes that gap worse. ini-values reaches all of them.
+          ini-values: memory_limit=1G
 
       - uses: actions/checkout@v7
         with:
@@ -65,12 +71,11 @@ jobs:
           DB_CONNECTION: sqlite
           LOG_CHANNEL: single
           LOG_LEVEL: debug
-        # -d memory_limit=1G: CI runs the entire test suite in a single
-        # PHP process, so memory accumulates from every prior test. Default
-        # 500M was pushing the process into OOM on Blade renders late in
-        # the alphabetical run (e.g. Users/Ui/TwoFactorResetTest). 1G
-        # gives comfortable headroom for suite growth.
-        run: php -d memory_limit=1G artisan test
+        # --parallel: one worker per core instead of one process for the whole
+        # suite. The memory ceiling now comes from ini-values on setup-php
+        # above, not a -d flag here, because each worker is a child process and
+        # would otherwise fall back to the ini default while loading the suite.
+        run: php artisan test --parallel
 
       - name: Upload Laravel logs as artifacts
         if: always()
