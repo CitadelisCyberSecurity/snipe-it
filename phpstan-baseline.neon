@@ -625,6 +625,12 @@ parameters:
 			path: app/Console/Commands/Version.php
 
 		-
+			message: '#^Variable \$app_version might not be defined\.$#'
+			identifier: variable.undefined
+			count: 3
+			path: app/Console/Commands/Version.php
+
+		-
 			message: '#^Strict comparison using \=\=\= between bool\|null and 1 will always evaluate to false\.$#'
 			identifier: identical.alwaysFalse
 			count: 1
