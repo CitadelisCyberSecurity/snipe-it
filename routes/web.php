@@ -7,7 +7,12 @@ use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\BulkCategoriesController;
+use App\Http\Controllers\BulkCompaniesController;
+use App\Http\Controllers\BulkDepartmentsController;
+use App\Http\Controllers\BulkDepreciationsController;
+use App\Http\Controllers\BulkMaintenanceTypesController;
 use App\Http\Controllers\BulkManufacturersController;
+use App\Http\Controllers\BulkStatuslabelsController;
 use App\Http\Controllers\BulkSuppliersController;
 use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\CompaniesController;
@@ -23,6 +28,8 @@ use App\Http\Controllers\ModalController;
 use App\Http\Controllers\NotesController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QrCodeController;
+use App\Http\Controllers\Reports\CustomComponentReportController;
+use App\Http\Controllers\Reports\CustomConsumableReportController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\ReportTemplatesController;
 use App\Http\Controllers\SettingsController;
@@ -35,9 +42,64 @@ use App\Http\Controllers\ViewAssetsController;
 use App\Livewire\Importer;
 use App\Mail\CheckoutComponentMail;
 use App\Models\AccessReviewCampaign;
+use App\Models\MaintenanceType;
 use App\Models\ReportTemplate;
 use Illuminate\Support\Facades\Route;
 use Tabuna\Breadcrumbs\Trail;
+
+/*
+ * Gate Passport's default personal-access-token routes
+ * behind the same self.api permission that protects Snipe-IT's own
+ * /account/api and /api/v1/account/personal-access-tokens surfaces.
+ *
+ * These three routes are auto-registered by PassportServiceProvider
+ * with only `web, auth:web` middleware, which meant any user with a
+ * valid session cookie could POST here and mint a long-lived bearer
+ * token even if an admin had revoked their self.api permission.
+ *
+ * Snipe-IT's routes/web.php loads before Passport's package service
+ * provider boots, so these registrations win route resolution over
+ * the Passport originals (FIFO). Requests are forwarded to the same
+ * PersonalAccessTokenController Passport would have used, so token
+ * shape and behavior are unchanged for users who ARE authorized.
+ */
+Route::middleware(['web', 'auth', 'can:self.api'])->prefix('oauth')->group(function () {
+    Route::get('personal-access-tokens', [\Laravel\Passport\Http\Controllers\PersonalAccessTokenController::class, 'forUser'])
+        ->name('passport.personal.tokens.index');
+    Route::post('personal-access-tokens', [\Laravel\Passport\Http\Controllers\PersonalAccessTokenController::class, 'store'])
+        ->name('passport.personal.tokens.store');
+    Route::delete('personal-access-tokens/{token_id}', [\Laravel\Passport\Http\Controllers\PersonalAccessTokenController::class, 'destroy'])
+        ->name('passport.personal.tokens.destroy');
+});
+
+/*
+ * Gate Passport's default OAuth-client management routes behind the
+ * superuser check that already protects Snipe-IT's own
+ * /admin/oauth surfaces (see the /admin group below,
+ * middleware ['auth', 'authorize:superuser']).
+ *
+ * These four routes were auto-registered by PassportServiceProvider
+ * with only `web, auth:web` middleware, so any user with a valid
+ * session cookie could POST /oauth/clients with an attacker-controlled
+ * redirect URI. If a phished admin then approved the resulting
+ * consent screen, the attacker exchanged the auth code for a
+ * long-lived bearer token carrying the admin's full API permissions.
+ *
+ * Same FIFO route-precedence trick as the personal-access-tokens
+ * override above: routes/web.php loads before the Passport package
+ * service provider boots, so these gated registrations win over the
+ * package originals.
+ */
+Route::middleware(['web', 'auth', 'authorize:superuser'])->prefix('oauth')->group(function () {
+    Route::get('clients', [\Laravel\Passport\Http\Controllers\ClientController::class, 'forUser'])
+        ->name('passport.clients.index');
+    Route::post('clients', [\Laravel\Passport\Http\Controllers\ClientController::class, 'store'])
+        ->name('passport.clients.store');
+    Route::put('clients/{client_id}', [\Laravel\Passport\Http\Controllers\ClientController::class, 'update'])
+        ->name('passport.clients.update');
+    Route::delete('clients/{client_id}', [\Laravel\Passport\Http\Controllers\ClientController::class, 'destroy'])
+        ->name('passport.clients.destroy');
+});
 
 Route::group(['middleware' => 'auth'], function () {
     /*
@@ -46,6 +108,8 @@ Route::group(['middleware' => 'auth'], function () {
     Route::resource('companies', CompaniesController::class, [
         'parameters' => ['company' => 'company_id'],
     ]);
+
+    Route::post('companies/bulk/delete', [BulkCompaniesController::class, 'destroy'])->name('companies.bulk.delete');
 
     /*
     * Categories
@@ -92,23 +156,72 @@ Route::group(['middleware' => 'auth'], function () {
 
     /*
     * Maintenance Types
+    *
+    * Expanded from a Route::resource so per-route breadcrumbs can hang
+    * off each GET action. The four GET routes get an explicit
+    * ->breadcrumbs(); the write routes (POST / PUT / PATCH / DELETE)
+    * don't render a page and don't need trails. Route names match what
+    * Route::resource('maintenance-types', ...) would have generated so
+    * every existing route() lookup keeps working.
     */
-    Route::resource('maintenance-types', MaintenanceTypesController::class);
+    Route::get('maintenance-types', [MaintenanceTypesController::class, 'index'])
+        ->name('maintenance-types.index')
+        ->breadcrumbs(fn (Trail $trail) => $trail->parent('maintenances.index')
+            ->push(trans('admin/maintenance_types/general.maintenance_types'), route('maintenance-types.index'))
+        );
+
+    Route::get('maintenance-types/create', [MaintenanceTypesController::class, 'create'])
+        ->name('maintenance-types.create')
+        ->breadcrumbs(fn (Trail $trail) => $trail->parent('maintenance-types.index')
+            ->push(trans('admin/maintenance_types/general.create'))
+        );
+
+    Route::post('maintenance-types', [MaintenanceTypesController::class, 'store'])
+        ->name('maintenance-types.store');
+
+    Route::get('maintenance-types/{maintenance_type}', [MaintenanceTypesController::class, 'show'])
+        ->name('maintenance-types.show')
+        ->breadcrumbs(fn (Trail $trail, MaintenanceType $maintenanceType) => $trail->parent('maintenance-types.index')
+            ->push($maintenanceType->name, route('maintenance-types.show', $maintenanceType))
+        );
+
+    Route::get('maintenance-types/{maintenance_type}/edit', [MaintenanceTypesController::class, 'edit'])
+        ->name('maintenance-types.edit')
+        ->breadcrumbs(fn (Trail $trail, MaintenanceType $maintenanceType) => $trail->parent('maintenance-types.show', $maintenanceType)
+            ->push(trans('admin/maintenance_types/general.update'))
+        );
+
+    Route::put('maintenance-types/{maintenance_type}', [MaintenanceTypesController::class, 'update'])
+        ->name('maintenance-types.update');
+
+    Route::patch('maintenance-types/{maintenance_type}', [MaintenanceTypesController::class, 'update']);
+
+    Route::delete('maintenance-types/{maintenance_type}', [MaintenanceTypesController::class, 'destroy'])
+        ->name('maintenance-types.destroy');
+
+    Route::post('maintenance-types/bulk/delete', [BulkMaintenanceTypesController::class, 'destroy'])
+        ->name('maintenance-types.bulk.delete');
 
     /*
     * Depreciations
      */
     Route::resource('depreciations', DepreciationsController::class);
 
+    Route::post('depreciations/bulk/delete', [BulkDepreciationsController::class, 'destroy'])->name('depreciations.bulk.delete');
+
     /*
     * Status Labels
      */
     Route::resource('statuslabels', StatuslabelsController::class);
 
+    Route::post('statuslabels/bulk/delete', [BulkStatuslabelsController::class, 'destroy'])->name('statuslabels.bulk.delete');
+
     /*
     * Departments
     */
     Route::resource('departments', DepartmentsController::class);
+
+    Route::post('departments/bulk/delete', [BulkDepartmentsController::class, 'destroy'])->name('departments.bulk.delete');
 
     /*
     * Access Review
@@ -140,9 +253,19 @@ Route::group(['middleware' => 'auth'], function () {
                 ->push($campaign->name));
         Route::post('campaigns/{campaign}/items/{item}/execute', [App\Http\Controllers\AccessReview\CampaignsController::class, 'executeItem'])
             ->name('campaigns.items.execute');
+        // withTrashed() lets the {manager} binding resolve a soft-deleted user. The results page
+        // lists managers through a withTrashed() relation, so it can render a Send Reminder button
+        // for a manager deleted after launch; without this the POST 404s and the page reports only
+        // a generic "Failed to send."
+        //
+        // The named limiter keys on the admin, the campaign and the manager, so the cap is three
+        // reminders per manager per hour rather than three across every campaign at once (see
+        // RouteServiceProvider::configureRateLimiting). An unnamed throttle keys on the user ID
+        // alone, which killed a pass over a campaign with more than a few managers.
         Route::post('campaigns/{campaign}/remind/{manager}', [App\Http\Controllers\AccessReview\CampaignsController::class, 'remindManager'])
-            ->middleware('throttle:3,60')
-            ->name('campaigns.remind-manager');
+            ->middleware('throttle:access_review_reminder')
+            ->name('campaigns.remind-manager')
+            ->withTrashed();
         Route::post('campaigns/bulk-destroy', [App\Http\Controllers\AccessReview\CampaignsController::class, 'bulkDestroy'])
             ->name('campaigns.bulk-destroy');
         Route::post('campaigns', [App\Http\Controllers\AccessReview\CampaignsController::class, 'store'])
@@ -226,6 +349,9 @@ Route::group(['prefix' => 'admin', 'middleware' => ['auth', 'authorize:superuser
     Route::post('settings', [SettingsController::class, 'postSettings'])
         ->name('settings.general.save');
 
+    Route::get('settings/location-scoping-report.csv', [SettingsController::class, 'downloadLocationScopingReport'])
+        ->name('settings.general.location_scoping_report');
+
     Route::get('branding', [SettingsController::class, 'getBranding'])
         ->name('settings.branding.index')
         ->breadcrumbs(fn (Trail $trail) => $trail->parent('settings.index')
@@ -290,6 +416,14 @@ Route::group(['prefix' => 'admin', 'middleware' => ['auth', 'authorize:superuser
     Route::post('ldap', [SettingsController::class, 'postLdapSettings'])
         ->name('settings.ldap.save');
 
+    // Livewire wizard version of the LDAP settings screen. Lives at its
+    // own URL for now; the legacy form stays in place until the wizard
+    // has been tested end-to-end.
+    Route::view('ldap-wizard', 'settings.ldap-wizard')
+        ->name('settings.ldap.wizard')
+        ->breadcrumbs(fn (Trail $trail) => $trail->parent('settings.index')
+            ->push(trans('admin/settings/general.ldap_ad'), route('settings.ldap.wizard')));
+
     Route::get('phpinfo', [SettingsController::class, 'getPhpInfo'])
         ->name('settings.phpinfo.index')
         ->breadcrumbs(fn (Trail $trail) => $trail->parent('settings.index')
@@ -299,6 +433,9 @@ Route::group(['prefix' => 'admin', 'middleware' => ['auth', 'authorize:superuser
         ->name('settings.oauth.index')
         ->breadcrumbs(fn (Trail $trail) => $trail->parent('settings.index')
             ->push(trans('admin/settings/general.oauth'), route('settings.oauth.index')));
+
+    Route::post('oauth/request-filters', [SettingsController::class, 'postApiRequestFilters'])
+        ->name('settings.oauth.request_filters.save');
 
     Route::post('oauth/tokens/{token}/revoke', [SettingsController::class, 'revokePersonalAccessToken'])
         ->name('settings.oauth.tokens.revoke');
@@ -474,7 +611,8 @@ Route::group(['prefix' => 'account', 'middleware' => ['auth']], function () {
         ->name('account.request-asset.cancel');
 
     Route::post('request/{itemType}/{itemId}/{cancel_by_admin?}/{requestingUser?}', [ViewAssetsController::class, 'getRequestItem'])
-        ->name('account/request-item');
+        ->name('account/request-item')
+        ->where('itemType', 'asset|asset_model|accessory');
 
     Route::get(
         'display-sig/{filename}',
@@ -586,14 +724,34 @@ Route::group(['prefix' => 'reports', 'middleware' => ['auth']], function () {
     Route::get('export/accessories', [ReportsController::class, 'exportAccessoryReport'])
         ->name('reports/export/accessories');
 
-    Route::get('custom', [ReportsController::class, 'getCustomReport'])
-        ->name('reports/custom')
-        ->breadcrumbs(fn (Trail $trail) => $trail->parent('home')
-            ->push(trans('general.reports'), route('reports.index'))
-            ->push(trans('general.custom_report'), route('reports/custom')));
+    Route::group(['prefix' => 'custom'], function () {
+        Route::get('/', [ReportsController::class, 'getCustomReport'])
+            ->name('reports/custom')
+            ->breadcrumbs(fn (Trail $trail) => $trail->parent('home')
+                ->push(trans('general.reports'), route('reports.index'))
+                ->push(trans('general.custom_report'), route('reports/custom')));
 
-    Route::post('custom', [ReportsController::class, 'postCustom'])
-        ->name('reports.post-custom');
+        Route::post('/', [ReportsController::class, 'postCustom'])
+            ->name('reports.post-custom');
+
+        Route::get('component', [CustomComponentReportController::class, 'show'])
+            ->name('reports.custom.component')
+            ->breadcrumbs(fn (Trail $trail) => $trail->parent('home')
+                ->push(trans('general.reports'), route('reports.index'))
+                ->push(trans('general.custom_component_report'), route('reports.custom.component')));
+
+        Route::post('component', [CustomComponentReportController::class, 'run'])
+            ->name('reports.custom.component.run');
+
+        Route::get('consumable', [CustomConsumableReportController::class, 'show'])
+            ->name('reports.custom.consumable')
+            ->breadcrumbs(fn (Trail $trail) => $trail->parent('home')
+                ->push(trans('general.reports'), route('reports.index'))
+                ->push(trans('general.custom_consumable_report'), route('reports.custom.consumable')));
+
+        Route::post('consumable', [CustomConsumableReportController::class, 'run'])
+            ->name('reports.custom.consumable.run');
+    });
 
     Route::prefix('templates')
         ->group(function () {
@@ -604,15 +762,30 @@ Route::group(['prefix' => 'reports', 'middleware' => ['auth']], function () {
             // The breadcrumb on this is a little odd for now since we don't have a template index
             Route::get('/{reportTemplate}', [ReportTemplatesController::class, 'show'])
                 ->name('report-templates.show')
-                ->breadcrumbs(fn (Trail $trail, ReportTemplate $reportTemplate) => $trail->parent('reports/custom')
-                    ->push($reportTemplate->name, null)
-                    ->push(trans('general.customize_report'), ''));
+                ->breadcrumbs(function (Trail $trail, ReportTemplate $reportTemplate) {
+                    $parent = match ($reportTemplate->type) {
+                        'asset' => 'reports/custom',
+                        'component' => 'reports.custom.component',
+                        'consumable' => 'reports.custom.consumable',
+                    };
+
+                    return $trail->parent($parent)
+                        ->push($reportTemplate->name, null);
+                });
 
             Route::get('/{reportTemplate}/edit', [ReportTemplatesController::class, 'edit'])
                 ->name('report-templates.edit')
-                ->breadcrumbs(fn (Trail $trail, ReportTemplate $reportTemplate) => $trail->parent('reports/custom')
-                    ->push($reportTemplate->name, route('report-templates.show', $reportTemplate))
-                    ->push(trans('general.customize_report'), ''));
+                ->breadcrumbs(function (Trail $trail, ReportTemplate $reportTemplate) {
+                    $parent = match ($reportTemplate->type) {
+                        'asset' => 'reports/custom',
+                        'component' => 'reports.custom.component',
+                        'consumable' => 'reports.custom.consumable',
+                    };
+
+                    return $trail->parent($parent)
+                        ->push($reportTemplate->name, route('report-templates.show', $reportTemplate))
+                        ->push(trans('general.update'), '');
+                });
 
             Route::post('/{reportTemplate}', [ReportTemplatesController::class, 'update'])
                 ->name('report-templates.update');

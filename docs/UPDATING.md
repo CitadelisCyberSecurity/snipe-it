@@ -142,6 +142,56 @@ the full release path, the `guard` ancestry check, and rollback.
 
 ---
 
+## Version-specific operator notes
+
+Things a given upstream sync requires operators to do or know, beyond the normal
+`git pull` + `composer install` + `php artisan migrate`. Add a section here
+whenever a sync changes something operator-visible.
+
+### Upstream 8.7
+
+**Breaking: `users.company_id` is gone.** A migration renames the column to
+`users.legacy_company_id` and moves company membership to a new `company_user`
+pivot table, because a user can now belong to more than one company. Anything
+outside the app that reads `users.company_id` directly — reporting queries, BI
+dashboards, SQL-based integrations, custom scripts — breaks silently or loudly at
+this upgrade and must be repointed at `company_user`. `licenses.company_id` and
+the other per-model `company_id` columns are unaffected.
+
+**New env vars.** Neither is required; both default to off.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `ALLOW_USER_IMPERSONATION` | blank (off) | Comma-separated usernames allowed to log in as other users. Listed users must **also** be superusers. Leave blank unless impersonation is a deliberate, accepted decision — it attributes the impersonated user's actions to them, not to the impersonator. |
+| `WEBHOOK_ALLOW_INTERNAL_TARGETS` | `false` | Allows webhooks to target internal/private addresses. Leaving it `false` is the SSRF-safe setting. |
+
+**`composer install` is no longer optional for contributors.** The sync adds
+`larastan/larastan`, `phpmd/phpmd` and `laravel/boost` to `require-dev`, and a new
+**Static Analysis** workflow runs `composer analyse:phpstan` and
+`composer analyse:phpmd` on every push to `develop`/`master` and every PR. Pulling
+without `composer install` leaves both gates unrunnable locally.
+
+Both gates are baseline-driven, so they only fail on *new* findings. If a sync
+introduces findings upstream did not baseline, regenerate:
+
+```bash
+composer analyse:phpstan:baseline
+composer analyse:phpmd:baseline
+```
+
+**Run and regenerate the PHPStan baseline on Linux/WSL, never on Windows.**
+PHPStan records a byte offset inside each `phpDoc.parseError` message. A CRLF
+checkout shifts every one of those offsets by a byte per preceding line, so the
+baseline entries stop matching and PHPStan reports errors that do not exist on
+CI — currently 34 of them, none real. The trap is that they look exactly like a
+genuine gap in the baseline, and "fixing" them writes CRLF offsets that then fail
+to match on CI.
+
+If you see `phpDoc.parseError` findings on a Windows checkout, check the CI run
+before believing them. Same CRLF hazard as the asset rebuild in step 3.
+
+---
+
 ## What triggers which image
 
 | Action | Image tag(s) |

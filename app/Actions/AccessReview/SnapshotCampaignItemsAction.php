@@ -27,8 +27,17 @@ final class SnapshotCampaignItemsAction
                 // the license and the assigned user belong to a scoped company. Filtering the license
                 // alone would leak another company's user (name, manager) when a license owned by a
                 // scoped company is checked out to a user outside it.
+                //
+                // User membership is read from the company_user pivot, which is the
+                // authoritative source: the scalar users.company_id column was renamed
+                // to legacy_company_id and is only a mirror for external consumers.
+                // Licenses still carry a real licenses.company_id column.
                 $query->whereIn('licenses.company_id', $campaign->company_ids)
-                    ->whereIn('users.company_id', $campaign->company_ids);
+                    ->whereIn('users.id', function ($sub) use ($campaign) {
+                        $sub->select('user_id')
+                            ->from('company_user')
+                            ->whereIn('company_id', $campaign->company_ids);
+                    });
             }
 
             $query->select([

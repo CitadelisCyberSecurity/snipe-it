@@ -20,23 +20,31 @@ jobs:
     name: PHP ${{ matrix.php-version }}
 
     steps:
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: "${{ matrix.php-version }}"
           coverage: none
+          # Set in php.ini rather than as a `php -d` flag on the test command:
+          # `artisan test` runs the actual test runner in a CHILD process, and
+          # CLI -d flags do not cross that boundary, so the child silently fell
+          # back to the ini default. Under --parallel there is a child per
+          # worker, which makes that gap worse. ini-values reaches all of them.
+          ini-values: memory_limit=1G
 
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Get Composer Cache Directory
         id: composer-cache
         run: |
           echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-${{ matrix.php-version }}-composer-${{ hashFiles('**/composer.lock') }}
           restore-keys: |
-            ${{ runner.os }}-composer-
+            ${{ runner.os }}-${{ matrix.php-version }}-composer-
 
       - name: Copy .env
         run: |
@@ -63,7 +71,11 @@ jobs:
           DB_CONNECTION: sqlite
           LOG_CHANNEL: single
           LOG_LEVEL: debug
-        run: php artisan test
+        # --parallel: one worker per core instead of one process for the whole
+        # suite. The memory ceiling now comes from ini-values on setup-php
+        # above, not a -d flag here, because each worker is a child process and
+        # would otherwise fall back to the ini default while loading the suite.
+        run: php artisan test --parallel
 
       - name: Upload Laravel logs as artifacts
         if: always()

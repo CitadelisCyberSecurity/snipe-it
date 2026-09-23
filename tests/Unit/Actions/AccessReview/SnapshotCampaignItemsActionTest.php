@@ -178,11 +178,15 @@ class SnapshotCampaignItemsActionTest extends TestCase
         $license = License::factory()->create(['company_id' => $companyA->id]);
 
         // In scope: license and assigned user both in company A.
-        $inScope = User::factory()->create(['manager_id' => $manager->id, 'company_id' => $companyA->id]);
+        // Company membership goes through ->forCompany(), not a company_id
+        // attribute: users.company_id was renamed to legacy_company_id and the
+        // company_user pivot is now authoritative, so passing the old attribute
+        // to the factory fails the insert outright.
+        $inScope = User::factory()->forCompany($companyA)->create(['manager_id' => $manager->id]);
         LicenseSeat::factory()->assignedToUser($inScope)->create(['license_id' => $license->id]);
 
         // Out of scope: company-A license checked out to a company-B user must not leak in.
-        $outOfScope = User::factory()->create(['manager_id' => $manager->id, 'company_id' => $companyB->id]);
+        $outOfScope = User::factory()->forCompany($companyB)->create(['manager_id' => $manager->id]);
         LicenseSeat::factory()->assignedToUser($outOfScope)->create(['license_id' => $license->id]);
 
         $count = SnapshotCampaignItemsAction::run($campaign);

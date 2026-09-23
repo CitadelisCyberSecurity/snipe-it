@@ -234,20 +234,18 @@
                     data-id-table="dashActivityReport"
                     data-sort-order="desc"
                     data-show-columns="false"
-                    data-fixed-number="false"
-                    data-fixed-right-number="false"
                     data-sort-name="created_at"
                     id="dashActivityReport"
                     class="table table-striped snipe-table"
                     data-url="{{ route('api.activity.index', ['limit' => 25]) }}">
                     <thead>
                     <tr>
-                        <th data-field="icon" data-visible="true" style="width: 40px;" class="hidden-xs" data-formatter="iconFormatter"><span  class="sr-only">{{ trans('admin/hardware/table.icon') }}</span></th>
-                        <th class="col-sm-3" data-visible="true" data-field="created_at" data-formatter="dateDisplayFormatter">{{ trans('general.date') }}</th>
-                        <th class="col-sm-2" data-visible="true" data-field="admin" data-formatter="usersLinkObjFormatter">{{ trans('general.created_by') }}</th>
-                        <th class="col-sm-2" data-visible="true" data-field="action_type">{{ trans('general.action') }}</th>
-                        <th class="col-sm-3" data-visible="true" data-field="item" data-formatter="polymorphicItemFormatter">{{ trans('general.item') }}</th>
-                        <th class="col-sm-2" data-visible="true" data-field="target" data-formatter="polymorphicItemFormatter">{{ trans('general.target') }}</th>
+                        <th scope="col" data-field="icon" data-visible="true" style="width: 40px;" class="hidden-xs" data-formatter="iconFormatter"><span  class="sr-only">{{ trans('admin/hardware/table.icon') }}</span></th>
+                        <th scope="col" class="col-sm-3" data-visible="true" data-field="created_at" data-formatter="dateDisplayFormatter">{{ trans('general.date') }}</th>
+                        <th scope="col" class="col-sm-2" data-visible="true" data-field="admin" data-formatter="usersLinkObjFormatter">{{ trans('general.created_by') }}</th>
+                        <th scope="col" class="col-sm-2" data-visible="true" data-field="action_type">{{ trans('general.action') }}</th>
+                        <th scope="col" class="col-sm-3" data-visible="true" data-field="item" data-formatter="polymorphicItemFormatter">{{ trans('general.item') }}</th>
+                        <th scope="col" class="col-sm-2" data-visible="true" data-field="target" data-formatter="polymorphicItemFormatter">{{ trans('general.target') }}</th>
                     </tr>
                     </thead>
                 </table>
@@ -312,8 +310,6 @@
 									data-side-pagination="server"
 									data-sort-order="desc"
                                     data-show-columns="false"
-                                    data-fixed-number="false"
-                                    data-fixed-right-number="false"
 									data-sort-field="assets_count"
 									id="dashCompanySummary"
 									class="table table-striped snipe-table"
@@ -321,28 +317,28 @@
 
 								<thead>
 								<tr>
-									<th class="col-sm-3" data-visible="true" data-field="name" data-formatter="companiesLinkFormatter" data-sortable="true">{{ trans('general.name') }}</th>
-									<th class="col-sm-1" data-visible="true" data-field="users_count" data-sortable="true">
+									<th scope="col" class="col-sm-3" data-visible="true" data-field="name" data-formatter="companiesLinkFormatter" data-sortable="true">{{ trans('general.name') }}</th>
+									<th scope="col" class="col-sm-1" data-visible="true" data-field="users_count" data-sortable="true">
                                         <x-icon type="users" />
 										<span class="sr-only">{{ trans('general.people') }}</span>
 									</th>
-									<th class="col-sm-1" data-visible="true" data-field="assets_count" data-sortable="true">
+									<th scope="col" class="col-sm-1" data-visible="true" data-field="assets_count" data-sortable="true">
                                         <x-icon type="assets" />
 										<span class="sr-only">{{ trans('general.asset_count') }}</span>
 									</th>
-									<th class="col-sm-1" data-visible="true" data-field="accessories_count" data-sortable="true">
+									<th scope="col" class="col-sm-1" data-visible="true" data-field="accessories_count" data-sortable="true">
                                         <x-icon type="accessories" />
 										<span class="sr-only">{{ trans('general.accessories_count') }}</span>
 									</th>
-									<th class="col-sm-1" data-visible="true" data-field="consumables_count" data-sortable="true">
+									<th scope="col" class="col-sm-1" data-visible="true" data-field="consumables_count" data-sortable="true">
                                         <x-icon type="consumables" />
 										<span class="sr-only">{{ trans('general.consumables_count') }}</span>
 									</th>
-									<th class="col-sm-1" data-visible="true" data-field="components_count" data-sortable="true">
+									<th scope="col" class="col-sm-1" data-visible="true" data-field="components_count" data-sortable="true">
                                         <x-icon type="components" />
 										<span class="sr-only">{{ trans('general.components_count') }}</span>
 									</th>
-									<th class="col-sm-1" data-visible="true" data-field="licenses_count" data-sortable="true">
+									<th scope="col" class="col-sm-1" data-visible="true" data-field="licenses_count" data-sortable="true">
                                         <x-icon type="licenses" />
 										<span class="sr-only">{{ trans('general.licenses_count') }}</span>
 									</th>
@@ -381,8 +377,6 @@
 									data-side-pagination="server"
                                     data-pagination="false"
 									data-sort-order="desc"
-                                    data-fixed-number="false"
-                                    data-fixed-right-number="false"
 									data-sort-field="assets_count"
 									id="dashLocationSummary"
                                     data-show-columns="false"
@@ -390,17 +384,17 @@
 									data-url="{{ route('api.locations.index', ['sort' => 'assets_count', 'order' => 'asc']) }}">
 								<thead>
 								<tr>
-									<th class="col-sm-3" data-visible="true" data-field="name" data-formatter="locationsLinkFormatter" data-sortable="true">{{ trans('general.name') }}</th>
+									<th scope="col" class="col-sm-3" data-visible="true" data-field="name" data-formatter="locationsLinkFormatter" data-sortable="true">{{ trans('general.name') }}</th>
 									
-									<th class="col-sm-1" data-visible="true" data-field="assets_count" data-sortable="true">
+									<th scope="col" class="col-sm-1" data-visible="true" data-field="assets_count" data-sortable="true">
                                         <x-icon type="assets" />
 										<span class="sr-only">{{ trans('general.asset_count') }}</span>
 									</th>
-									<th class="col-sm-1" data-visible="true" data-field="assigned_assets_count" data-sortable="true">
+									<th scope="col" class="col-sm-1" data-visible="true" data-field="assigned_assets_count" data-sortable="true">
 										
 										{{ trans('general.assigned') }}
 									</th>
-									<th class="col-sm-1" data-visible="true" data-field="users_count" data-sortable="true">
+									<th scope="col" class="col-sm-1" data-visible="true" data-field="users_count" data-sortable="true">
                                         <x-icon type="users" />
 										<span class="sr-only">{{ trans('general.people') }}</span>
 										
@@ -445,8 +439,6 @@
                                 data-pagination="false"
                                 data-side-pagination="server"
                                 data-show-columns="false"
-                                data-fixed-number="false"
-                                data-fixed-right-number="false"
                                 data-sort-order="desc"
                                 data-sort-field="assets_count"
                                 id="dashCategorySummary"
@@ -454,27 +446,27 @@
                                 data-url="{{ route('api.categories.index', ['sort' => 'assets_count', 'order' => 'asc']) }}">
                             <thead>
                             <tr>
-                                <th class="col-sm-3" data-visible="true" data-field="name" data-formatter="categoriesLinkFormatter" data-sortable="true">{{ trans('general.name') }}</th>
-                                <th class="col-sm-3" data-visible="true" data-field="category_type" data-sortable="true">
+                                <th scope="col" class="col-sm-3" data-visible="true" data-field="name" data-formatter="categoriesLinkFormatter" data-sortable="true">{{ trans('general.name') }}</th>
+                                <th scope="col" class="col-sm-3" data-visible="true" data-field="category_type" data-sortable="true">
                                     {{ trans('general.type') }}
                                 </th>
-                                <th class="col-sm-1" data-visible="true" data-field="assets_count" data-sortable="true">
+                                <th scope="col" class="col-sm-1" data-visible="true" data-field="assets_count" data-sortable="true">
                                     <x-icon type="assets" />
                                     <span class="sr-only">{{ trans('general.asset_count') }}</span>
                                 </th>
-                                <th class="col-sm-1" data-visible="true" data-field="accessories_count" data-sortable="true">
+                                <th scope="col" class="col-sm-1" data-visible="true" data-field="accessories_count" data-sortable="true">
                                     <x-icon type="licenses" />
                                     <span class="sr-only">{{ trans('general.accessories_count') }}</span>
                                 </th>
-                                <th class="col-sm-1" data-visible="true" data-field="consumables_count" data-sortable="true">
+                                <th scope="col" class="col-sm-1" data-visible="true" data-field="consumables_count" data-sortable="true">
                                     <x-icon type="consumables" />
                                     <span class="sr-only">{{ trans('general.consumables_count') }}</span>
                                 </th>
-                                <th class="col-sm-1" data-visible="true" data-field="components_count" data-sortable="true">
+                                <th scope="col" class="col-sm-1" data-visible="true" data-field="components_count" data-sortable="true">
                                     <x-icon type="components" />
                                     <span class="sr-only">{{ trans('general.components_count') }}</span>
                                 </th>
-                                <th class="col-sm-1" data-visible="true" data-field="licenses_count" data-sortable="true">
+                                <th scope="col" class="col-sm-1" data-visible="true" data-field="licenses_count" data-sortable="true">
                                     <x-icon type="licenses" />
                                     <span class="sr-only">{{ trans('general.licenses_count') }}</span>
                                 </th>

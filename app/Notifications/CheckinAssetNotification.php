@@ -116,9 +116,9 @@ class CheckinAssetNotification extends Notification
                 ->title(trans('mail.Asset_Checkin_Notification', ['tag' => '']))
                 ->addStartGroupToSection('activityText')
                 ->fact(htmlspecialchars_decode($item->display_name), '', 'activityText')
-                ->fact(trans('mail.checked_into'), ($item->location) ? $item->location->name : '')
-                ->fact(trans('general.administrator'), $admin->display_name)
-                ->fact(trans('admin/hardware/form.status'), $item->status?->name)
+                ->fact(trans('mail.checked_into'), $item->location?->name ?: '')
+                ->fact(trans('general.administrator'), (string) ($admin?->display_name ?? ''))
+                ->fact(trans('admin/hardware/form.status'), (string) ($item->status?->name ?? ''))
                 ->fact(trans('mail.notes'), $note ?: '');
         }
 
@@ -139,21 +139,22 @@ class CheckinAssetNotification extends Notification
         $target = $this->target;
         $item = $this->item;
         $note = $this->note;
-//
+
+        //
         return GoogleChatMessage::create()
             ->to($this->settings->webhook_endpoint)
             ->card(
                 Card::create()
                     ->header(
-                        '<strong>' . trans('mail.Asset_Checkin_Notification', ['tag' => '']) . '</strong>' ?: '',
+                        '<strong>'.trans('mail.Asset_Checkin_Notification', ['tag' => '']).'</strong>' ?: '',
                         htmlspecialchars_decode($item->display_name) ?: '',
                     )
                     ->section(
                         Section::create(
                             KeyValue::create(
                                 trans('mail.checked_into') ?: '',
-                                ($item->location) ? $item->location?->name : '',
-                                trans('admin/hardware/form.status') . ': ' . $item->status?->name
+                                $item->location?->name ?? '-',
+                                trans('admin/hardware/form.status').': '.$item->status?->name
                             )->onClick(route('hardware.show', $item->id))
                         )
                     )

@@ -42,11 +42,23 @@ class AccessReviewCampaign extends SnipeModel
         'notify_managers_on_launch' => 'boolean',
     ];
 
+    /**
+     * Generics are required here: the native `: HasMany` return type takes
+     * precedence over PHPStan's inference from the body, and a bare HasMany
+     * means HasMany<Model, Model>. That turns `$campaign->items` into a
+     * collection of base Models, so every `$item->manager_completed_at` /
+     * `$item->isExecuted()` read downstream is flagged as undefined.
+     *
+     * @return HasMany<AccessReviewItem, $this>
+     */
     public function items(): HasMany
     {
         return $this->hasMany(AccessReviewItem::class, 'campaign_id');
     }
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

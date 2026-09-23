@@ -20,10 +20,9 @@
 
         @if ($location->deleted_at!='')
             <div class="col-md-12">
-                <div class="callout callout-warning">
-                    <x-icon type="warning" />
+                <x-callout type="warning" icon="warning" live="assertive">
                     {{ trans('admin/locations/message.deleted_warning') }}
-                </div>
+                </x-callout>
             </div>
         @endif
 
@@ -205,7 +204,7 @@
 
                   <!-- start history tab pane -->
                   <x-tabs.pane name="history">
-                      <x-table.history :model="$location" :route="route('api.locations.history', $location)"/>
+                      <x-table.history :model="$location" :route="route('api.locations.history', $location)" :hide_fields="['order_number']"/>
                   </x-tabs.pane>
                   <!-- end history tab pane -->
 

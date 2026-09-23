@@ -36,8 +36,8 @@ class EditMaintenanceTest extends TestCase
                 'name' => 'Test Maintenance',
                 'supplier_id' => $supplier->id,
                 'maintenance_type_id' => $type->id,
-                'start_date' => '2021-01-01',
-                'completion_date' => '2021-01-10',
+                'start_date' => '2021-01-01 00:00:00',
+                'completion_date' => '2021-01-10 00:00:00',
                 'is_warranty' => '1',
                 'image' => UploadedFile::fake()->image('test_image.png'),
                 'notes' => 'A note',
@@ -57,8 +57,8 @@ class EditMaintenanceTest extends TestCase
             'asset_maintenance_type' => $type->name,
             'name' => 'Test Maintenance',
             'is_warranty' => 1,
-            'start_date' => '2021-01-01',
-            'completion_date' => '2021-01-10',
+            'start_date' => '2021-01-01 00:00:00',
+            'expected_completion_date' => '2021-01-10 00:00:00',
             'notes' => 'A note',
             'url' => 'https://snipeitapp.com',
             'image' => $maintenance->image,
@@ -118,7 +118,8 @@ class EditMaintenanceTest extends TestCase
 
         $this->assertDatabaseHas('maintenances', [
             'id' => $maintenance->id,
-            'asset_id' => $asset->id,
+            'item_id' => $asset->id,
+            'item_type' => \App\Models\Asset::class,
             'name' => 'Updated Name',
         ]);
     }
@@ -143,7 +144,8 @@ class EditMaintenanceTest extends TestCase
 
         $this->assertDatabaseHas('maintenances', [
             'id' => $maintenance->id,
-            'asset_id' => $assetB->id,
+            'item_id' => $assetB->id,
+            'item_type' => \App\Models\Asset::class,
         ]);
     }
 
@@ -168,7 +170,8 @@ class EditMaintenanceTest extends TestCase
 
         $this->assertDatabaseHas('maintenances', [
             'id' => $maintenance->id,
-            'asset_id' => $assetA->id,
+            'item_id' => $assetA->id,
+            'item_type' => \App\Models\Asset::class,
         ]);
     }
 }
