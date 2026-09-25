@@ -41,8 +41,15 @@ on:
     # Negations must follow a positive pattern; `!` is not valid as the first
     # element, and a negation only excludes refs an earlier pattern matched.
     # https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
+    # A single trailing letter allows a hotfix on an already-published number
+    # (8.7.2 -> 8.7.2a), mirroring upstream's own convention. Glob syntax here,
+    # NOT regex: `[a-z]` is one character from the range, so `8.7.2ab` still
+    # does not match. Keep this in step with the semver branch of exclude-tags
+    # in ghcr-cleanup.yml, or a suffixed release sits outside the prune
+    # protection that keeps release history pullable.
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+[a-z]'
       - '!3.2.0'
       - '!5.1.7'
 

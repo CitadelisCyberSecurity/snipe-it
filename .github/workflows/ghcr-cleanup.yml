@@ -93,7 +93,14 @@ jobs:
           #
           # exclude-tags WINS over delete-tags, so anything listed here is safe
           # regardless of what the pattern below says.
-          exclude-tags: '^(latest|testing|develop|alpine)(-alpine)?$|^[0-9]+\.[0-9]+\.[0-9]+(-alpine)?$'
+          #
+          # `[a-z]?` covers the hotfix suffix the docker-*.yml triggers accept
+          # (8.7.2a). It has to be here and not left to "no pattern matches it":
+          # an unprotected release tag is invisible until someone widens
+          # delete-tags, and then a live release vanishes on the next cron --
+          # exactly the failure the 1.1.x note below records. Regex here, glob
+          # in the triggers, so these dots are escaped and those are not.
+          exclude-tags: '^(latest|testing|develop|alpine)(-alpine)?$|^[0-9]+\.[0-9]+\.[0-9]+[a-z]?(-alpine)?$'
 
           # One legacy family: <branch>-<sha> per-commit pins, from the type=sha
           # entry that used to be in the docker-*.yml metadata blocks (32
