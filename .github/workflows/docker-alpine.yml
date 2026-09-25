@@ -42,8 +42,11 @@ on:
     # Negations must follow a positive pattern; `!` is not valid as the first
     # element, and a negation only excludes refs an earlier pattern matched.
     # https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
+    # See docker-ubuntu.yml: a single trailing letter allows a hotfix on an
+    # already-published number (8.7.2 -> 8.7.2a). Glob syntax, not regex.
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+[a-z]'
       - '!3.2.0'
       - '!5.1.7'
 
