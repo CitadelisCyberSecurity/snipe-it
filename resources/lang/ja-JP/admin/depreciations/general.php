@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => '償却資産',
     'create' => '減価償却の作成',
     'depreciation_name' => '減価償却名',
-    'depreciation_min' => '減価償却の残存簿価',
     'number_of_months' => '月数',
     'update' => '減価償却の更新',
     'depreciation_min' => '残存簿価',

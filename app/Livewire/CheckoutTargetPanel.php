@@ -2,7 +2,6 @@
 
 namespace App\Livewire;
 
-use App\Models\Accessory;
 use App\Models\Asset;
 use App\Models\Location;
 use App\Models\User;
@@ -85,8 +84,12 @@ class CheckoutTargetPanel extends Component
     {
         return view('livewire.checkout-target-panel', [
             'items' => $this->items(),
-            'noun' => $this->itemNoun(),
-            'targetNoun' => $this->targetNoun(),
+            // $this->type is validated against self::TYPES in mount(),
+            // and $this->targetType is either null or one of TARGET_TYPES
+            // per targetSelected(), so both concatenations always land on
+            // a defined translation key.
+            'noun' => trans('general.'.$this->type),
+            'targetNoun' => trans('general.'.($this->targetType ?? 'user')),
         ]);
     }
 
@@ -113,23 +116,23 @@ class CheckoutTargetPanel extends Component
         // and means "assets physically at this location". Same story for
         // accessories: query the checkout pivot rather than the
         // location_id column.
+        // Ordered by most-recent checkout first so the operator sees
+        // what the target just received at the top of the panel, not
+        // whatever the underlying relation's default order emits.
         return match ("{$this->type}:{$this->targetType}") {
-            'assets:user' => $target->assets,
-            'licenses:user' => $target->licenses,
-            'accessories:user' => $target->accessories,
-            'consumables:user' => $target->consumables,
+            'assets:user' => $target->assets()->reorder('last_checkout', 'desc')->get(),
+            'licenses:user' => $target->licenses()->orderByPivot('created_at', 'desc')->get(),
+            'accessories:user' => $target->accessories()->reorder('accessories_checkout.created_at', 'desc')->get(),
+            'consumables:user' => $target->consumables()->orderByPivot('created_at', 'desc')->get(),
 
-            'assets:asset' => $target->assignedAssets,
-            'licenses:asset' => $target->licenses,
-            'accessories:asset' => $target->accessories,
+            'assets:asset' => $target->assignedAssets()->reorder('last_checkout', 'desc')->get(),
+            'licenses:asset' => $target->licenses()->orderByPivot('created_at', 'desc')->get(),
+            'accessories:asset' => $target->assignedAccessories()->with('accessory')->orderBy('created_at', 'desc')->get(),
 
-            'assets:location' => $target->assignedAssets,
-            'accessories:location' => Accessory::whereHas('checkouts', function ($q) {
-                $q->where('assigned_type', Location::class)
-                    ->where('assigned_to', $this->targetId);
-            })->get(),
+            'assets:location' => $target->assignedAssets()->reorder('last_checkout', 'desc')->get(),
+            'accessories:location' => $target->assignedAccessories()->with('accessory')->orderBy('created_at', 'desc')->get(),
 
-            'components:asset' => $target->components,
+            'components:asset' => $target->components()->orderByPivot('created_at', 'desc')->get(),
 
             default => collect(),
         };
@@ -142,27 +145,6 @@ class CheckoutTargetPanel extends Component
             'asset' => Asset::find($this->targetId),
             'location' => Location::find($this->targetId),
             default => null,
-        };
-    }
-
-    private function itemNoun(): string
-    {
-        return match ($this->type) {
-            'assets' => trans('general.assets'),
-            'licenses' => trans('general.licenses'),
-            'accessories' => trans('general.accessories'),
-            'consumables' => trans('general.consumables'),
-            'components' => trans('general.components'),
-        };
-    }
-
-    private function targetNoun(): string
-    {
-        return match ($this->targetType) {
-            'user' => trans('general.user'),
-            'asset' => trans('general.asset'),
-            'location' => trans('general.location'),
-            default => trans('general.user'),
         };
     }
 }

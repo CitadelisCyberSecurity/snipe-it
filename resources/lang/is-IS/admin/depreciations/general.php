@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Fyrningar eigna',
     'create' => 'Búa til fyrningarflokk',
     'depreciation_name' => 'Heiti fyrningarflokks',
-    'depreciation_min' => 'Floor Value of Depreciation',
     'number_of_months' => 'Fjöldi mánaða',
     'update' => 'Uppfæra fyrningarflokk',
     'depreciation_min' => 'Lágmarksvirði að loknum afskriftum',

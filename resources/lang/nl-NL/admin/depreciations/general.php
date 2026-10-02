@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Asset afschrijvingen',
     'create' => 'Afschrijving aanmaken',
     'depreciation_name' => 'Afschrijvingsnaam',
-    'depreciation_min' => 'Minimale waarde voor afschrijving',
     'number_of_months' => 'Aantal maanden',
     'update' => 'Afschrijving bijwerken',
     'depreciation_min' => 'Minimale waarde na afschrijving',

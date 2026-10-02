@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Tapahatanga Tahua',
     'create' => 'Waihangahia te whakahekenga',
     'depreciation_name' => 'Te Ingoa Taweke',
-    'depreciation_min' => 'Floor Value of Depreciation',
     'number_of_months' => 'Tau o Marama',
     'update' => 'Whakahouhia te whakahekenga',
     'depreciation_min' => 'Minimum Value after Depreciation',

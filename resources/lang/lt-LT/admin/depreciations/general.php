@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Turto nusidėvėjimas',
     'create' => 'Sukurti nusidėvėjimą',
     'depreciation_name' => 'Nusidėvėjimo pavadinimas',
-    'depreciation_min' => 'Minimali nusidėvėjimo reikšmė',
     'number_of_months' => 'Mėnesių skaičius',
     'update' => 'Atnaujinti nusidėvėjimą',
     'depreciation_min' => 'Minimali nusidėvėjimo reikšmė',

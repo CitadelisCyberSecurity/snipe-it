@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Deprecijacija imovine',
     'create' => 'Stvorite amortizaciju',
     'depreciation_name' => 'Naziv amortizacije',
-    'depreciation_min' => 'Donja granica vrijednosti za amortizaciju',
     'number_of_months' => 'Broj mjeseci',
     'update' => 'Ažuriraj amortizaciju',
     'depreciation_min' => 'Minimalna vrijednost nakon amortizacije',

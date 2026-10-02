@@ -29,15 +29,15 @@ return [
     'require_serial_help' => 'Seri Numarası Gerekli.',
     'restore' => 'Demirbaşı Geri Getir',
     'pending' => 'Bekliyor',
+    'fulfilled' => 'Fulfilled',
+    'fulfill' => 'Fulfill',
+    'fulfill_multiple' => 'Fulfill Multiple',
+    'open_requests_count' => '{1} :count open request|[2,*] :count open requests',
     'undeployable' => 'Dağtılamaz',
     'undeployable_tooltip' => 'Bu varlığın konuşlandırılamayan ve şu anda teslim alınamayan bir durum etiketi var.',
     'view' => 'Demirbaşı Görüntüle',
     'csv_error' => 'CSV dosyanızda bir hata var:',
-    'import_text' => '<p>Varlık geçmişini içeren bir CSV dosyası yükleyin. Varlıklar ve kullanıcılar sistemde HALİHAZIRDA mevcut olmalıdır, aksi takdirde atlanırlar. Geçmiş aktarımı için varlık eşleştirmesi, varlık etiketi üzerinden yapılır. Sağladığınız kullanıcı adına ve aşağıda seçeceğiniz kriterlere göre eşleşen bir kullanıcı bulmaya çalışacağız. Aşağıda herhangi bir kriter seçmezseniz, yalnızca <code>Yönetici &gt; Genel Ayarlar</code> bölümünde yapılandırdığınız kullanıcı adı biçimiyle eşleştirme yapılacaktır.</p>
-
-<p>CSV dosyasındaki alanlar şu başlıklarla eşleşmelidir: <strong>Varlık Etiketi, Ad, Teslim Alma Tarihi, Teslim Etme Tarihi</strong>. Ekstra alanlar yok sayılacaktır.</p>
-
-<p>Teslim Etme Tarihi: Boş bırakılan veya gelecekteki tarihler, ilgili kullanıcıya varlığı teslim edilmiş olarak gösterecektir. Teslim Etme Tarihi sütunu dahil edilmezse, bugünün tarihi teslim tarihi olarak kullanılır.</p>    ',
+    'import_text' => '<p>Upload a CSV that contains asset history. The assets, users, and locations referenced MUST already exist in the system, or the row will be skipped. Matching assets for history import happens against the asset tag. For user rows we will try to find a matching user based on the user\'s name you provide, and the criteria you select below. If you do not select any criteria below, it will simply try to match on the username format you configured in the <code>Admin &gt; General Settings</code>. For assets checked out to locations, the CSV location name must match an existing location\'s name exactly.</p><p>Fields included in the CSV must match the headers: <strong>Asset Tag, Name, Checkout Date, Checkin Date, Target Type, Notes</strong>. <code>Target Type</code> is optional and accepts <code>user</code> or <code>location</code>. Blank or absent target type rows falls back to <code>user</code>. <code>Notes</code> is optional and gets logged to the checkout action. Any additional fields will be ignored.</p><p>Checkin Date: blank or future checkin dates will checkout items to the target on the row. (This should be in <code>YYYY-MM-DD HH:MM:SS</code> format) Excluding the Checkin Date column will create a checkin date with today\'s date (which sort of defeats the purpose of this particular kind of import.)</p>    ',
     'csv_import_match_f-l' => 'Kullanıcıları <strong>isim.soyisim</strong> (<code>jane.smith</code>) formatına göre eşleştirmeyi dene',
     'csv_import_match_initial_last' => 'Kullanıcıları <strong>ilk harf + soyisim</strong> (<code>jsmith</code>) formatına göre eşleştirmeyi dene',
     'csv_import_match_first' => 'Kullanıcıları <strong>isim</strong> (<code>jane</code>) formatına göre eşleştirmeyi dene',

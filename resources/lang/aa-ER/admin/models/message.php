@@ -45,4 +45,14 @@ return [
         'success_partial' => 'crwdns1977:0crwdne1977:0',
     ],
 
+    'merge' => [
+        'min_two' => 'crwdns17077:0crwdne17077:0',
+        'no_target' => 'crwdns17079:0crwdne17079:0',
+        'not_found' => 'crwdns17081:0crwdne17081:0',
+        'information' => 'crwdns17083:0crwdne17083:0',
+        'warning' => 'crwdns17085:0crwdne17085:0',
+        'pick_target' => 'crwdns17087:0crwdne17087:0',
+        'success' => 'crwdns17089:0crwdne17089:0',
+    ],
+
 ];

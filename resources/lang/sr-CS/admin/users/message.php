@@ -4,8 +4,8 @@ return [
 
     'accepted' => 'Uspešno ste prihvatili ovu stavku.',
     'declined' => 'Uspešno ste odbili ovu stavku.',
-    'accept_signature_write_failed' => 'Your acceptance signature could not be saved to storage. Acceptance was not recorded. Please contact your administrator.',
-    'accept_pdf_write_failed' => 'The acceptance PDF could not be saved to storage. Acceptance was not recorded. Please contact your administrator.',
+    'accept_signature_write_failed' => 'Vaš potpis prihvatanja nije mogao biti sačuvan u skladištu. Prihvatanje nije zapisano. Molim vas kontaktirajte vašeg administratora.',
+    'accept_pdf_write_failed' => 'PDF prihvatanja nije mogao biti sačuvan u skladištu. Prihvatanje nije zapisano. Molim vas kontaktirajte vašeg administratora.',
     'bulk_manager_warn' => 'Your users have been successfully updated, however your manager entry was not saved because the manager you selected was also in the user list to be edited, and users may not be their own manager. Please select your users again, excluding the manager.',
     'user_exists' => 'Korisnik već postoji!',
     'cannot_delete' => 'Korisnik ne postoji ili vi nemate ovlašćenja da ga obrišete.',
@@ -70,7 +70,7 @@ return [
         'password_ldap' => 'Lozinku za ovaj nalog kontroliše LDAP / Active Directory. Obratite se IT centru za promenu lozinke. ',
         'multi_company_items_assigned' => 'Ovaj korisnik poseduje zadužene stavke koje pripadaju drugoj kompaniji. Molim vas razdužite ih ili promenite njihovu kompaniju.',
         'no_pending_acceptances' => 'Ovaj korisnik nema prihvatanja na čekanju za koja bi ih podsetili.',
-        'company_not_permitted' => 'One or more requested company assignments are outside your permitted company scope.',
+        'company_not_permitted' => 'Jedna ili više zahtevanih dodela kompanije su izvan vašeg dozvoljenog opsega kompanije.',
     ],
 
     'deletefile' => [

@@ -79,7 +79,7 @@
                     <x-input.user-select
                         :label="trans('general.user')"
                         name="assigned_user"
-                        :selected="old('assigned_user')"
+                        :selected="old('assigned_user', $checkoutRequest?->user_id)"
                         :companyId="$asset->company_id"
                         :style="(session('checkout_to_type') ?: 'user') == 'user' ? null : 'display: none;'"
                     />
@@ -102,6 +102,7 @@
                         type="datetimepicker"
                         :item="$item"
                         :default_now="false"
+                        :default="old('expected_checkin', ($checkoutRequest?->end_date ? $checkoutRequest->end_date->toDateString() : ($item->expected_checkin ?? null)))"
                         input_div_class="col-md-4"
                     />
 
@@ -120,56 +121,7 @@
                         'show_custom_fields_type' => 'checkout',
                     ])
 
-                    @if ($asset->requireAcceptance() || (string) $snipeSettings->require_accept_signature === '1' || $asset->getEula() || ($snipeSettings->webhook_endpoint != ''))
-                        <div class="form-group notification-callout" style="display:none;">
-                            <div class="col-md-8 col-md-offset-3">
-                                <x-callout type="info" role="status">
-
-                                    @if ($asset->requireAcceptance())
-                                        <x-icon type="email" class="fa-fw"/>
-                                        {{ trans('admin/categories/general.required_acceptance') }}
-                                        <br>
-                                    @endif
-
-                                    @if ((string) $snipeSettings->require_accept_signature === '1')
-                                            <x-icon type="signature" class="fa-fw"/>
-                                        {{ trans('admin/categories/general.required_signature') }}
-                                        <br>
-                                    @endif
-
-                                    @if ($asset->getEula())
-                                        <x-icon type="email" class="fa-fw"/>
-                                        {{ trans('admin/categories/general.required_eula') }}
-                                        <br>
-                                    @endif
-
-                                    @if (($asset->model?->category) && ($asset->model->category->checkin_email))
-                                        <x-icon type="email" class="fa-fw"/>
-                                        {{ trans('admin/categories/general.checkin_email_notification') }}
-                                        <br>
-                                    @endif
-
-                                    @if ($snipeSettings->webhook_endpoint != '')
-                                        <i class="fab fa-slack fa-fw" aria-hidden="true"></i>
-                                        {{ trans('general.webhook_msg_note') }}
-                                    @endif
-                                </x-callout>
-                            </div>
-
-                            <!-- Sign in place checkbox -->
-                            @if ($asset->requireAcceptance() || (string) $snipeSettings->require_accept_signature === '1')
-                                <div id="sign_in_place_div" class="col-md-7 col-md-offset-3">
-                                    <label class="form-control">
-                                        <input type="checkbox" value="1" name="sign_in_place" @checked(old('sign_in_place', session('sign_in_place', false))) aria-label="sign_in_place">
-                                        {{ trans('general.sign_in_place') }}
-                                    </label>
-                                    <p class="help-block">
-                                        {{ trans('general.sign_in_place_help') }}
-                                    </p>
-                                </div>
-                            @endif
-                        </div>
-                    @endif
+                    <x-checkout.checkout-notification-callout :item="$asset" :category="$asset->model?->category" />
 
                     <x-slot:customfooter>
                         <x-redirect_submit_options
@@ -191,6 +143,8 @@
         </x-page-column>
 
         <x-page-column class="col-md-5">
+            <x-checkout-request-context :request="$checkoutRequest ?? null" :requestable="$asset" />
+
             <livewire:checkout-target-panel type="assets" />
         </x-page-column>
 

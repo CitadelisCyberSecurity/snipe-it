@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Dímheas Sócmhainní',
     'create' => 'Críochnaigh Dímheas',
     'depreciation_name' => 'Ainm Dímheas',
-    'depreciation_min' => 'Floor Value of Depreciation',
     'number_of_months' => 'Líon na Míonna',
     'update' => 'Dímheas Nuashonraigh',
     'depreciation_min' => 'Minimum Value after Depreciation',

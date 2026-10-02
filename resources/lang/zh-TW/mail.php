@@ -93,7 +93,7 @@ return [
     'read_the_terms' => '請閱讀以下使用條款。',
     'read_the_terms_and_click' => '請閱讀以下使用條款，並點擊底部連結確認您已閱讀並同意使用條款，且已收到該項目。',
     'click_here_to_review_terms_and_accept_item' => '點擊這裡查看使用條款並接受項目|點擊這裡查看使用條款並接受項目',
-    'requested' => '已申請',
+    'requested' => '已申領',
     'reset_link' => '您的密碼重設連結',
     'reset_password' => '請按一下此處重置您的密碼︰',
     'rights_reserved' => '版權所有。',

@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Aktīvu vērtības samazināšanās',
     'create' => 'Izveidot nolietojumu',
     'depreciation_name' => 'Nolietojuma nosaukums',
-    'depreciation_min' => 'Nolietojuma zemākā vērtība',
     'number_of_months' => 'Mēnešu skaits',
     'update' => 'Atjaunināt nolietojumu',
     'depreciation_min' => 'Minimālā vērtība pēc nolietojuma beigām',

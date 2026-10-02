@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Ukuncishiswa kwempahla',
     'create' => 'Dala ukwehla',
     'depreciation_name' => 'Igama lokunciphisa',
-    'depreciation_min' => 'Floor Value of Depreciation',
     'number_of_months' => 'Inani lezinyanga',
     'update' => 'Buyekeza ukwehla kwenani',
     'depreciation_min' => 'Minimum Value after Depreciation',

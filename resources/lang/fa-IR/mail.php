@@ -101,7 +101,7 @@ return [
     'read_the_terms' => 'لطفا شرایط استفاده زیر را بخوانید.',
     'read_the_terms_and_click' => 'Please read the terms of use below, and click on the link at the bottom to confirm that you read and agree to the terms of use, and have received the item.',
     'click_here_to_review_terms_and_accept_item' => 'Click here to review the terms of use and accept the item|Click here to review the terms of use and accept the items',
-    'requested' => 'در خواست شده',
+    'requested' => 'درخواست شده',
     'reset_link' => 'رمز عبور خود را بازنشانی کنید',
     'reset_password' => 'برای تغییر رمز عبور اینجا کلیک کنید:',
     'rights_reserved' => 'All rights reserved.',

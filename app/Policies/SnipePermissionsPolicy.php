@@ -94,12 +94,12 @@ abstract class SnipePermissionsPolicy
 
     public function history(User $user, $item = null)
     {
-        return Gate::allows('view', $item) || $user->hasAccess('activity.view');
+        return Gate::allows('view', $item) || Gate::allows('activity.view');
     }
 
     public function journal(User $user, $item = null)
     {
-        return Gate::allows('view', $item) || $user->hasAccess('activity.view');
+        return Gate::allows('view', $item) || Gate::allows('activity.view');
     }
 
     public function files(User $user, $item = null)
@@ -130,6 +130,18 @@ abstract class SnipePermissionsPolicy
     public function create(User $user)
     {
         return $user->hasAccess($this->columnName().'.create');
+    }
+
+    /**
+     * Determine whether the user can clone the given instance to a new
+     * record. Composes view + create so a user can only pre-populate the
+     * create form from a source they already have read access to. Not a
+     * standalone permission, so admins configure it via the existing
+     * view + create toggles on each role.
+     */
+    public function clone(User $user, $item = null)
+    {
+        return $this->view($user, $item) && $this->create($user);
     }
 
     /**

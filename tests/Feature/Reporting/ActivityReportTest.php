@@ -223,6 +223,39 @@ class ActivityReportTest extends TestCase
             ->assertStatusMessageIs('error');
     }
 
+    public function test_search_matches_target_asset_tag_on_component_checkout()
+    {
+        // Component checkouts store item=Component and target=Asset.
+        // Actionlog's $searchableRelations only walks item_id, so
+        // searching by the target asset's tag missed these rows
+        // before the advancedTextSearch() override on Actionlog.
+        // Same fix applied here for the general reports.view path.
+        // Positive-membership assertion because the built-in
+        // item_id-keyed searchRelations may also match the asset's
+        // own create log, and both matches are legitimate.
+        $actor = User::factory()->superuser()->create();
+
+        $component = \App\Models\Component::factory()->create();
+        $targetAsset = Asset::factory()->create(['asset_tag' => 'TARGET-TAG-4242']);
+
+        $matchingLog = Actionlog::factory()->create([
+            'action_type' => 'checkout',
+            'item_type' => \App\Models\Component::class,
+            'item_id' => $component->id,
+            'target_type' => Asset::class,
+            'target_id' => $targetAsset->id,
+        ]);
+
+        $ids = collect($this->actingAsForApi($actor)
+            ->getJson(route('api.activity.index', ['search' => 'TARGET-TAG-4242']))
+            ->assertOk()
+            ->json('rows'))
+            ->pluck('id')
+            ->all();
+
+        $this->assertContains($matchingLog->id, $ids);
+    }
+
     public function test_search_matches_action_log_location_name()
     {
         // Activity Report eager-loads and shows the location on each

@@ -25,4 +25,11 @@ return [
         'partial_success' => 'crwdns13888:0crwdne13888:0',
     ],
 
+    'bulkedit' => [
+        'warn' => 'crwdns17177:0crwdne17177:0',
+        'no_selection' => 'crwdns17179:0crwdne17179:0',
+        'no_changes' => 'crwdns17181:0crwdne17181:0',
+        'success' => 'crwdns17183:0crwdne17183:0',
+    ],
+
 ];

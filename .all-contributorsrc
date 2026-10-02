@@ -4375,6 +4375,52 @@
       "contributions": [
         "code"
       ]
+    },
+    {
+      "login": "NyCodeGHG",
+      "name": "Marie Ramlow",
+      "avatar_url": "https://avatars.githubusercontent.com/u/37078297?v=4",
+      "profile": "https://github.com/NyCodeGHG",
+      "contributions": []
+    },
+    {
+      "login": "SBCV-apegram",
+      "name": "Andrew Pegram",
+      "avatar_url": "https://avatars.githubusercontent.com/u/89920666?v=4",
+      "profile": "https://github.com/SBCV-apegram",
+      "contributions": []
+    },
+    {
+      "login": "MatheusGarvao",
+      "name": "Matheus Garvão",
+      "avatar_url": "https://avatars.githubusercontent.com/u/100000464?v=4",
+      "profile": "https://github.com/MatheusGarvao",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "mrjcap",
+      "name": "Jay Cap",
+      "avatar_url": "https://avatars.githubusercontent.com/u/3140504?v=4",
+      "profile": "https://github.com/mrjcap",
+      "contributions": []
+    },
+    {
+      "login": "staabm",
+      "name": "Markus Staab",
+      "avatar_url": "https://avatars.githubusercontent.com/u/120441?v=4",
+      "profile": "https://staabm.github.io/",
+      "contributions": []
+    },
+    {
+      "login": "danez",
+      "name": "Daniel Tschinder",
+      "avatar_url": "https://avatars.githubusercontent.com/u/231804?v=4",
+      "profile": "https://github.com/danez",
+      "contributions": [
+        "code"
+      ]
     }
   ]
 }

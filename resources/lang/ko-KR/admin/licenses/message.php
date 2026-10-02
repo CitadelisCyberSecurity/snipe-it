@@ -62,4 +62,8 @@ return [
         'success' => '라이선스가 반입 되었습니다.',
     ],
 
+    'import' => [
+        'no_free_seats' => 'License ":license" has no free seats. ":target" was not assigned to a seat.',
+    ],
+
 ];

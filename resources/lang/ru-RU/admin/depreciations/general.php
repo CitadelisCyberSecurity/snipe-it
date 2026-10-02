@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Износ активов',
     'create' => 'Создать амортизацию',
     'depreciation_name' => 'Название амортизации',
-    'depreciation_min' => 'Минимальная стоимость амортизации',
     'number_of_months' => 'Количество месяцев',
     'update' => 'Обновить амортизацию',
     'depreciation_min' => 'Минимальное значение после амортизации',

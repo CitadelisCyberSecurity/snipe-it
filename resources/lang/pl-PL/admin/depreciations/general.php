@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Amortyzacja nabytków',
     'create' => 'Nowa amortyzacja',
     'depreciation_name' => 'Nazwa amortyzacji',
-    'depreciation_min' => 'Minimalna wartość amortyzacji',
     'number_of_months' => 'Numer miesiąca',
     'update' => 'Aktualizuj amortyzację',
     'depreciation_min' => 'Minimalna wartość po spadku wartości',

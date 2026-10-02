@@ -25,4 +25,11 @@ return [
         'partial_success' => 'Կատեգորիան հաջողությամբ ջնջվեց։ Տես ստորև լրացուցիչ տեղեկությունը։ | :count կատեգորիաներ հաջողությամբ ջնջվեցին։ Տես ստորև լրացուցիչ տեղեկությունը։',
     ],
 
+    'bulkedit' => [
+        'warn' => 'You are about to edit the properties of the following category:|You are about to edit the properties of the following :count categories:',
+        'no_selection' => 'You must select at least one category to edit.',
+        'no_changes' => 'Դաշտեր չեն փոփոխվել, ուստի ոչինչ չի թարմացվել։',
+        'success' => 'Category successfully updated.|:count categories successfully updated.',
+    ],
+
 ];

@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Susut Nilai Harta',
     'create' => 'Buat Susut',
     'depreciation_name' => 'Nama Susut Nilai',
-    'depreciation_min' => 'Floor Value of Depreciation',
     'number_of_months' => 'Bilangan Bulan',
     'update' => 'Kemas kini Susutnilai',
     'depreciation_min' => 'Nilai Minimum selepas Susut Nilai',

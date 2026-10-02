@@ -20,6 +20,14 @@
     </div>
 @endif
 
+@if($this->showFmcsRestrictionNotice)
+    <div class="col-md-12">
+        <x-alert type="info" icon="tip">
+            {{ trans('general.fmcs_import_restriction_note') }}
+        </x-alert>
+    </div>
+@endif
+
         @if($import_errors)
           <div class="col-md-12">
             <div class="box box-default">
@@ -85,20 +93,18 @@
                                     </div>
                                 @else
 
-                                @if (count($selectedIds) > 0)
                                     <div class="row" style="padding-bottom: 10px;">
                                         <div class="col-md-12">
                                             <button type="button"
                                                     class="btn btn-danger"
                                                     data-toggle="modal"
                                                     data-target="#bulkDeleteImportsModal"
-                                                @disabled(config('app.lock_passwords'))>
+                                                @disabled(config('app.lock_passwords') || count($selectedIds) === 0)>
                                                 <i class="fas fa-trash" aria-hidden="true"></i>
                                                 {{ trans('admin/hardware/message.import.bulk_delete.button', ['count' => count($selectedIds)]) }}
                                             </button>
                                         </div>
                                     </div>
-                                @endif
 
                                 <table data-id-table="upload-table"
                                         data-side-pagination="client"
@@ -135,7 +141,7 @@
 
                                     @foreach($this->files as $currentFile)
 
-                                        <tr style="{{ ($this->activeFile && ($currentFile->id == $this->activeFile->id)) ? 'font-weight: bold' : '' }}">
+                                        <tr wire:key="import-row-{{ $currentFile->id }}" style="{{ ($this->activeFile && ($currentFile->id == $this->activeFile->id)) ? 'font-weight: bold' : '' }}">
                                                 <td>
                                                     <label class="sr-only" for="import-row-{{ $currentFile->id }}">
                                                         {{ trans('admin/hardware/message.import.bulk_delete.select_row', ['file' => $currentFile->file_path]) }}
@@ -198,8 +204,9 @@
 
                                                     @if (((auth()->user()->id == $currentFile->adminuser?->id) || (auth()->user()->isSuperUser())) && ! config('app.lock_passwords'))
                                                         <a href="#" wire:click.prevent="$set('activeFileId',null)" data-tooltip="true" data-title="{{ trans('general.delete') }}">
-                                                            <button class="btn btn-sm btn-danger" wire:click="destroy({{ $currentFile->id }})">
-                                                                <i class="fas fa-trash icon-white" aria-hidden="true"></i>
+                                                            <button class="btn btn-sm btn-danger" wire:click="destroy({{ $currentFile->id }})" wire:loading.attr="disabled" wire:target="destroy({{ $currentFile->id }})">
+                                                                <i class="fas fa-trash icon-white" aria-hidden="true" wire:loading.remove wire:target="destroy({{ $currentFile->id }})"></i>
+                                                                <i class="fas fa-spinner fa-spin icon-white" aria-hidden="true" wire:loading wire:target="destroy({{ $currentFile->id }})"></i>
                                                                 <span class="sr-only">{{ trans('general.delete') }}</span>
                                                             </button>
                                                         </a>
@@ -408,10 +415,24 @@
                                 <x-form.checkbox-row
                                     name="update"
                                     :label="trans('general.update_existing_values')"
-                                    :help_text="trans('admin/hardware/message.import.update_mode_help')"
+                                    :help_text="trans('general.update_mode_help')"
                                     :checked="(bool) $update"
                                     wire:model.live="update"
                                 />
+
+                                {{-- Only useful when Update Existing Values
+                                     is on. Default to clear-blanks behavior
+                                     unless the importing user explicitly opts in to
+                                     preserving DB values on blank CSV cells. --}}
+                                @if ($update)
+                                    <x-form.checkbox-row
+                                        name="preserve_blanks"
+                                        :label="trans('general.preserve_blank_cells_on_update')"
+                                        :help_text="trans('general.preserve_blank_cells_on_update_help')"
+                                        :checked="(bool) $preserve_blanks"
+                                        wire:model.live="preserve_blanks"
+                                    />
+                                @endif
                             @endif
 
                             @if ($typeOfImport === 'asset' && $snipeSettings->auto_increment_assets == 1 && $update)
@@ -422,7 +443,7 @@
                                 </div>
                             @endif
 
-                            @if ($typeOfImport === 'user' || $this->hasUserCheckoutMapping)
+                            @if (($typeOfImport === 'user' || $this->hasUserCheckoutMapping) && $typeOfImport !== 'assetHistory')
                                 {{-- Also shown for non-user imports (asset,
                                      accessory, etc.) when the current column
                                      mapping includes any user-identifying
@@ -430,7 +451,10 @@
                                      items out to users. The welcome email
                                      only fires for users that are actually
                                      created by the importer; existing-user
-                                     matches don't retrigger it. --}}
+                                     matches don't retrigger it.
+
+                                     assetHistory is excluded because it
+                                     never creates users --}}
                                 <x-form.checkbox-row
                                     name="send_welcome"
                                     :label="trans('general.send_welcome_email_to_users')"
@@ -1085,6 +1109,7 @@
                         var isLastSlice = (sliceIndex === totalSlices - 1);
                         var payload = {
                             'import-update': !!$wire.$get('update'),
+                            'import-preserve-blanks': !!$wire.$get('preserve_blanks'),
                             'send-welcome': !!$wire.$get('send_welcome'),
                             'import-type': $wire.$get('typeOfImport'),
                             // run-backup only makes sense before the first

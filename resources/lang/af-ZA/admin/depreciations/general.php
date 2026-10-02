@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Bate afskrywing',
     'create' => 'Skep waardevermindering',
     'depreciation_name' => 'Waardevermindering Naam',
-    'depreciation_min' => 'Floor Value of Depreciation',
     'number_of_months' => 'Aantal maande',
     'update' => 'Werk waardevermindering op',
     'depreciation_min' => 'Minimum Value after Depreciation',

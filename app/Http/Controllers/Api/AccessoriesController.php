@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\CheckoutableCheckedIn;
 use App\Events\CheckoutableCheckedOut;
 use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
@@ -17,7 +18,6 @@ use App\Http\Transformers\SelectlistTransformer;
 use App\Models\Accessory;
 use App\Models\AccessoryCheckout;
 use App\Models\Company;
-use App\Models\Setting;
 use App\Models\User;
 use Carbon\Carbon;
 use DomainException;
@@ -414,7 +414,7 @@ class AccessoriesController extends Controller
         $this->authorize('checkout', $accessory);
         $target = $this->determineCheckoutTarget();
 
-        if ((Setting::getSettings()->full_multiple_companies_support == '1') && (! $target->companies()->where('companies.id', $accessory->company_id)->exists())) {
+        if (! $accessory->canCheckoutTo($target)) {
             return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.error_user_company')));
         }
 
@@ -503,13 +503,8 @@ class AccessoriesController extends Controller
         $accessory = Accessory::find($accessory_checkout->accessory_id);
         $this->authorize('checkin', $accessory);
 
-        $accessory->logCheckin(User::find($accessory_checkout->assigned_to), $request->input('note'));
-
-        // Was the accessory updated?
         if ($accessory_checkout->delete()) {
-            if (! is_null($accessory_checkout->assigned_to)) {
-                $user = User::find($accessory_checkout->assigned_to);
-            }
+            event(new CheckoutableCheckedIn($accessory, $accessory_checkout->assignedTo, auth()->user(), $request->input('note')));
 
             $payload = [
                 'accessory_id' => $accessory->id,
@@ -558,5 +553,36 @@ class AccessoriesController extends Controller
         $history = (clone $historyQuery)->skip($offset)->take($limit)->get();
 
         return response()->json((new ActionlogsTransformer)->transformActionlogs($history, $total), 200, ['Content-Type' => 'application/json;charset=utf8'], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * List accessories that are requestable AND reachable by the
+     * current caller (per FMCS + location scoping). Hydrates the
+     * accessories tab on /account/requestable. Deliberately
+     * open to any authenticated user - the web page it feeds is open
+     * too, and the Requestable() scope layered on top of
+     * the CompanyableTrait global scope ensures the caller only sees
+     * rows they can act on.
+     */
+    public function requestable(Request $request): array
+    {
+        $query = Accessory::with('category', 'location', 'company', 'manufacturer', 'requests')
+            ->withCount('checkouts as checkouts_count')
+            ->Requestable();
+
+        if ($request->filled('search')) {
+            $query->TextSearch($request->input('search'));
+        }
+
+        $total = $query->count();
+        $offset = ($request->input('offset') > $total) ? $total : app('api_offset_value');
+        $limit = app('api_limit_value');
+
+        $order = $request->input('order') === 'asc' ? 'asc' : 'desc';
+        $sort = in_array($request->input('sort'), ['name', 'created_at'], true) ? $request->input('sort') : 'name';
+
+        $rows = $query->orderBy($sort, $order)->skip($offset)->take($limit)->get();
+
+        return (new AccessoriesTransformer)->transformAccessories($rows, $total);
     }
 }

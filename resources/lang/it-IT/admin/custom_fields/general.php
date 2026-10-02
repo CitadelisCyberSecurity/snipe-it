@@ -70,8 +70,8 @@ return [
     'display_checkout' => 'Mostra nei moduli di assegnazione',
     'display_audit' => 'Mostra nei moduli di revisione',
     'section_security' => 'Sicurezza',
-    'section_behavior' => 'Behavior',
-    'section_visibility' => 'Visibility',
+    'section_behavior' => 'Comportamento',
+    'section_visibility' => 'Visibilità',
     'section_display_on_forms' => 'Display on Forms',
     'validation' => [
         'element_not_valid_for_format' => 'The :element element is not valid for the :format format. Allowed elements: :allowed.',
@@ -86,8 +86,8 @@ return [
         'markdown-textarea' => 'Area di testo Markdown',
         'checkbox' => 'Casella di spunta',
         'radio' => 'Pulsanti di opzione',
-        'date_picker' => 'Date Picker',
-        'datetime_picker' => 'Datetime Picker',
+        'date_picker' => 'Selettore Data',
+        'datetime_picker' => 'Selettore Data/Ora',
     ],
     'general_help_text' => 'I campi personalizzati memorizzano informazioni aggiuntive non coperte dai campi predefiniti del Bene. <a href="https://snipe-it.readme.io/docs/custom-fields#/"><i class="fa fa-external-link"></i></a>.',
 ];

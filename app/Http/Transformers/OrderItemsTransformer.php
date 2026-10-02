@@ -5,7 +5,9 @@ namespace App\Http\Transformers;
 use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
 use App\Models\OrderItem;
+use App\Models\Supplier;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Gate;
 
 class OrderItemsTransformer
 {
@@ -35,6 +37,10 @@ class OrderItemsTransformer
             'supplier' => $order?->supplier ? [
                 'id' => (int) $order->supplier->id,
                 'name' => e($order->supplier->name),
+                // Drives suppliersLinkObjFormatter: rendered as plain
+                // text when the caller cannot view the supplier show
+                // page, so a scoped viewer's click does not 403.
+                'viewable' => Gate::allows('view', $order->supplier),
             ] : null,
             'purchase_date' => Helper::getFormattedDateObject($order?->purchase_date, 'date'),
             'qty' => $qty,
@@ -46,6 +52,10 @@ class OrderItemsTransformer
             'created_by' => $admin ? [
                 'id' => (int) $admin->id,
                 'name' => e($admin->display_name),
+                // Drives usersLinkObjFormatter: same rationale as
+                // supplier above. Components-only viewer without
+                // users.view sees the actor name but no dead link.
+                'viewable' => Gate::allows('view', $admin),
             ] : null,
             'created_at' => Helper::getFormattedDateObject($line->created_at, 'datetime'),
         ];

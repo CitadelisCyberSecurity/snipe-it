@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'ค่าเสื่อมราคาสินทรัพย์',
     'create' => 'สร้างค่าเสื่อมราคา',
     'depreciation_name' => 'ชื่อค่าเสื่อมราคา',
-    'depreciation_min' => 'มูลค่าเสื่อมราคาต่ำสุด',
     'number_of_months' => 'จำนวนเดือน',
     'update' => 'อัปเดตค่าเสื่อมราคา',
     'depreciation_min' => 'มูลค่าขั้นต่ำหลังค่าเสื่อมราคา',

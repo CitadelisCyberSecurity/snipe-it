@@ -148,6 +148,18 @@ class AssetModel extends SnipeModel
         return $this->hasMany(Asset::class, 'model_id')->RTD();
     }
 
+    /**
+     * Bulk-fulfillment eligibility hook. Overrides the Requestable
+     * trait's default (which probes numRemaining) since AssetModel
+     * fulfills by handing out concrete assets of the model rather
+     * than a qty count. Returns true when at least one available
+     * (RTD) asset of this model exists.
+     */
+    protected function hasStockForBulkFulfillment(): bool
+    {
+        return $this->availableAssets()->exists();
+    }
+
     public function assignedAssets()
     {
         return $this->hasMany(Asset::class, 'model_id')->Deployed();
@@ -224,6 +236,11 @@ class AssetModel extends SnipeModel
     public function category()
     {
         return $this->belongsTo(Category::class, 'category_id');
+    }
+
+    public function requireAcceptance(): bool
+    {
+        return (bool) ($this->category?->require_acceptance ?? false);
     }
 
     /**
@@ -356,7 +373,7 @@ class AssetModel extends SnipeModel
      *
      * @version v3.5
      */
-    public function scopeRequestableModels($query)
+    public function scopeRequestable($query)
     {
         return $query->where('requestable', '1');
     }
@@ -449,8 +466,8 @@ class AssetModel extends SnipeModel
      */
     public function scopeOrderPercentRemaining($query, $order)
     {
-        $direction = strtolower($order) === 'asc' ? 'asc' : 'desc';
+        $order = strtolower($order) === 'asc' ? 'asc' : 'desc';
 
-        return $query->orderByRaw('CASE WHEN assets_count = 0 THEN 0 ELSE (remaining * 100.0 / assets_count) END '.$direction);
+        return $query->orderByRaw('CASE WHEN assets_count = 0 THEN 0 ELSE (remaining * 100.0 / assets_count) END '.$order);
     }
 }

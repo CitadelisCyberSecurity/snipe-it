@@ -12,6 +12,7 @@ use App\Http\Transformers\LicenseSeatsTransformer;
 use App\Http\Transformers\LicensesTransformer;
 use App\Http\Transformers\SelectlistTransformer;
 use App\Models\Asset;
+use App\Models\CheckoutAcceptance;
 use App\Models\Company;
 use App\Models\License;
 use App\Models\LicenseSeat;
@@ -325,6 +326,8 @@ class LicensesController extends Controller
             'assigned_to' => 'required_if:target_type,user|integer|nullable',
             'asset_id' => 'required_if:target_type,asset|integer|nullable',
             'notes' => 'sometimes|string|nullable',
+            // Opt-in flag for instantly reassigning an occupied seat.
+            'reassign' => 'sometimes|boolean',
         ]);
 
         if ($license->isInactive()) {
@@ -352,6 +355,45 @@ class LicensesController extends Controller
                 $errorResponse = response()->json(Helper::formatStandardApiResponse('error', null, trans('admin/licenses/message.checkout.unavailable')));
 
                 return;
+            }
+
+            // GHSA-r25g-f428-466r: reject occupied seats on explicit-id
+            // checkout by default.
+            if ($licenseSeat->assigned_to !== null || $licenseSeat->asset_id !== null) {
+                if (!($validated['reassign'] ?? false)) {
+                    $errorResponse = response()->json(Helper::formatStandardApiResponse('error', null, trans('admin/licenses/message.checkout.unavailable')));
+
+                    return;
+                }
+
+                if (!$licenseSeat->license->reassignable) {
+                    $errorResponse = response()->json(Helper::formatStandardApiResponse('error', null, trans('admin/licenses/message.checkout.unavailable')));
+
+                    return;
+                }
+
+                // Fire CheckoutableCheckedIn for the
+                // current holder and delete their pending acceptance
+                $displaced = $licenseSeat->assigned_to
+                    ? User::withoutGlobalScopes()->find($licenseSeat->assigned_to)
+                    : ($licenseSeat->asset_id ? Asset::withoutGlobalScopes()->find($licenseSeat->asset_id) : null);
+
+                if ($displaced instanceof User) {
+                    CheckoutAcceptance::pending()
+                        ->where('checkoutable_type', LicenseSeat::class)
+                        ->where('checkoutable_id', $licenseSeat->id)
+                        ->where('assigned_to_id', $displaced->id)
+                        ->get()
+                        ->each(fn($a) => $a->delete());
+                }
+
+                $licenseSeat->assigned_to = null;
+                $licenseSeat->asset_id = null;
+                $licenseSeat->save();
+
+                if ($displaced) {
+                    event(new CheckoutableCheckedIn($licenseSeat, $displaced, auth()->user(), $validated['notes'] ?? null));
+                }
             }
 
             if ($validated['target_type'] === 'user') {
@@ -497,5 +539,32 @@ class LicensesController extends Controller
         $history = (clone $historyQuery)->skip($offset)->take($limit)->get();
 
         return response()->json((new ActionlogsTransformer)->transformActionlogs($history, $total), 200, ['Content-Type' => 'application/json;charset=utf8'], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * List licenses that are requestable AND reachable by the current
+     * caller (per FMCS + location scoping). Hydrates the licenses tab
+     * on /account/requestable. See the sibling
+     * AccessoriesController::requestable for design rationale.
+     */
+    public function requestable(Request $request): array
+    {
+        $query = License::with('category', 'company', 'manufacturer', 'requests')
+            ->Requestable();
+
+        if ($request->filled('search')) {
+            $query->TextSearch($request->input('search'));
+        }
+
+        $total = $query->count();
+        $offset = ($request->input('offset') > $total) ? $total : app('api_offset_value');
+        $limit = app('api_limit_value');
+
+        $order = $request->input('order') === 'asc' ? 'asc' : 'desc';
+        $sort = in_array($request->input('sort'), ['name', 'created_at'], true) ? $request->input('sort') : 'name';
+
+        $rows = $query->orderBy($sort, $order)->skip($offset)->take($limit)->get();
+
+        return (new LicensesTransformer)->transformLicenses($rows, $total);
     }
 }

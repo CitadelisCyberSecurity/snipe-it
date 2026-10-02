@@ -42,7 +42,7 @@ return [
     'redirect_to_all' => 'Ritorna a tutti i :type',
     'redirect_to_type' => 'Vai a :type',
     'redirect_to_checked_out_to' => 'Vai agli assegnati',
-    'redirect_to_bulk_checkout' => 'Return to Bulk Checkout',
+    'redirect_to_bulk_checkout' => 'Torna ad Assegnazione Massiva',
     'select_statustype' => 'Selezionare il tipo di stato',
     'serial' => 'Seriale',
     'serial_required' => 'È obbligatorio il numero di serie per il bene :number',

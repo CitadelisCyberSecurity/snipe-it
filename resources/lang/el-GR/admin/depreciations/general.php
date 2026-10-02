@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Αποσβέσεις περιουσιακών στοιχείων',
     'create' => 'Δημιουργία αποσβέσεων',
     'depreciation_name' => 'Όνομα απόσβεσης',
-    'depreciation_min' => 'Τιμή δάπεδο της απόσβεσης',
     'number_of_months' => 'Αριθμός των μηνών',
     'update' => 'Ενημέρωση αποσβέσεων',
     'depreciation_min' => 'Ελάχιστη τιμή μετά την απόσβεση',

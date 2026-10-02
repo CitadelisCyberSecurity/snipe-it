@@ -18,7 +18,7 @@ return [
         'error' => 'Podczas usuwania oddziału napotkano problem. Spróbuj ponownie.',
         'success' => 'Oddział usunięty pomyślnie.',
         'bulk_success' => 'Department deleted successfully.|:count departments were deleted successfully.',
-        'partial_success' => 'Department deleted successfully. See additional information below. | :count departments were deleted successfully. See additional information below.',
+        'partial_success' => 'Departament został usunięty pomyślnie. Zobacz dodatkowe informacje poniżej. |:count departamenty zostały usunięte pomyślnie. Zobacz dodatkowe informacje poniżej.',
     ],
 
 ];

@@ -62,4 +62,8 @@ return [
         'success' => 'உரிமம் வெற்றிகரமாக சரிபார்க்கப்பட்டது',
     ],
 
+    'import' => [
+        'no_free_seats' => 'License ":license" has no free seats. ":target" was not assigned to a seat.',
+    ],
+
 ];

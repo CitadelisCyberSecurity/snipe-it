@@ -4,8 +4,8 @@ return [
 
     'accepted' => 'Jūs sėkmingai priėmėte šį daiktą.',
     'declined' => 'Jūs sėkmingai atsisakėte priimti šį daiktą.',
-    'accept_signature_write_failed' => 'Your acceptance signature could not be saved to storage. Acceptance was not recorded. Please contact your administrator.',
-    'accept_pdf_write_failed' => 'The acceptance PDF could not be saved to storage. Acceptance was not recorded. Please contact your administrator.',
+    'accept_signature_write_failed' => 'Jūsų patvirtinimo parašo nepavyko išsaugoti saugykloje. Patvirtinimas nebuvo užregistruotas. Kreipkitės į savo administratorių.',
+    'accept_pdf_write_failed' => 'Patvirtinimo PDF failo nepavyko išsaugoti saugykloje. Patvirtinimas nebuvo užregistruotas. Kreipkitės į savo administratorių.',
     'bulk_manager_warn' => 'Jūsų naudotojai buvo sėkmingai atnaujinti, tačiau tiesioginio vadovo informacija nebuvo išsaugota, nes jūsų nurodytas tiesioginis vadovas taip pat buvo redaguojamų naudotojų sąraše. Naudotojas negali būti savo paties tiesioginiu vadovu, todėl dar kartą pasirinkite naudotojus, neįtraukdami tiesioginio vadovo.',
     'user_exists' => 'Toks naudotojas jau yra!',
     'cannot_delete' => 'Tokio naudotojo nėra arba jūs neturite teisės jo panaikinti.',
@@ -70,7 +70,7 @@ return [
         'password_ldap' => 'Šios paskyros slaptažodį tvarko LDAP / Active Directory. Prašome susisiekti su savo IT skyriumi, kad pakeistumėte slaptažodį. ',
         'multi_company_items_assigned' => 'Šiam naudotojui yra priskirti daiktai, priklausantys kitai įmonei. Paimkite juos arba pakeiskite jų įmonę.',
         'no_pending_acceptances' => 'Šis naudotojas neturi jokių laukiančių patvirtinimų, apie kuriuos jam būtų galima priminti.',
-        'company_not_permitted' => 'One or more requested company assignments are outside your permitted company scope.',
+        'company_not_permitted' => 'Vienas ar keli prašomi įmonės priskyrimai nepatenka į jums leidžiamos įmonės veiklos sritį.',
     ],
 
     'deletefile' => [

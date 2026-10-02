@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Amortizacija sredstev',
     'create' => 'Ustvari amortizacijo',
     'depreciation_name' => 'Ime amortizacije',
-    'depreciation_min' => 'Spodnja vrednost amortizacije',
     'number_of_months' => 'Število mesecev',
     'update' => 'Posodobi amortizacijo',
     'depreciation_min' => 'Minimalna vrednost po amortizaciji',

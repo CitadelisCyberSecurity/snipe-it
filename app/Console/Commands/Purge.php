@@ -9,6 +9,7 @@ use App\Models\Asset;
 use App\Models\AssetModel;
 use App\Models\Category;
 use App\Models\CheckoutAcceptance;
+use App\Models\CheckoutRequest;
 use App\Models\Company;
 use App\Models\Component;
 use App\Models\Consumable;
@@ -230,8 +231,32 @@ class Purge extends Command
         // that happen to share the same numeric id.
         $childTables = [
             AccessReviewCampaign::class => ['access_review_items' => 'campaign_id'],
-            Asset::class => ['maintenances' => ['item_id', 'item_type', Asset::class]],
-            License::class => ['license_seats' => 'license_id'],
+            Asset::class => [
+                'maintenances' => ['item_id', 'item_type', Asset::class],
+                'checkout_requests' => ['requestable_id', 'requestable_type', Asset::class],
+                // Sync-adapter identity rows tying this asset to a
+                // vendor host. Orphaned once the asset is purged, and
+                // an orphan would cause the next sync to skip creating
+                // a fresh asset for that vendor host because
+                // provisionAsset() finds the dead link first.
+                'asset_external_sources' => 'asset_id',
+            ],
+            License::class => [
+                'license_seats' => 'license_id',
+                'checkout_requests' => ['requestable_id', 'requestable_type', License::class],
+            ],
+            // Every model carrying the Requestable trait needs its
+            // pending / historical CheckoutRequest rows nuked when
+            // the parent is purged, or those rows linger as orphans
+            // in the admin queue and the requester's own /account/
+            // requested page. Cascade uses the polymorphic
+            // requestable_id + requestable_type pair; the trait's
+            // forceDeleted hook covers the direct forceDelete() path
+            // that bypasses this command.
+            Accessory::class => ['checkout_requests' => ['requestable_id', 'requestable_type', Accessory::class]],
+            Consumable::class => ['checkout_requests' => ['requestable_id', 'requestable_type', Consumable::class]],
+            Component::class => ['checkout_requests' => ['requestable_id', 'requestable_type', Component::class]],
+            AssetModel::class => ['checkout_requests' => ['requestable_id', 'requestable_type', AssetModel::class]],
         ];
         $childCounts = [];
         if (array_key_exists($modelClass, $childTables)) {

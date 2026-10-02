@@ -4,8 +4,8 @@ return [
 
     'accepted' => 'Hai accettato con successo questo articolo.',
     'declined' => 'Hai rifiutato con successo questo articolo.',
-    'accept_signature_write_failed' => 'Your acceptance signature could not be saved to storage. Acceptance was not recorded. Please contact your administrator.',
-    'accept_pdf_write_failed' => 'The acceptance PDF could not be saved to storage. Acceptance was not recorded. Please contact your administrator.',
+    'accept_signature_write_failed' => 'La firma di accettazione non può essere salvata. L\'accettazione non è stata registrata. Si prega di contattare l\'amministratore.',
+    'accept_pdf_write_failed' => 'Il PDF di accettazione non può essere salvato. L\'accettazione non è stata registrata. Si prega di contattare l\'amministratore.',
     'bulk_manager_warn' => 'I tuoi utenti sono stati aggiornati con successo, tuttavia la voce del gestore non è stata salvata perché il gestore selezionato è stato anche nell\'elenco utenti da modificare e gli utenti potrebbero non essere il proprio gestore. Seleziona nuovamente i tuoi utenti, esclusi il gestore.',
     'user_exists' => 'Utente già esistente!',
     'cannot_delete' => 'L\'utente non esiste oppure non hai l\'autorizzazione per eliminarlo.',
@@ -15,7 +15,7 @@ return [
     'nothing_currently_assigned' => 'Niente attualmente assegnato.',
     'user_password_required' => 'È richiesta la password.',
     'insufficient_permissions' => 'Permessi Insufficienti.',
-    'auth_fields_denied' => 'You do not have permission to modify credential or activation fields on this user. Requested fields not updated: :fields',
+    'auth_fields_denied' => 'Non hai il permesso di modificare i campi credenziali o di attivazione per questo utente. Campi richiesti non aggiornati: :fields',
     'user_deleted_warning' => 'Questo utente è stato eliminato. Si dovrà ripristinare questo utente per modificare o assegnare nuovi beni.',
     'ldap_not_configured' => 'L\'integrazione con LDAP non è stata configurata per questa installazione.',
     'password_resets_sent' => 'È stato inviato un link agli utenti selezionati che sono attivati e hanno un indirizzo email valido, per reimpostare la password.',
@@ -70,7 +70,7 @@ return [
         'password_ldap' => 'La password per questo account è gestita da LDAP / Active Directory. Per cambiare la tua password, contatta il tuo reparto IT.',
         'multi_company_items_assigned' => 'A questo utente sono assegnati oggetti appartenenti a un\'altra azienda. Si prega di farli restituire o modificarne l\'azienda.',
         'no_pending_acceptances' => 'Questo utente non ha accettazioni in sospeso da notificare.',
-        'company_not_permitted' => 'One or more requested company assignments are outside your permitted company scope.',
+        'company_not_permitted' => 'Una o più richieste di assegnazioni aziendali sono fuori dal tuo campo di applicazione aziendale.',
     ],
 
     'deletefile' => [

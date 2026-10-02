@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Penyusutan Aset',
     'create' => 'Buat Pengurangan',
     'depreciation_name' => 'Nama Penyusutan',
-    'depreciation_min' => 'Floor Value of Depreciation',
     'number_of_months' => 'Jumlah Bulan',
     'update' => 'Perbarui pengurangan',
     'depreciation_min' => 'Minimum Value after Depreciation',

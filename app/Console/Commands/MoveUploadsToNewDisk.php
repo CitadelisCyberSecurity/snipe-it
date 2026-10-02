@@ -71,7 +71,7 @@ class MoveUploadsToNewDisk extends Command
 
                 try {
                     Storage::disk('public')->put('uploads/'.$public_type.'/'.$filename, file_get_contents($public_upload[$i]));
-                    $new_url = Storage::disk('public')->url('uploads/'.$public_type.'/'.$filename, $filename);
+                    $new_url = Storage::disk('public')->url('uploads/'.$public_type.'/'.$filename);
                     $this->info($type_count.'. PUBLIC: '.$filename.' was copied to '.$new_url);
                 } catch (\Exception $e) {
                     Log::debug($e);
@@ -89,7 +89,7 @@ class MoveUploadsToNewDisk extends Command
             $type_count++;
             $filename = basename($logo);
             Storage::disk('public')->put('uploads/'.$filename, file_get_contents($logo));
-            $this->info($type_count.'. LOGO: '.$filename.' was copied to '.env('PUBLIC_AWS_URL').'/uploads/'.$filename);
+            $this->info($type_count.'. LOGO: '.$filename.' was copied to '.config('filesystems.disks.public_aws.url').'/uploads/'.$filename);
         }
 
         $private_uploads['assets'] = glob('storage/private_uploads/assets'.'/*.*');
@@ -112,7 +112,7 @@ class MoveUploadsToNewDisk extends Command
 
                 try {
                     Storage::put($private_type.'/'.$filename, file_get_contents($private_upload[$x]));
-                    $new_url = Storage::url($private_type.'/'.$filename, $filename);
+                    $new_url = Storage::url($private_type.'/'.$filename);
                     $this->info($type_count.'. PRIVATE: '.$filename.' was copied to '.$new_url);
                 } catch (\Exception $e) {
                     Log::debug($e);

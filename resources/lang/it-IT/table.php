@@ -11,5 +11,6 @@ return [
     'load_error_body' => 'Il server ha restituito un errore. Per favore riprova tra un attimo. Se questo continua ad accadere, controlla il registro dell\' applicazione.',
     'load_error_http_status' => 'Stato HTTP',
     'load_error_session_expired' => 'La tua sessione è scaduta. Ricarico la pagina.',
+    'shift_select' => 'Cliccare su una casella di controllo e poi, tenendo premuto <code>MAIUSC</code>, fare clic su un\'altra casella di controllo nella tabella per selezionare/deselezionare un intervallo.'
 
 ];

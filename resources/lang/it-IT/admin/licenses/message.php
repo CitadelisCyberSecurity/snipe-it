@@ -43,8 +43,8 @@ return [
     ],
 
     'delete_with_checkin' => [
-        'bulk_success' => ':count licenses were deleted successfully after checking in :seats seats.',
-        'partial_success' => ':count licenses were deleted successfully after checking in :seats seats. See additional information below.',
+        'bulk_success' => ':count licenze eliminate con successo dopo la restituzione di :seats slot.',
+        'partial_success' => ':count licenze eliminate con successo dopo la restituzione di :seats slot. Seguono ulteriori informazioni.',
     ],
 
     'checkout' => [
@@ -60,6 +60,10 @@ return [
         'error' => 'C\'è stato un problema nella restituzione della licenza. Riprova.',
         'not_reassignable' => 'Licenza già utilizzata',
         'success' => 'La licenza è stata restituita con successo',
+    ],
+
+    'import' => [
+        'no_free_seats' => 'La licenza ":license" non ha slot liberi. A ":target" non è stato assegnato nessun slot licenza.',
     ],
 
 ];

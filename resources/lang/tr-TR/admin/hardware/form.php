@@ -51,7 +51,7 @@ return [
     'tag' => 'Demirbaş Etiketi',
     'update' => 'Demirbaş Güncelle',
     'warranty' => 'Garanti',
-    'warranty_months' => 'Warranty Months',
+    'warranty_months' => '',
     'warranty_expires' => 'Garanti Süresi Sona Erdi',
     'years' => 'yıl',
     'asset_location' => 'Varlık konumunu güncelle',

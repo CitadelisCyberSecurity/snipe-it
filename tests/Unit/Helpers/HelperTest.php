@@ -10,14 +10,6 @@ use Tests\TestCase;
 
 class HelperTest extends TestCase
 {
-    /**
-     * Regression: `<x-form.row type="datetimepicker">` on transient checkout
-     * forms (hardware/checkout, bulk-checkout, kits/checkout, etc.) passes
-     * `$item = null` down to `Helper::checkIfRequired`. Without the null guard
-     * this hit `null::rules()` and threw "Class name must be a valid object or
-     * a string", 500ing the whole page. When there's no bound model to
-     * introspect, we treat the field as not required.
-     */
     public function test_check_if_required_returns_false_when_class_is_null()
     {
         $this->assertFalse(Helper::checkIfRequired(null, 'name'));
@@ -341,6 +333,106 @@ class HelperTest extends TestCase
         $this->assertNull(Helper::sameOriginUrl('//evil.example.com/steal-session'));
     }
 
+    #[\PHPUnit\Framework\Attributes\DataProvider('schemeOnlyBypassProvider')]
+    public function test_same_origin_url_rejects_scheme_without_authority(string $input): void
+    {
+        $this->assertNull(Helper::sameOriginUrl($input));
+    }
+
+    public static function schemeOnlyBypassProvider(): array
+    {
+        return [
+            'https scheme only' => ['https:evil.example.com'],
+            'http scheme only' => ['http:evil.example.com'],
+            'https with path suffix' => ['https:evil.example.com/path?q=1'],
+            'https with port and path' => ['https:evil.example.com:8080/admin'],
+            'http userinfo without authority' => ['http:@evil.example.com'],
+            'https single slash prefix' => ['https:/evil.example.com'],
+            'bare scheme with colon' => ['http:'],
+            'ipv4 loopback via scheme-only' => ['http:127.0.0.1:9931/bg'],
+        ];
+    }
+
+    public function test_same_origin_url_rejects_backslash_userinfo_parser_differential(): void
+    {
+        config(['app.url' => 'https://app.example.com']);
+
+        $this->assertNull(Helper::sameOriginUrl('https://evil.example.com\\@app.example.com/'));
+        $this->assertNull(Helper::sameOriginUrl('https://evil.example.com\\\\@app.example.com/'));
+    }
+
+    public function test_same_origin_url_rejects_userinfo_in_authority(): void
+    {
+        // Same-origin redirects never legitimately carry credentials. Any
+        // input where parse_url extracted userinfo is rejected outright,
+        // closing further parser-differential variants that hide the real
+        // authority behind an `@`.
+        config(['app.url' => 'https://app.example.com']);
+
+        $this->assertNull(Helper::sameOriginUrl('https://user@app.example.com/'));
+        $this->assertNull(Helper::sameOriginUrl('https://user:pass@app.example.com/'));
+        $this->assertNull(Helper::sameOriginUrl('https://user:pass@evil.example.com/'));
+    }
+
+    public function test_safe_intended_returns_stored_url_when_it_passes_the_origin_guard(): void
+    {
+        config(['app.url' => 'https://app.example.com']);
+        Session::put('url.intended', 'https://app.example.com/foo?bar=1');
+
+        $response = Helper::safeIntended('/fallback');
+
+        $this->assertSame(302, $response->getStatusCode());
+        $this->assertSame('https://app.example.com/foo?bar=1', $response->headers->get('Location'));
+    }
+
+    public function test_safe_intended_falls_back_to_default_when_stored_url_is_offsite(): void
+    {
+        // A writer that skipped Helper::sameOriginUrl (or a future
+        // parser-differential bypass at the write) leaves a poisoned
+        // url.intended in session. The read-side guard must fall back to
+        // the caller-supplied default rather than emit the poisoned URL.
+        config(['app.url' => 'https://app.example.com']);
+        Session::put('url.intended', 'https://evil.example.com/steal-session');
+
+        $response = Helper::safeIntended('/fallback');
+
+        $this->assertStringEndsWith('/fallback', $response->headers->get('Location'));
+    }
+
+    public function test_safe_intended_falls_back_to_default_when_stored_url_uses_backslash_bypass(): void
+    {
+        // GHSA-579m-9gf4-28jp regression: even if a writer accepted the
+        // backslash-userinfo payload against an older Helper::sameOriginUrl,
+        // the emission-side guard must reject it.
+        config(['app.url' => 'https://app.example.com']);
+        Session::put('url.intended', 'https://evil.example.com\\@app.example.com/');
+
+        $response = Helper::safeIntended('/fallback');
+
+        $this->assertStringEndsWith('/fallback', $response->headers->get('Location'));
+    }
+
+    public function test_safe_intended_falls_back_to_default_when_session_key_is_absent(): void
+    {
+        Session::forget('url.intended');
+
+        $response = Helper::safeIntended('/fallback');
+
+        $this->assertStringEndsWith('/fallback', $response->headers->get('Location'));
+    }
+
+    public function test_safe_intended_pulls_the_session_key(): void
+    {
+        // pull() semantics: after the redirect is built, url.intended must
+        // be gone so subsequent requests don't re-consume the same target.
+        config(['app.url' => 'https://app.example.com']);
+        Session::put('url.intended', 'https://app.example.com/foo');
+
+        Helper::safeIntended('/fallback');
+
+        $this->assertFalse(Session::has('url.intended'));
+    }
+
     /**
      * FD-56673 regression coverage: customFieldFormValue collapses the
      * gate + decrypt + default fallback that every branch of
@@ -432,5 +524,80 @@ class HelperTest extends TestCase
             strtoupper(trans('admin/custom_fields/general.encrypted')),
             Helper::customFieldFormValue($field, null, $model)
         );
+    }
+
+    /**
+     * Regression coverage for historic CSV-imported values on DATE / DATETIME
+     * custom fields. AssetImporter shoves raw CSV strings straight into
+     * custom-field columns, so a column can legitimately hold `M/D/YYYY`
+     * or similar. The view path already normalizes on read via
+     * AssetsTransformer + getFormattedDateObject; this helper does the
+     * matching normalization for the edit form so the datepicker widget
+     * gets a value in its expected `Y-m-d` / `Y-m-d H:i:s` shape and
+     * doesn't blank or mangle it on hydrate.
+     */
+    public function test_custom_field_form_value_normalizes_us_formatted_date_to_ymd(): void
+    {
+        \App\Models\CustomField::factory()->create([
+            'name' => 'Warranty Start Date',
+            'format' => 'DATE',
+            'element' => 'date_picker',
+        ]);
+        $field = \App\Models\CustomField::where('name', 'Warranty Start Date')->first();
+        $asset = new \App\Models\Asset;
+        $asset->{$field->db_column} = '3/28/2025';
+        $model = \App\Models\AssetModel::factory()->make();
+
+        $this->assertSame('2025-03-28', Helper::customFieldFormValue($field, $asset, $model));
+    }
+
+    public function test_custom_field_form_value_normalizes_us_formatted_datetime_to_ymd_his(): void
+    {
+        \App\Models\CustomField::factory()->create([
+            'name' => 'Last Serviced',
+            'format' => 'DATETIME',
+            'element' => 'datetime_picker',
+        ]);
+        $field = \App\Models\CustomField::where('name', 'Last Serviced')->first();
+        $asset = new \App\Models\Asset;
+        $asset->{$field->db_column} = '3/28/2025 09:15:00';
+        $model = \App\Models\AssetModel::factory()->make();
+
+        $this->assertSame('2025-03-28 09:15:00', Helper::customFieldFormValue($field, $asset, $model));
+    }
+
+    public function test_custom_field_form_value_leaves_already_normalized_date_untouched(): void
+    {
+        \App\Models\CustomField::factory()->create([
+            'name' => 'Audited',
+            'format' => 'DATE',
+            'element' => 'date_picker',
+        ]);
+        $field = \App\Models\CustomField::where('name', 'Audited')->first();
+        $asset = new \App\Models\Asset;
+        $asset->{$field->db_column} = '2026-08-20';
+        $model = \App\Models\AssetModel::factory()->make();
+
+        $this->assertSame('2026-08-20', Helper::customFieldFormValue($field, $asset, $model));
+    }
+
+    public function test_custom_field_form_value_leaves_unparseable_date_value_untouched(): void
+    {
+        // Free-text values that were stored in a DATE-format column
+        // (`2028 1st Qtr` and similar) can't be Carbon-parsed. The
+        // helper falls through with the raw string so the user sees
+        // and can correct it, instead of masking it with a fake
+        // "normalized" date.
+        \App\Models\CustomField::factory()->create([
+            'name' => 'End of Lease Date',
+            'format' => 'DATE',
+            'element' => 'date_picker',
+        ]);
+        $field = \App\Models\CustomField::where('name', 'End of Lease Date')->first();
+        $asset = new \App\Models\Asset;
+        $asset->{$field->db_column} = '2028 1st Qtr';
+        $model = \App\Models\AssetModel::factory()->make();
+
+        $this->assertSame('2028 1st Qtr', Helper::customFieldFormValue($field, $asset, $model));
     }
 }

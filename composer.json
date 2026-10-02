@@ -35,7 +35,9 @@
     "enshrined/svg-sanitize": "^0.22.0",
     "erusev/parsedown": "^1.7",
     "fakerphp/faker": "^1.24",
+    "firebase/php-jwt": "^6.4|^7.0",
     "guzzlehttp/guzzle": "^7.0.1",
+    "innoge/laravel-msgraph-mail": "^2.0",
     "intervention/image": "^2.5",
     "javiereguiluz/easyslugger": "^1.0",
     "laravel-notification-channels/google-chat": "^3.0",
@@ -91,6 +93,9 @@
     "phpmd/phpmd": "^2.15",
     "phpunit/phpunit": "^11.0",
     "squizlabs/php_codesniffer": "^3.5"
+  },
+  "conflict": {
+    "laravel/prompts": "<0.3.19"
   },
   "extra": {
     "laravel": {

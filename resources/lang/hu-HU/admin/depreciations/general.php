@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Eszköz értékcsökkenések',
     'create' => 'Értékcsökkenés létrehozása',
     'depreciation_name' => 'Értékcsökkenés neve',
-    'depreciation_min' => 'Az értékcsökkenés alsó értéke',
     'number_of_months' => 'Hónapok száma',
     'update' => 'Értékcsökkenés frissítése',
     'depreciation_min' => 'Minimum érték értékcsökkenés után',

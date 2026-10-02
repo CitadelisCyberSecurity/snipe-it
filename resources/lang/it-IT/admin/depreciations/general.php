@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Deprezzamento Beni',
     'create' => 'Crea un deprezzamento',
     'depreciation_name' => 'Nome del deprezzamento',
-    'depreciation_min' => 'Valore Finale del deprezzamento',
     'number_of_months' => 'Numero di Mesi',
     'update' => 'Aggiorna il deprezzamento',
     'depreciation_min' => 'Valore minimo dopo il deprezzamento',

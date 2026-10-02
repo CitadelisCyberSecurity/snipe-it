@@ -58,6 +58,7 @@ class ReportsController extends Controller
         // then they shouldn't be able to see the activity log for that item or target,
         // but if they have the general activity view permission,
         // then they can see all activity logs regardless of the item or target.
+        
         if ((! Gate::allows('activity.view')) && (($targetClass && $request->filled('target_id')) || ($itemClass && $request->filled('item_id')))) {
 
             if ($targetClass && $request->filled('target_id')) {

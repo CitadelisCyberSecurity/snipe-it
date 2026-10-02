@@ -50,8 +50,8 @@ return [
         ],
 
         'delete_with_checkin' => [
-            'label' => 'Check in seats and delete',
-            'log_msg' => 'Checked in via bulk delete-with-checkin in license index',
+            'label' => 'Paimti vietas ir ištrinti',
+            'log_msg' => 'Paimta naudojant masinio ištrynimo su paėmimu funkciją licencijų sąraše',
         ],
     ],
 

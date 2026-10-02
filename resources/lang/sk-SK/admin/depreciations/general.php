@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Odpisy majetku',
     'create' => 'Vytovirť typ odpisu',
     'depreciation_name' => 'Názov odpisovania',
-    'depreciation_min' => 'Minimálna hodnota odpisu',
     'number_of_months' => 'Počet mesiacov',
     'update' => 'Upraviť odpisovanie',
     'depreciation_min' => 'Minimálna hodnota po odpísaní',

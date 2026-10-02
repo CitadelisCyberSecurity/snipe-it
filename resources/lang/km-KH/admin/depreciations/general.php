@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'ការរំលោះទ្រព្យសកម្ម',
     'create' => 'បង្កើតការរំលោះ',
     'depreciation_name' => 'ឈ្មោះរំលោះ',
-    'depreciation_min' => 'តម្លៃជាន់នៃរំលោះ',
     'number_of_months' => 'ចំនួនខែ',
     'update' => 'ធ្វើបច្ចុប្បន្នភាពការរំលោះ',
     'depreciation_min' => 'តម្លៃអប្បបរមាបន្ទាប់ពីការរំលោះ',

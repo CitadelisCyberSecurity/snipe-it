@@ -62,4 +62,8 @@ return [
         'success' => 'A licença foi registrada com sucesso.',
     ],
 
+    'import' => [
+        'no_free_seats' => 'A licença ":license" não possui assentos livres. ":target" não foi atribuído a um assento.',
+    ],
+
 ];

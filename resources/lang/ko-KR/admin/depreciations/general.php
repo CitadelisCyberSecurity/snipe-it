@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => '자산 감가 상각',
     'create' => '감가 상각 생성',
     'depreciation_name' => '감가 상각 명',
-    'depreciation_min' => '감가상각 최저 금액',
     'number_of_months' => '개월 수',
     'update' => '감가 상각 갱신',
     'depreciation_min' => '감가상각 완료 후 최소 가치',

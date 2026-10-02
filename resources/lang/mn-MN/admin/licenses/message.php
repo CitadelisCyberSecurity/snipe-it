@@ -62,4 +62,8 @@ return [
         'success' => 'Лицензийг амжилттай шалгасан байна',
     ],
 
+    'import' => [
+        'no_free_seats' => 'License ":license" has no free seats. ":target" was not assigned to a seat.',
+    ],
+
 ];

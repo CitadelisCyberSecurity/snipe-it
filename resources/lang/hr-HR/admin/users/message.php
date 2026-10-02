@@ -2,8 +2,8 @@
 
 return [
 
-    'accepted' => 'You have successfully accepted this item.',
-    'declined' => 'You have successfully declined this item.',
+    'accepted' => 'Zaduženje opreme je prihvaćeno.',
+    'declined' => 'Zaduženje opreme je odbijeno.',
     'accept_signature_write_failed' => 'Your acceptance signature could not be saved to storage. Acceptance was not recorded. Please contact your administrator.',
     'accept_pdf_write_failed' => 'The acceptance PDF could not be saved to storage. Acceptance was not recorded. Please contact your administrator.',
     'bulk_manager_warn' => 'Vaši su korisnici uspješno ažurirani, ali vaš unos upravitelja nije spremljen jer je upravitelj koji ste odabrali također bio na popisu korisnika koji se uređuje, a korisnici možda nisu vlastiti upravitelj. Ponovno odaberite svoje korisnike, isključujući upravitelja.',
@@ -44,7 +44,7 @@ return [
         'unsuspend' => 'Korisnik je uspješno suspendiran.',
         'restored' => 'Korisnik je uspješno obnovljen.',
         'import' => 'Korisnici su uspješno uvezeni.',
-        'acceptance_reminder_sent' => 'Acceptance reminder sent for :count pending item.|Acceptance reminder sent for :count pending items.',
+        'acceptance_reminder_sent' => 'Podsjetnik za prihvaćanje poslan za :count stavku na čekanju. | Podsjetnik za prihvaćanje poslan za :count stavki na čekanju.',
     ],
 
     'error' => [

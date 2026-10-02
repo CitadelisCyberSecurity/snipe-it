@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Laitteiden poistot',
     'create' => 'Luo arvonalentumisia',
     'depreciation_name' => 'Poiston nimi',
-    'depreciation_min' => 'Vähittäispoistoarvo',
     'number_of_months' => 'Kuukausien lukumäärä',
     'update' => 'Päivitä poistot',
     'depreciation_min' => 'Minimiarvo poistojen jälkeen',

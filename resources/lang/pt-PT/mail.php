@@ -93,7 +93,7 @@ return [
     'read_the_terms' => 'Por favor, leia os termos de uso abaixo.',
     'read_the_terms_and_click' => 'Please read the terms of use below, and click on the link at the bottom to confirm that you read and agree to the terms of use, and have received the item.',
     'click_here_to_review_terms_and_accept_item' => 'Click here to review the terms of use and accept the item|Click here to review the terms of use and accept the items',
-    'requested' => 'Solicitado',
+    'requested' => 'Requisitado',
     'reset_link' => 'Seu Link de redefinição da senha',
     'reset_password' => 'Clique aqui para redefinir a sua password:',
     'rights_reserved' => 'Todos os direitos reservados.',

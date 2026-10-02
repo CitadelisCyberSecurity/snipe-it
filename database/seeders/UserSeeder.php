@@ -26,7 +26,7 @@ class UserSeeder extends Seeder
         User::truncate();
 
         // Truncate the company_user pivot too. Truncating users alone leaves
-        // orphaned pivot rows referencing the old user_ids; on the next reseed
+        // orphaned pivot rows referencing the old user_ids. On the next reseed
         // AUTO_INCREMENT hands out those same ids again, and any attempt to
         // reattach a re-created user to the same company hits the
         // (company_id, user_id) unique constraint.
@@ -36,13 +36,13 @@ class UserSeeder extends Seeder
             $this->call(CompanySeeder::class);
         }
 
-        $companyIds = Company::all()->pluck('id');
+        $companyIds = Company::pluck('id');
 
         if (! Department::count()) {
             $this->call(DepartmentSeeder::class);
         }
 
-        $departmentIds = Department::all()->pluck('id');
+        $departmentIds = Department::pluck('id');
 
         // Named admins get multiple companies. They manage assets across several organisations.
         foreach (['firstAdmin', 'snipeAdmin', 'testAdmin'] as $state) {
@@ -163,14 +163,24 @@ class UserSeeder extends Seeder
         }
 
         $src = public_path('/img/demo/avatars/');
-        $dst = 'avatars'.'/';
-        $del_files = Storage::files($dst);
+        $dst = 'avatars/';
 
-        foreach ($del_files as $del_file) { // iterate files
-            $file_to_delete = str_replace($src, '', $del_file);
-            Log::debug('Deleting: '.$file_to_delete);
+        // Wipe every item file in the public uploads dir.
+        $disk = Storage::disk('public');
+        foreach ($disk->files(rtrim($dst, '/')) as $del_file) {
+            Log::debug('Deleting: ' . $del_file);
             try {
-                Storage::disk('public')->delete($dst.$del_file);
+                $disk->delete($del_file);
+            } catch (\Exception $e) {
+                Log::debug($e);
+            }
+        }
+
+        // Attached files on the private (default) disk.
+        foreach (Storage::files('private_uploads/users') as $del_file) {
+            Log::debug('Deleting: ' . $del_file);
+            try {
+                Storage::delete($del_file);
             } catch (\Exception $e) {
                 Log::debug($e);
             }

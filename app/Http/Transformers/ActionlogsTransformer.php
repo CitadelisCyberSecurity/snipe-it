@@ -10,6 +10,7 @@ use App\Models\Asset;
 use App\Models\AssetModel;
 use App\Models\Company;
 use App\Models\CustomField;
+use App\Models\License;
 use App\Models\Location;
 use App\Models\Setting;
 use App\Models\Statuslabel;
@@ -158,6 +159,39 @@ class ActionlogsTransformer
 
             }
             $clean_meta = $this->changedInfo($clean_meta);
+
+            // A license serial is the product key. When the current
+            // user does not hold licenses.keys / create / edit, the
+            // resource / index / export sinks all mask the raw key.
+            // The old / new pair in log_meta['serial'] on a license
+            // edit would otherwise leak both the previous and new
+            // key through the History tab and the activity report.
+            if ($actionlog->item instanceof License
+                && ! Gate::allows('viewKeys', $actionlog->item)
+                && isset($clean_meta['serial'])
+                && is_array($clean_meta['serial'])
+            ) {
+                if (isset($clean_meta['serial']['old'])) {
+                    $clean_meta['serial']['old'] = License::PRODUCT_KEY_MASK;
+                }
+                if (isset($clean_meta['serial']['new'])) {
+                    $clean_meta['serial']['new'] = License::PRODUCT_KEY_MASK;
+                }
+            }
+        }
+
+        // A license serial is the product key. When the current user
+        // does not hold licenses.keys / create / edit, mask it here the
+        // same way LicensesTransformer masks product_key. Without this
+        // the /api/v1/licenses/{id}/history and /api/v1/reports/activity
+        // sinks leak the raw key through actionlog rows.
+        $itemSerial = null;
+        if ($actionlog->item && $actionlog->item->serial) {
+            if ($actionlog->item instanceof License && ! Gate::allows('viewKeys', $actionlog->item)) {
+                $itemSerial = License::PRODUCT_KEY_MASK;
+            } else {
+                $itemSerial = e($actionlog->item->serial);
+            }
         }
 
         $array = [
@@ -177,7 +211,13 @@ class ActionlogsTransformer
                 'id' => (int) $actionlog->item->id,
                 'name' => e($actionlog->item->display_name) ?? null,
                 'type' => e($actionlog->itemType()),
-                'serial' => e($actionlog->item->serial) ? e($actionlog->item->serial) : null,
+                'serial' => $itemSerial,
+                // Per-row view flag consumed by polymorphicItemFormatter
+                // to render the name as plain text when the caller
+                // cannot reach the show controller for this record.
+                // Without it, clicking through a scoped viewer's
+                // recent-activity row 403s on the target page.
+                'viewable' => Gate::allows('view', $actionlog->item),
             ] : null,
             'location' => ($actionlog->location) ? [
                 'id' => (int) $actionlog->location->id,
@@ -194,17 +234,26 @@ class ActionlogsTransformer
                 'name' => e($actionlog->adminuser->display_name) ?? null,
                 'first_name' => e($actionlog->adminuser->first_name),
                 'last_name' => e($actionlog->adminuser->last_name),
+                // Per-row view flag consumed by
+                // genericColumnObjLinkFormatter to render the actor
+                // as plain text when the caller cannot reach the
+                // user show page. Same reasoning as item.viewable /
+                // target.viewable above.
+                'viewable' => Gate::allows('view', $actionlog->adminuser),
             ] : null,
             'created_by' => ($actionlog->adminuser) ? [
                 'id' => (int) $actionlog->adminuser->id,
                 'name' => e($actionlog->adminuser->display_name),
                 'first_name' => e($actionlog->adminuser->first_name),
                 'last_name' => e($actionlog->adminuser->last_name),
+                'viewable' => Gate::allows('view', $actionlog->adminuser),
             ] : null,
             'target' => ($actionlog->target) ? [
                 'id' => (int) $actionlog->target->id,
                 'name' => e($actionlog->target->display_name) ?? null,
                 'type' => e($actionlog->targetType()),
+                // See item.viewable above for shape reasoning.
+                'viewable' => Gate::allows('view', $actionlog->target),
             ] : null,
             'quantity' => $this->getQuantity($actionlog),
             // action_logs.order_number was replaced by action_logs.order_item_id
@@ -217,7 +266,7 @@ class ActionlogsTransformer
                 : null,
             'note' => ($actionlog->note) ? Helper::parseEscapedMarkedownInline($actionlog->note) : null,
             'signature_file' => (($actionlog->accept_signature) && Storage::exists('private_uploads/signatures/'.$actionlog->accept_signature)) ? route('log.signature.view', ['filename' => $actionlog->accept_signature]) : null,
-            'log_meta' => ((isset($clean_meta)) && (is_array($clean_meta))) ? $clean_meta : null,
+            'log_meta' => $clean_meta ?? null,
             'remote_ip' => e($actionlog->remote_ip) ?? null,
             'user_agent' => e($actionlog->user_agent) ?? null,
             'action_source' => ($actionlog->action_source) ?? null,
@@ -363,6 +412,33 @@ class ActionlogsTransformer
             $clean_meta['companies']['new'] = $resolveCompanyNames($clean_meta['companies']['new']);
             $clean_meta[trans('general.companies')] = $clean_meta['companies'];
             unset($clean_meta['companies']);
+        }
+        if (array_key_exists('groups', $clean_meta)) {
+            // groups meta is a list of {id, name} snapshots taken at
+            // write time. The name is the load-bearing bit: it
+            // preserves what the group was called at the moment the
+            // change happened, so a later rename or delete doesn't
+            // rewrite history. clean_field() ran e(json_encode()) on
+            // the arrays, so we have to htmlspecialchars_decode the
+            // JSON string before json_decode can read the escaped
+            // quotes back. The companies handler above sidesteps this
+            // because its ids are plain integers with no quoted
+            // strings inside the JSON.
+            $renderGroupSnapshot = function ($rawValue): string {
+                $entries = json_decode(htmlspecialchars_decode((string) $rawValue, ENT_QUOTES), true);
+                if (empty($entries) || ! is_array($entries)) {
+                    return trans('general.unassigned');
+                }
+
+                return collect($entries)
+                    ->map(fn ($entry) => is_array($entry) && isset($entry['name']) ? e($entry['name']) : trans('general.deleted'))
+                    ->join(', ');
+            };
+
+            $clean_meta['groups']['old'] = $renderGroupSnapshot($clean_meta['groups']['old']);
+            $clean_meta['groups']['new'] = $renderGroupSnapshot($clean_meta['groups']['new']);
+            $clean_meta[trans('general.groups')] = $clean_meta['groups'];
+            unset($clean_meta['groups']);
         }
         if (array_key_exists('supplier_id', $clean_meta)) {
 

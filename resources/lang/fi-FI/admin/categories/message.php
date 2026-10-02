@@ -25,4 +25,11 @@ return [
         'partial_success' => 'Kategoria poistettiin onnistuneesti. Katso lisätietoja alapuolelta. | :count kategoriaa poistettiin onnistuneesti. Katso lisätietoja alapuolelta.',
     ],
 
+    'bulkedit' => [
+        'warn' => 'You are about to edit the properties of the following category:|You are about to edit the properties of the following :count categories:',
+        'no_selection' => 'You must select at least one category to edit.',
+        'no_changes' => 'Mitään kentistä ei ollut muutettu, joten mitään ei päivitetty.',
+        'success' => 'Category successfully updated.|:count categories successfully updated.',
+    ],
+
 ];

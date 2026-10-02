@@ -25,4 +25,11 @@ return [
         'partial_success' => 'หมวดหมู่ถูกลบแล้ว ดูข้อมูลเพิ่มเติมด้านล่าง | :count หมวดหมู่ได้ถูกลบแล้ว ดูข้อมูลเพิ่มเติมด้านล่าง',
     ],
 
+    'bulkedit' => [
+        'warn' => 'You are about to edit the properties of the following category:|You are about to edit the properties of the following :count categories:',
+        'no_selection' => 'You must select at least one category to edit.',
+        'no_changes' => 'ไม่มีการเปลี่ยนแปลงเขตข้อมูลดังนั้นไม่มีอะไรที่ได้รับการปรับปรุง',
+        'success' => 'Category successfully updated.|:count categories successfully updated.',
+    ],
+
 ];

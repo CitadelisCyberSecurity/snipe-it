@@ -25,4 +25,11 @@ return [
         'partial_success' => 'Категорията е изтрита. Вижте повече информация по-долу. | :count категорий бяха изтрити успешно. Вижте повече информация по-долу.',
     ],
 
+    'bulkedit' => [
+        'warn' => 'You are about to edit the properties of the following category:|You are about to edit the properties of the following :count categories:',
+        'no_selection' => 'You must select at least one category to edit.',
+        'no_changes' => 'Няма полета, който да са се променили, така че нищо не е осъвременено.',
+        'success' => 'Category successfully updated.|:count categories successfully updated.',
+    ],
+
 ];

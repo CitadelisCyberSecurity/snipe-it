@@ -17,7 +17,7 @@ return [
     'last_login' => 'Letzte Anmeldung',
     'last_name' => 'Familienname',
     'location' => 'Ort',
-    'lock_passwords' => 'Some user details cannot be changed on the demo. Try creating a new user instead.',
+    'lock_passwords' => 'Einige Benutzerdetails können auf der Demo nicht geändert werden. Versuchen Sie stattdessen einen neuen Benutzer zu erstellen.',
     'manager' => 'Manager',
     'managed_locations' => 'Verwaltete Standorte',
     'managed_users' => 'Verwaltete Benutzer',

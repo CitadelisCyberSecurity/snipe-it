@@ -4,7 +4,7 @@ return [
 
     'does_not_exist' => 'Tokios kategorijos nėra.',
     'assoc_models' => 'Ši kategorija šiuo metu yra susieta bent su vienu modeliu ir negali būti panaikinta. Atnaujinkite savo modelius, kad nebebūtų sąsajos su šia kategorija, ir bandykite dar kartą. ',
-    'assoc_items' => 'Ši kategorija šiuo metu yra susieta bent su vienu : asset_type ir negali būti panaikinta. Atnaujinkite savo :asset_type, kad nebebūtų sąsajos su šia kategorija, ir bandykite dar kartą. ',
+    'assoc_items' => 'Ši kategorija šiuo metu yra susieta bent su vienu :asset_type ir negali būti panaikinta. Atnaujinkite savo :asset_type, kad nebebūtų sąsajos su šia kategorija, ir bandykite dar kartą. ',
 
     'create' => [
         'error' => 'Kategorijos sukurti nepavyko, badykite dar kartą.',
@@ -23,6 +23,13 @@ return [
         'success' => 'Kategorija sėkmingai ištrinta.',
         'bulk_success' => 'Kategorija sėkmingai ištrinta.|Kategorijos (:count) sėkmingai ištrintos.',
         'partial_success' => 'Kategorija sėkmingai ištrinta. Daugiau informacijos rasite žemiau. | Kategorijos (:count) buvo sėkmingai ištrintos. Daugiau informacijos rasite žemiau.',
+    ],
+
+    'bulkedit' => [
+        'warn' => 'You are about to edit the properties of the following category:|You are about to edit the properties of the following :count categories:',
+        'no_selection' => 'You must select at least one category to edit.',
+        'no_changes' => 'Jokie laukai nebuvo pakeisti, todėl niekas nebuvo atnaujinta.',
+        'success' => 'Category successfully updated.|:count categories successfully updated.',
     ],
 
 ];
