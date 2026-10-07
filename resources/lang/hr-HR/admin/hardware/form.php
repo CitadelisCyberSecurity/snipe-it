@@ -45,7 +45,7 @@ return [
     'redirect_to_bulk_checkout' => 'Return to Bulk Checkout',
     'select_statustype' => 'Odaberite vrstu statusa',
     'serial' => 'Serijski',
-    'serial_required' => 'Asset :number requires a serial number',
+    'serial_required' => 'Oprema :number zahtijeva serijski broj',
     'serial_required_post_model_update' => ':asset_model have been updated to require a serial number. Please add a serial number for this asset.',
     'status' => 'Status',
     'tag' => 'Oznaka imovine',

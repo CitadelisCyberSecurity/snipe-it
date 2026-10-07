@@ -83,12 +83,14 @@ class LocationsTransformer
             ];
 
             $permissions_array['available_actions'] = [
-                'update' => (Gate::allows('update', Location::class) && ($location->deleted_at == '')),
+                'view' => Gate::allows('view', $location),
+                'update' => (Gate::allows('update', $location) && ($location->deleted_at == '')),
                 'delete' => $location->isDeletable(),
                 'bulk_selectable' => [
+                    'edit' => (Gate::allows('update', $location) && ($location->deleted_at == '')),
                     'delete' => $location->isDeletable(),
                 ],
-                'clone' => (Gate::allows('create', Location::class) && ($location->deleted_at == '')),
+                'clone' => (Gate::allows('clone', $location) && ($location->deleted_at == '')),
                 'restore' => (Gate::allows('create', Location::class) && ($location->deleted_at != '')),
             ];
 
@@ -131,7 +133,7 @@ class LocationsTransformer
 
         $permissions_array['available_actions'] = [
             'checkout' => false,
-            'checkin' => Gate::allows('checkin', Accessory::class),
+            'checkin' => Gate::allows('checkin', $accessory_checkout->accessory),
         ];
 
         $array += $permissions_array;

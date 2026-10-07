@@ -25,4 +25,11 @@ return [
         'partial_success' => 'Kategoria usunięta z powodzeniem. Sprawdź szczegółowe informacje poniżej. | :count kategorie zostały usunięte z powodzeniem. Sprawdź szczegółowe informacje poniżej.',
     ],
 
+    'bulkedit' => [
+        'warn' => 'You are about to edit the properties of the following category:|You are about to edit the properties of the following :count categories:',
+        'no_selection' => 'You must select at least one category to edit.',
+        'no_changes' => 'Żadne pole nie zostało zmodyfikowane, więc nic nie zostało zaktualizowane.',
+        'success' => 'Category successfully updated.|:count categories successfully updated.',
+    ],
+
 ];

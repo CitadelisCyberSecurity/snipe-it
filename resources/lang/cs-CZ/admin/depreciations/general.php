@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Amortizace majetku',
     'create' => 'Vytvořit amortizaci',
     'depreciation_name' => 'Jméno amortizace',
-    'depreciation_min' => 'Minimální hodnota odpisu',
     'number_of_months' => 'Počet měsíců',
     'update' => 'Aktualizovat amortizaci',
     'depreciation_min' => 'Minimální hodnota po odpisech',

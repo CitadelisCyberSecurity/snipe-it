@@ -62,4 +62,8 @@ return [
         'success' => '许可证已经成功归还。',
     ],
 
+    'import' => [
+        'no_free_seats' => 'License ":license" has no free seats. ":target" was not assigned to a seat.',
+    ],
+
 ];

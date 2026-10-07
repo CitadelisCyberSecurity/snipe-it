@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'פחת נכסים',
     'create' => 'יצירת פחת',
     'depreciation_name' => 'שם פחת',
-    'depreciation_min' => 'Floor Value of Depreciation',
     'number_of_months' => 'מספר החודשים',
     'update' => 'עדכון פחת',
     'depreciation_min' => 'Minimum Value after Depreciation',

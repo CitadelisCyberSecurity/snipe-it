@@ -21,6 +21,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
@@ -169,6 +170,11 @@ class ComponentsController extends Controller
                 break;
             case 'remaining':
                 $components = $components->OrderRemaining($order);
+                break;
+            case 'order_number':
+                // components.order_number is `legacy_order_number` now
+                // so a raw orderBy on it is a SQL error.
+                $components = $components->OrderByOrderNumber($order);
                 break;
             case 'purchase_cost':
                 // See AccessoriesController for the rationale — these
@@ -337,7 +343,17 @@ class ComponentsController extends Controller
      */
     public function getAssets(Component $component, Request $request): array
     {
-        $this->authorize('view', Asset::class);
+        // Backs the default "Assigned" tab on the component show
+        // page. Anyone who can view this specific component reaches
+        // that page, so gating on view Asset alone (which
+        // components-only viewers don't have) 403s the tab that
+        // opens by default and breaks the show page for scoped
+        // viewers. Accept either view on this component OR view on
+        // Asset. Asset viewers who hit this endpoint directly still
+        // work as they did before this widen. The BelongsToMany
+        // below still applies Asset's CompanyableScope so
+        // FMCS-scoped viewers see only assets in their own company.
+        abort_unless(Gate::allows('view', $component) || Gate::allows('view', Asset::class), 403);
 
         $offset = request('offset', 0);
         $limit = $request->input('limit', 50);
@@ -541,5 +557,33 @@ class ComponentsController extends Controller
         $history = (clone $historyQuery)->skip($offset)->take($limit)->get();
 
         return response()->json((new ActionlogsTransformer)->transformActionlogs($history, $total), 200, ['Content-Type' => 'application/json;charset=utf8'], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * List components that are requestable AND reachable by the
+     * current caller (per FMCS + location scoping). Hydrates the
+     * components tab on /account/requestable. See the sibling
+     * AccessoriesController::requestable for design rationale.
+     */
+    public function requestable(Request $request): array
+    {
+        $query = Component::with('category', 'location', 'company', 'manufacturer', 'requests')
+            ->withCount('assets as components_assets_count')
+            ->Requestable();
+
+        if ($request->filled('search')) {
+            $query->TextSearch($request->input('search'));
+        }
+
+        $total = $query->count();
+        $offset = ($request->input('offset') > $total) ? $total : app('api_offset_value');
+        $limit = app('api_limit_value');
+
+        $order = $request->input('order') === 'asc' ? 'asc' : 'desc';
+        $sort = in_array($request->input('sort'), ['name', 'created_at'], true) ? $request->input('sort') : 'name';
+
+        $rows = $query->orderBy($sort, $order)->skip($offset)->take($limit)->get();
+
+        return (new ComponentsTransformer)->transformComponents($rows, $total);
     }
 }

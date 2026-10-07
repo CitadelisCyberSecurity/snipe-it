@@ -43,8 +43,8 @@ return [
     ],
 
     'delete_with_checkin' => [
-        'bulk_success' => ':count licenses were deleted successfully after checking in :seats seats.',
-        'partial_success' => ':count licenses were deleted successfully after checking in :seats seats. See additional information below.',
+        'bulk_success' => 'Licencijos (:count) buvo sėkmingai ištrintos po vietų (:seats) paėmimo.',
+        'partial_success' => 'Licencijos (:count) buvo sėkmingai ištrintos po vietų (:seats) paėmimo. Daugiau informacijos rasite žemiau.',
     ],
 
     'checkout' => [
@@ -60,6 +60,10 @@ return [
         'error' => 'Bandant paimti licenciją įvyko klaida. Bandykite dar kartą.',
         'not_reassignable' => 'Vieta buvo panaudota',
         'success' => 'Licencija sėkmingai paimta',
+    ],
+
+    'import' => [
+        'no_free_seats' => 'Licencija „:license“ neturi laisvų vietų. „:target“ nebuvo priskirtas jokiai vietai.',
     ],
 
 ];

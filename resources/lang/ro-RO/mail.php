@@ -93,7 +93,7 @@ return [
     'read_the_terms' => 'Citiți termenii de utilizare de mai jos.',
     'read_the_terms_and_click' => 'Please read the terms of use below, and click on the link at the bottom to confirm that you read and agree to the terms of use, and have received the item.',
     'click_here_to_review_terms_and_accept_item' => 'Click here to review the terms of use and accept the item|Click here to review the terms of use and accept the items',
-    'requested' => 'Cereri',
+    'requested' => 'Solicitat',
     'reset_link' => 'Parola Resetare parolă',
     'reset_password' => 'Faceți clic aici pentru a vă reseta parola:',
     'rights_reserved' => 'Toate drepturile rezervate.',

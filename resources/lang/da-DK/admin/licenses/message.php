@@ -62,4 +62,8 @@ return [
         'success' => 'Licensen blev tjekket ind med succes',
     ],
 
+    'import' => [
+        'no_free_seats' => 'License ":license" has no free seats. ":target" was not assigned to a seat.',
+    ],
+
 ];

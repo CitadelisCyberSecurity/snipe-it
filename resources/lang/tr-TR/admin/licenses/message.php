@@ -62,4 +62,8 @@ return [
         'success' => 'Lisans girişi yapıldı',
     ],
 
+    'import' => [
+        'no_free_seats' => 'License ":license" has no free seats. ":target" was not assigned to a seat.',
+    ],
+
 ];

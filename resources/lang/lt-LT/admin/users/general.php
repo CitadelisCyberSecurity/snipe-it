@@ -65,7 +65,7 @@ return [
     'floater_mode_warning_help' => 'Bendrų objektų režimas įjungtas. Naudotojas be įmonės priskyrimo galės matyti visus sistemos įrašus. Tik supernaudotojai gali išsaugoti naudotoją be įmonės, kai bendrų objektų režimas yra įjungtas.',
     'no_companies_assigned' => '(Nėra priskirtų įmonių)',
     'cannot_edit_privileged_user_companies' => 'Tik administratorius arba supernaudotojas gali keisti administratoriaus ar supernadotojo paskyros priskyrimus įmonėms.',
-    'cannot_manage_companies_without_membership' => 'Įjungtas pilnas kelių įmonių palaikymas kartu su bendrų visiems objektų režimu, todėl prieš tvarkydami kitų naudotojų įmonių priskyrimus, patys turite būti priskirti bent vienai įmonei.',
+    'cannot_manage_companies_without_membership' => 'Yra įjungtas visiškas kelių įmonių palaikymas kartu su bendrų visiems objektų režimu, todėl prieš tvarkydami kitų naudotojų įmonių priskyrimus, patys turite būti priskirti bent vienai įmonei.',
     'impersonate_user' => 'Prisijungti kaip :name',
     'impersonate_confirm_title' => 'Patvirtinti tapatybės prisiėmimą',
     'impersonate_confirm_body' => 'Jūs ketinate prisijungti kaip :name. Visi jūsų veiksmai bus užregistruoti taip, tarsi juos būtų atlikęs :name. Tęsti?',

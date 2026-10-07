@@ -25,4 +25,11 @@ return [
         'partial_success' => '類別已成功刪除。請見下方詳細資訊。 | :count 個類別已成功刪除。請見下方詳細資訊。',
     ],
 
+    'bulkedit' => [
+        'warn' => 'You are about to edit the properties of the following category:|You are about to edit the properties of the following :count categories:',
+        'no_selection' => 'You must select at least one category to edit.',
+        'no_changes' => '沒有欄位被更改，因此沒有更新任何內容。',
+        'success' => 'Category successfully updated.|:count categories successfully updated.',
+    ],
+
 ];

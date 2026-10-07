@@ -17,7 +17,7 @@ return [
     'name' => 'Nazwa Kategorii',
     'require_acceptance' => 'Wymaga od użytkowników, aby potwierdzić akceptację środków w tej kategorii.',
     'required_acceptance' => 'Do użytkownika zostanie wysłana wiadomość email z linkiem potwierdzającym akceptację przedmiotu.',
-    'global_signature_required_notice' => 'Podpisy użytkowników są obecnie wymagane globalnie poprzez ustawienia administracyjne, w związku z tym podpisy będą wymagane niezależnie od ustawień kategorii, jeśli środek jest przypisany do użytkownika (w przeciwieństwie do lokalizacji, itp).',
+    'global_signature_required_notice' => 'The global "Require Signature" setting is on. Signatures only apply when this category also has "Require acceptance" turned on: enable both to require users to sign when accepting items from this category.',
     'required_eula' => 'Do użytkownika zostanie wysłana wiadomość email z kopią EULA',
     'required_acceptance_component' => 'If the target asset is currently assigned to a user, that user will be emailed with a link to confirm acceptance of this component.',
     'required_eula_component' => 'If the target asset is currently assigned to a user, that user will be emailed a copy of the EULA.',

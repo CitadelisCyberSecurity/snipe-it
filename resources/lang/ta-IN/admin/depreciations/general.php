@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'சொத்து குறைபாடுகள்',
     'create' => 'தேய்மானத்தை உருவாக்குங்கள்',
     'depreciation_name' => 'தேய்மானி பெயர்',
-    'depreciation_min' => 'Floor Value of Depreciation',
     'number_of_months' => 'மாதங்களின் எண்ணிக்கை',
     'update' => 'தேய்மானம் புதுப்பிக்கவும்',
     'depreciation_min' => 'Minimum Value after Depreciation',

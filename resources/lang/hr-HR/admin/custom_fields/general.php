@@ -69,7 +69,7 @@ return [
     'display_checkin' => 'Display in checkin forms',
     'display_checkout' => 'Display in checkout forms',
     'display_audit' => 'Display in audit forms',
-    'section_security' => 'Security',
+    'section_security' => 'Sigurnost',
     'section_behavior' => 'Behavior',
     'section_visibility' => 'Visibility',
     'section_display_on_forms' => 'Display on Forms',

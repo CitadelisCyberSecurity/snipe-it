@@ -23,7 +23,7 @@ return [
     'add_maintenance' => 'Inventarieunderhåll',
     'append' => 'Lägg till',
     'new' => 'Ny',
-    'show_hide_info' => 'Show/Hide More Information',
+    'show_hide_info' => 'Visa/dölj mer information',
     'var' => [
         'clone' => 'Kopiera :item_type',
         'edit' => 'Redigera :item_type',

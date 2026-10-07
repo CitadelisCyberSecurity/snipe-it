@@ -11,5 +11,6 @@ return [
     'load_error_body' => 'Serveris grąžino klaidą. Prašome po kurio laiko pabandyti dar kartą. Jei ši problema kartojasi, patikrinkite programos žurnalą.',
     'load_error_http_status' => 'HTTP būsena',
     'load_error_session_expired' => 'Jūsų sesija baigėsi. Puslapis įkeliamas iš naujo.',
+    'shift_select' => 'Spustelėkite žymimąjį langelį ir laikydami nuspaudę klavišą <code>Shift</code>, spustelėkite kitą žymimąjį langelį lentelėje, kad pažymėtumėte arba atžymėtumėte diapazoną.'
 
 ];

@@ -93,7 +93,7 @@ return [
     'read_the_terms' => 'Aşağıdaki kullanım koşullarını okuyunuz.',
     'read_the_terms_and_click' => 'Lütfen aşağıdaki kullanım koşullarını okuyun ve okuduğunuzu, kabul ettiğinizi ve ürünü teslim aldığınızı onaylamak için alttaki bağlantıya tıklayın.',
     'click_here_to_review_terms_and_accept_item' => 'Kullanım şartlarını incelemek ve öğeyi kabul etmek için buraya tıklayın|Kullanım şartlarını incelemek ve öğeleri kabul etmek için buraya tıklayın',
-    'requested' => 'Talep Edilen',
+    'requested' => 'Talep edildi',
     'reset_link' => 'Parola Sıfırlama Bağlantısı',
     'reset_password' => 'Şifrenizi sıfırlamak için burayı tıklatın:',
     'rights_reserved' => 'Her türlü hakkı saklıdır.',

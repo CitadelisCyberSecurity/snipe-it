@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Aktiv Afskrivninger',
     'create' => 'Opret afskrivninger',
     'depreciation_name' => 'Afskrivningnavn',
-    'depreciation_min' => 'Bæreværdi for afskrivning',
     'number_of_months' => 'Antal måneder',
     'update' => 'Opdater Afskrivninger',
     'depreciation_min' => 'Minimumsværdi efter afskrivning',

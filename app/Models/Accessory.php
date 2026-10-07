@@ -14,6 +14,7 @@ use App\Presenters\AccessoryPresenter;
 use App\Presenters\Presentable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Query\Builder;
@@ -186,7 +187,7 @@ class Accessory extends SnipeModel
      * Scope query to only requestable accessories. Unlike assets, accessories
      * have no deployable status to check, so the flag is all we need here.
      */
-    public function scopeRequestableAccessories($query)
+    public function scopeRequestable($query)
     {
         return $query->where('accessories.requestable', '1');
     }
@@ -273,7 +274,7 @@ class Accessory extends SnipeModel
      * @since  v5.0.0
      * @see checkedout()
      */
-    public function lastCheckout()
+    public function lastCheckout(): HasMany
     {
         return $this->assetlog()->where('action_type', '=', 'checkout')->take(1);
     }
@@ -581,9 +582,9 @@ class Accessory extends SnipeModel
      */
     public function scopeOrderPercentRemaining($query, $order)
     {
-        $direction = strtolower($order) === 'asc' ? 'asc' : 'desc';
+        $order = strtolower($order) === 'asc' ? 'asc' : 'desc';
 
-        return $query->orderByRaw('CASE WHEN accessories.qty = 0 THEN 0 ELSE ((accessories.qty - checkouts_count) * 100.0 / accessories.qty) END '.$direction);
+        return $query->orderByRaw('CASE WHEN accessories.qty = 0 THEN 0 ELSE ((accessories.qty - checkouts_count) * 100.0 / accessories.qty) END '.$order);
     }
 
     /**
@@ -596,8 +597,8 @@ class Accessory extends SnipeModel
      */
     public function scopeOrderRemaining($query, $order)
     {
-        $direction = strtolower($order) === 'asc' ? 'asc' : 'desc';
+        $order = strtolower($order) === 'asc' ? 'asc' : 'desc';
 
-        return $query->orderByRaw('(accessories.qty - checkouts_count) ' . $direction);
+        return $query->orderByRaw('(accessories.qty - checkouts_count) '.$order);
     }
 }

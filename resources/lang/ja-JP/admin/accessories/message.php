@@ -20,8 +20,8 @@ return [
         'confirm' => 'この付属品を本当に削除してもよろしいですか？',
         'error' => 'この付属品を削除する際に問題が発生しました。もう一度、やり直して下さい。',
         'success' => 'この付属品は正常に削除されました。',
-        'bulk_success' => 'Accessory deleted successfully.|:count accessories were deleted successfully.',
-        'partial_success' => ':count accessory was deleted successfully, but others could not be deleted. See below for details.|:count accessories were deleted successfully, but others could not be deleted. See below for details.',
+        'bulk_success' => 'アクセサリは正常に削除されました。|:count アクセサリは正常に削除されました。',
+        'partial_success' => ':count個のアクセサリーは正常に削除されましたが、それ以外のものは削除できませんでした。詳細は以下をご覧ください。|:count個のアクセサリーは正常に削除されましたが、それ以外のものは削除できませんでした。詳細は以下をご覧ください。',
     ],
 
     'checkout' => [

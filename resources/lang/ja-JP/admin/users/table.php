@@ -17,7 +17,7 @@ return [
     'last_login' => '最終ログイン',
     'last_name' => '苗字',
     'location' => 'ロケーション:',
-    'lock_passwords' => 'Some user details cannot be changed on the demo. Try creating a new user instead.',
+    'lock_passwords' => '一部のユーザー情報はデモで変更できません。代わりに新しいユーザーを作成してみてください。',
     'manager' => 'マネージャー',
     'managed_locations' => '管理ロケーション',
     'managed_users' => '管理ユーザー',

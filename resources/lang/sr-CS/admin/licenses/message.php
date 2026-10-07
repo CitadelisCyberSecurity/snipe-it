@@ -43,8 +43,8 @@ return [
     ],
 
     'delete_with_checkin' => [
-        'bulk_success' => ':count licenses were deleted successfully after checking in :seats seats.',
-        'partial_success' => ':count licenses were deleted successfully after checking in :seats seats. See additional information below.',
+        'bulk_success' => ':count licence su uspešno izbrisane nakon razduživanja :seats sedišta.',
+        'partial_success' => ':count licence su uspešno izbrisane nakon razduživanja :seats sedišta. Pogledajte dodatne informacije ispod.',
     ],
 
     'checkout' => [
@@ -60,6 +60,10 @@ return [
         'error' => 'Došlo je do problema prilikom provere licence. Molim pokušajte ponovo.',
         'not_reassignable' => 'Mesto je iskorišćeno',
         'success' => 'Licenca je uspešno proverena',
+    ],
+
+    'import' => [
+        'no_free_seats' => 'Licenca ":license" nema slobodnih mesta. ":target" nije dodeljeno mesto.',
     ],
 
 ];

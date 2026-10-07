@@ -20,9 +20,16 @@ return [
     'delete' => [
         'confirm' => 'Biztos benne, hogy törölni szeretné a kategóriát?',
         'error' => 'A kategória törlése közben probléma merült fel, kérjük, próbálja újra.',
-        'success' => 'Category was deleted successfully.',
-        'bulk_success' => 'Category deleted successfully.|:count categories were deleted successfully.',
-        'partial_success' => 'Category deleted successfully. See additional information below. | :count categories were deleted successfully. See additional information below.',
+        'success' => 'Kategória sikeresen törölve.',
+        'bulk_success' => 'Kategória sikeresen törölve.|:count kategória sikeresen törölve lett.',
+        'partial_success' => 'Kategória sikeresen törölve. További információt lejjebb talál az oldalon. | :count kategória sikeresen törlésre került. További információt lejjebb talál az oldalon.',
+    ],
+
+    'bulkedit' => [
+        'warn' => 'You are about to edit the properties of the following category:|You are about to edit the properties of the following :count categories:',
+        'no_selection' => 'You must select at least one category to edit.',
+        'no_changes' => 'Nincsenek mezők megváltoztak, így semmi sem frissült.',
+        'success' => 'Category successfully updated.|:count categories successfully updated.',
     ],
 
 ];

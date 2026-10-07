@@ -880,11 +880,22 @@ class Helper
             ->havingRaw('(qty - checkouts_count) < (min_amt + ?)', [$alert_threshold])
             ->get();
 
+        // Components are checked out with a per-assignment quantity
+        // stored on the components_assets pivot (assigned_qty), NOT
+        // one row per unit. withCount() would count assignment rows
+        // and produce a wrong "remaining" ("qty - 1" instead of "qty
+        // - N" for a single pivot row that shipped N units). Match
+        // Component::numCheckedOut() by summing pivot.assigned_qty
+        // through the unconstrainedAssets relation, which also drops
+        // CompanyableScope so cross-company checkouts count against
+        // stock the same way the model method does. coalesce() maps
+        // "no assignments" (SUM returns NULL) back to 0 so the
+        // havingRaw comparison stays numeric.
         $components = Component::select('id', 'name', 'qty', 'min_amt')
-            ->withCount('assets as sum_unconstrained_assets')
+            ->withSum('unconstrainedAssets as sum_unconstrained_assets', 'components_assets.assigned_qty')
             ->whereNotNull('min_amt')
             ->groupBy('components.id', 'components.name', 'components.qty', 'components.min_amt')
-            ->havingRaw('(qty - sum_unconstrained_assets) < (min_amt + ?)', [$alert_threshold])
+            ->havingRaw('(qty - COALESCE(sum_unconstrained_assets, 0)) < (min_amt + ?)', [$alert_threshold])
             ->get();
 
         $asset_models = AssetModel::select('id', 'name', 'min_amt')
@@ -942,7 +953,7 @@ class Helper
         }
 
         foreach ($components as $component) {
-            $avail = $component->qty - $component->sum_unconstrained_assets;
+            $avail = $component->qty - ($component->sum_unconstrained_assets ?? 0);
             $percent = $component->qty > 0
                 ? number_format((($avail / $component->qty) * 100), 0)
                 : 100;
@@ -1285,11 +1296,32 @@ class Helper
             return strtoupper(trans('admin/custom_fields/general.encrypted'));
         }
 
-        if (isset($item)) {
-            return self::gracefulDecrypt($field, $item->{$field->db_column_name()});
+        $value = isset($item)
+            ? self::gracefulDecrypt($field, $item->{$field->db_column_name()})
+            : $field->defaultValue($model->id);
+
+        // DATE / DATETIME custom fields can hold non-YYYY-MM-DD strings
+        // in the DB (e.g. `3/28/2025` from a historic CSV import that
+        // shoved raw cell values into the column). The datepicker
+        // widgets expect `Y-m-d` / `Y-m-d H:i:s` and blank or mangle
+        // anything else. AssetsTransformer already normalizes on the
+        // view / API read path via getFormattedDateObject; do the
+        // same here so the edit form renders a value the picker can
+        // hydrate. Save cycle rewrites the column to YYYY-MM-DD via
+        // the picker's own output, so the DB heals per-edit. Any
+        // value Carbon cannot parse falls through unchanged so the
+        // user sees the raw string and can correct it.
+        if (in_array($field->format, ['DATE', 'DATETIME'], true) && ! empty($value)) {
+            try {
+                $value = $field->format === 'DATETIME'
+                    ? Carbon::parse($value)->format('Y-m-d H:i:s')
+                    : Carbon::parse($value)->format('Y-m-d');
+            } catch (\Exception $e) {
+                // Unparseable value stays as-is.
+            }
         }
 
-        return $field->defaultValue($model->id);
+        return $value;
     }
 
     public static function formatStandardApiResponse($status, $payload = null, $messages = null)
@@ -1621,7 +1653,6 @@ class Helper
     {
         if (config('app.lock_passwords') === true) {
             return true;
-            Log::debug('app locked!');
         }
 
         return false;
@@ -1678,8 +1709,6 @@ class Helper
                 return (1 / 72) * static::getUnitConversionFactor('in');
             default:
                 throw new \InvalidArgumentException('Unit: '.e($unit).' is not supported');
-
-                return false;
         }
     }
 
@@ -1777,12 +1806,31 @@ class Helper
 
         $url = str_replace(["\r", "\n"], '', $url);
 
-        $parts = parse_url($url);
+        // Normalize backslashes to forward slashes before parsing, so that a malicious input like
+        // https:\\evil.com\@example.com\@evil.com\@example.com
+        // doesn't get parsed as a same-origin URL.
+        $normalized = str_replace('\\', '/', $url);
+
+        $parts = parse_url($normalized);
         if ($parts === false) {
             return null;
         }
 
         if (isset($parts['scheme']) && ! in_array(strtolower($parts['scheme']), ['http', 'https'], true)) {
+            return null;
+        }
+
+        // Same-origin redirects never legitimately carry credentials.
+        // Reject any input where parse_url extracted a userinfo component,
+        // closing further parser-differential variants that hide the real
+        // authority behind an `@`.
+        if (isset($parts['user']) || isset($parts['pass'])) {
+            return null;
+        }
+
+        // Reject scheme-only URLs with no authority (e.g. "https:evil.com",
+        // "https:/evil.com", "http:@evil.com").
+        if (isset($parts['scheme']) && !isset($parts['host'])) {
             return null;
         }
 
@@ -1794,6 +1842,30 @@ class Helper
         }
 
         return $url;
+    }
+
+    /**
+     * Emission-side replacement for Laravel's redirect()->intended().
+     *
+     * Laravel's redirect()->intended() pulls session('url.intended') and
+     * hands it straight to redirect()->to() with no host validation. The
+     * write-side sanitize we perform in SamlController::acs and similar
+     * places is defense-in-depth, but any writer that skips it (or any
+     * parser-differential bypass of Helper::sameOriginUrl at write time)
+     * leaves an open-redirect surface. This helper reads url.intended,
+     * runs it through sameOriginUrl at emission, and falls back to the
+     * caller-supplied default whenever the stored value is missing or
+     * fails the guard. Every controller that previously called
+     * redirect()->intended(...) directly should call this instead.
+     */
+    public static function safeIntended(?string $default = null): RedirectResponse
+    {
+        $default ??= '/';
+
+        $intended = session()->pull('url.intended');
+        $target = self::sameOriginUrl($intended) ?? $default;
+
+        return redirect()->to($target);
     }
 
     public static function getRedirectOption($request, $id, $table, $item_id = null): RedirectResponse
@@ -1825,6 +1897,7 @@ class Helper
                 'Components' => route('components.index'),
                 'Consumables' => route('consumables.index'),
                 'Maintenances' => route('maintenances.index'),
+                default => route('home'),
             };
 
             // #15214: preserve query-string filters when the user came
@@ -1850,6 +1923,7 @@ class Helper
                 'Accessories' => redirect()->route('accessories.show', $id ?? $item_id),
                 'Components' => redirect()->route('components.show', $id ?? $item_id),
                 'Consumables' => redirect()->route('consumables.show', $id ?? $item_id),
+                default => redirect()->route('home'),
             };
         }
 
@@ -1869,6 +1943,7 @@ class Helper
                 'asset' => $assetId
                     ? redirect()->route('hardware.show', $assetId)
                     : redirect()->route('hardware.index'),
+                default => redirect()->route('home'),
             };
         }
 
@@ -1877,6 +1952,7 @@ class Helper
             return match ($other_redirect) {
                 'audit' => redirect()->route('assets.audit.due'),
                 'model' => redirect()->route('models.show', $request->model_id),
+                default => redirect()->route('home'),
             };
 
         }

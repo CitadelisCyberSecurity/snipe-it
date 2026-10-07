@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => '資產折舊',
     'create' => '新建折舊',
     'depreciation_name' => '折舊名稱',
-    'depreciation_min' => '折舊的下限價值',
     'number_of_months' => '月數',
     'update' => '更新折舊',
     'depreciation_min' => '折舊後的最低價值',

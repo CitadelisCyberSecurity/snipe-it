@@ -25,4 +25,11 @@ return [
         'partial_success' => '분류를 삭제했습니다. 아래 추가 정보를 확인해 주세요. | :count 개의 분류를 삭제했습니다. 아래 추가 정보를 확인해 주세요.',
     ],
 
+    'bulkedit' => [
+        'warn' => 'You are about to edit the properties of the following category:|You are about to edit the properties of the following :count categories:',
+        'no_selection' => 'You must select at least one category to edit.',
+        'no_changes' => '변경된 항목이 없어서, 갱신되지 않습니다.',
+        'success' => 'Category successfully updated.|:count categories successfully updated.',
+    ],
+
 ];

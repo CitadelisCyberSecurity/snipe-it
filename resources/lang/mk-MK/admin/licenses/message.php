@@ -62,4 +62,8 @@ return [
         'success' => 'Лиценцата беше успешно раздолжена',
     ],
 
+    'import' => [
+        'no_free_seats' => 'License ":license" has no free seats. ":target" was not assigned to a seat.',
+    ],
+
 ];

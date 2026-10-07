@@ -50,8 +50,8 @@ return [
         ],
 
         'delete_with_checkin' => [
-            'label' => 'Check in seats and delete',
-            'log_msg' => 'Checked in via bulk delete-with-checkin in license index',
+            'label' => 'Razduži sedišta i obriši',
+            'log_msg' => 'Razduženo sa masovnim brisanje-sa-razduživanje u indeksu licence',
         ],
     ],
 

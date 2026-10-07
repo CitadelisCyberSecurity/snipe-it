@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Хөрөнгийн элэгдэл',
     'create' => 'Элэгдэл бий болгох',
     'depreciation_name' => 'Элэгдэл Нэр',
-    'depreciation_min' => 'Floor Value of Depreciation',
     'number_of_months' => 'Сарын тоо',
     'update' => 'Элэгдэл шинэчлэх',
     'depreciation_min' => 'Minimum Value after Depreciation',

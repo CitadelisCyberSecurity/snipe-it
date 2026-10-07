@@ -224,7 +224,12 @@ class LocationsController extends Controller
 
         // Parent company check applies whenever FMCS is on, independent of scope_locations_fmcs.
         if (Setting::getSettings()->full_multiple_companies_support) {
-            $parent = $location->parent_id ? Location::find($location->parent_id) : null;
+            // withoutGlobalScopes: Location::CompanyableScope would filter a
+            // cross-tenant parent out for a scoped non-superuser, so find()
+            // would return null and the null check below would short-circuit
+            // the reject branch, letting the parent_id save through. See
+            // ValidationServiceProvider::fmcs_location for the sibling fix.
+            $parent = $location->parent_id ? Location::withoutGlobalScopes()->find($location->parent_id) : null;
             if ($parent && $parent->company_id != $location->company_id) {
                 return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.error_location_parent_company', [
                     'parent' => $parent->name,
@@ -338,7 +343,12 @@ class LocationsController extends Controller
         // Parent company check applies whenever FMCS is on, independent of scope_locations_fmcs.
         // Runs outside the company_id gate so a parent_id-only update is also validated.
         if (Setting::getSettings()->full_multiple_companies_support) {
-            $parent = $location->parent_id ? Location::find($location->parent_id) : null;
+            // withoutGlobalScopes: Location::CompanyableScope would filter a
+            // cross-tenant parent out for a scoped non-superuser, so find()
+            // would return null and the null check below would short-circuit
+            // the reject branch, letting the parent_id save through. See
+            // ValidationServiceProvider::fmcs_location for the sibling fix.
+            $parent = $location->parent_id ? Location::withoutGlobalScopes()->find($location->parent_id) : null;
             if ($parent && $parent->company_id != $location->company_id) {
                 return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.error_location_parent_company', [
                     'parent' => $parent->name,
@@ -485,6 +495,20 @@ class LocationsController extends Controller
 
         if ($request->filled('excludeId')) {
             $locations->where('locations.id', '!=', (int) $request->input('excludeId'));
+        }
+
+        // excludeIds is the batch variant used by the bulk-edit form's
+        // parent picker so a location can't be picked as its own new
+        // parent (or the parent of one of its siblings in the same
+        // batch, which would collapse the hierarchy in confusing ways).
+        // Accepts a comma-separated list of ints because js-data-ajax
+        // forwards data-exclude-ids as-is.
+        if ($request->filled('excludeIds')) {
+            $rawExclude = $request->input('excludeIds');
+            $excludeIds = array_filter(array_map('intval', is_array($rawExclude) ? $rawExclude : explode(',', (string) $rawExclude)));
+            if ($excludeIds !== []) {
+                $locations->whereNotIn('locations.id', $excludeIds);
+            }
         }
 
         if ((Setting::getSettings()->full_multiple_companies_support == '1') && $request->filled('companyId')) {

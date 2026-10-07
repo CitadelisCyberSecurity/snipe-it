@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Traits\Acceptable;
 use App\Models\Traits\AdjustsQuantity;
 use App\Models\Traits\CompanyableTrait;
 use App\Models\Traits\HasOrders;
 use App\Models\Traits\HasUploads;
 use App\Models\Traits\Loggable;
+use App\Models\Traits\Requestable;
 use App\Models\Traits\Searchable;
 use App\Presenters\ComponentPresenter;
 use App\Presenters\Presentable;
@@ -31,15 +33,18 @@ class Component extends SnipeModel
 
     protected $presenter = ComponentPresenter::class;
 
+    use Acceptable;
     use AdjustsQuantity;
     use CompanyableTrait;
     use HasOrders;
     use HasUploads;
     use Loggable, Presentable;
+    use Requestable;
     use SoftDeletes;
 
     protected $casts = [
         'purchase_date' => 'datetime',
+        'requestable' => 'boolean',
     ];
 
     protected $table = 'components';
@@ -60,6 +65,7 @@ class Component extends SnipeModel
         'manufacturer_id' => 'integer|exists:manufacturers,id|nullable',
         'default_supplier_id' => 'nullable|integer|exists:suppliers,id',
         'default_purchase_cost' => 'numeric|nullable|gte:0|max:99999999999999999.99',
+        'requestable' => 'nullable|boolean',
     ];
 
     /**
@@ -95,6 +101,7 @@ class Component extends SnipeModel
         'notes',
         'default_supplier_id',
         'default_purchase_cost',
+        'requestable',
     ];
 
     use Searchable;
@@ -148,6 +155,31 @@ class Component extends SnipeModel
         return Gate::allows('delete', $this)
             && ($this->numCheckedOut() === 0)
             && ($this->deleted_at == '');
+    }
+
+    /**
+     * Normalize the requestable form input so an empty string from an
+     * unchecked checkbox lands as false rather than a truthy "0" cast
+     * (matches Accessory / Consumable setRequestableAttribute).
+     */
+    public function setRequestableAttribute($value)
+    {
+        if ($value == '') {
+            $value = null;
+        }
+        $this->attributes['requestable'] = filter_var($value, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Scope query to only requestable components. FMCS + location
+     * scoping falls out of the CompanyableTrait global scope, so the
+     * usual "user only sees rows in their reachable companies" rule
+     * applies without any additional wrapping here (matches the
+     * Accessory scope's shape and rationale).
+     */
+    public function scopeRequestable($query)
+    {
+        return $query->where('components.requestable', '1');
     }
 
     /**
@@ -530,9 +562,9 @@ class Component extends SnipeModel
      */
     public function scopeOrderPercentRemaining($query, $order)
     {
-        $direction = strtolower($order) === 'asc' ? 'asc' : 'desc';
+        $order = strtolower($order) === 'asc' ? 'asc' : 'desc';
 
-        return $query->orderByRaw('CASE WHEN components.qty = 0 THEN 0 ELSE ((components.qty - COALESCE(sum_unconstrained_assets, 0)) * 100.0 / components.qty) END '.$direction);
+        return $query->orderByRaw('CASE WHEN components.qty = 0 THEN 0 ELSE ((components.qty - COALESCE(sum_unconstrained_assets, 0)) * 100.0 / components.qty) END '.$order);
     }
 
     /**
@@ -545,8 +577,8 @@ class Component extends SnipeModel
      */
     public function scopeOrderRemaining($query, $order)
     {
-        $direction = strtolower($order) === 'asc' ? 'asc' : 'desc';
+        $order = strtolower($order) === 'asc' ? 'asc' : 'desc';
 
-        return $query->orderByRaw('(components.qty - COALESCE(sum_unconstrained_assets, 0)) ' . $direction);
+        return $query->orderByRaw('(components.qty - COALESCE(sum_unconstrained_assets, 0)) '.$order);
     }
 }

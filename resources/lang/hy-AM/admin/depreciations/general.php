@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Ակտիվի ամորտիզացիաները',
     'create' => 'Ստեղծել ամորտիզացիա',
     'depreciation_name' => 'Ամորտիզացիայի անուն',
-    'depreciation_min' => 'Ամորտիզացիայի մինիմալ արժեք',
     'number_of_months' => 'Ամիսների քանակ',
     'update' => 'Թարմացնել ամորտիզացիան',
     'depreciation_min' => 'Ամորտիզացիայից հետո նվազագույն արժեք',

@@ -41,7 +41,7 @@ return [
 
     'assetsview' => [
         'name' => 'Pregled imovine',
-        'note' => 'Upamtite da korisnici sa ovom dozvolom takođe mogu da vide (ne da menjaju ili brišu) datoteke otpremljene u model imovine. Ovo je zato da bi se lakše delila uobičajena dokumenta poput korisničkih uputstava među imovinom bez potrebe da se otpremaju za svaku imovinu, i da se izbegne dodeljivanje korisniku dozvola za izmenu datoteka imovine.',
+        'note' => 'Note that users with this permission will also be able to see (not modify or delete) files uploaded to the asset model as well. This is to make it easier to share common documents like user manuals across assets without having to upload them to every asset, and to avoid having to grant the user permission to modify asset files. Users with this permission will also be able to view edit and checkin history.',
     ],
 
     'assetscreate' => [
@@ -72,8 +72,8 @@ return [
     ],
 
     'assetsviewrequestable' => [
-        'name' => 'Pregled zatražene imovine',
-        'note' => 'Omogućava korisniku pregled imovine koja je označene kao zatraživa.',
+        'name' => 'Pogledaj stavke koje se mogu zatražiti',
+        'note' => 'Omogućava korisniku da pregleda stavke označene kao zatražive.',
     ],
 
     'assetsviewencrypted-custom-fields' => [
@@ -256,6 +256,7 @@ return [
     ],
     'usersview' => [
         'name' => 'Prikaži korisnike',
+        'note' => 'Note that users with this permission will also be able to see (not modify or delete) files uploaded to the user as well. Users with this permission will also be able to view edit and checkin history.',
     ],
     'userscreate' => [
         'name' => 'Kreiranje novih korisnika',

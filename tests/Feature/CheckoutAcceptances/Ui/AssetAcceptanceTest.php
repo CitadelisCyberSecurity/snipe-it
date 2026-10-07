@@ -137,6 +137,7 @@ class AssetAcceptanceTest extends TestCase
     public function test_user_can_decline_asset()
     {
         Event::fake([CheckoutAccepted::class]);
+        $this->settings->disableAlertEmail(); //otherwise it tries to send an email without having enough information
 
         $checkoutAcceptance = CheckoutAcceptance::factory()->pending()->create();
 
@@ -211,7 +212,7 @@ class AssetAcceptanceTest extends TestCase
     {
         Event::fake([CheckoutAccepted::class]);
         Notification::fake();
-        $this->settings->enableAlertEmail();
+        $this->settings->enableAdminCC();
 
         $customField = CustomField::factory()->create([
             'name' => 'Cost Center',
@@ -259,7 +260,7 @@ class AssetAcceptanceTest extends TestCase
         // <img> tag survives markdown parsing.
         Event::fake([CheckoutAccepted::class]);
         Notification::fake();
-
+        $this->settings->enableAdminCC();
         $checkoutAcceptance = CheckoutAcceptance::factory()->pending()->create();
 
         $lfrPayload = '![x](/etc/hostname)';

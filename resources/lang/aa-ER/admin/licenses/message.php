@@ -62,4 +62,8 @@ return [
         'success' => 'crwdns949:0crwdne949:0',
     ],
 
+    'import' => [
+        'no_free_seats' => 'crwdns15619:0crwdne15619:0',
+    ],
+
 ];

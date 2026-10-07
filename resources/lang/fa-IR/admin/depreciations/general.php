@@ -6,8 +6,6 @@ return [
     'asset_depreciations' => 'استهلاک دارایی',
     'create' => 'ایجاد استهلاک',
     'depreciation_name' => 'نام استهلاک',
-    'depreciation_min' => 'ارزش کف استهلاک
-',
     'number_of_months' => 'تعداد ماه ها',
     'update' => 'کمبود به روزرسانی',
     'depreciation_min' => 'حداقل ارزش پس از استهلاک

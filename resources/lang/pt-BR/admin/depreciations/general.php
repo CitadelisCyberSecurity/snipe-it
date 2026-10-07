@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Depreciações de Ativos',
     'create' => 'Criar Depreciação',
     'depreciation_name' => 'Nome da Depreciação',
-    'depreciation_min' => 'Valor mínimo de depreciação',
     'number_of_months' => 'Número de Meses',
     'update' => 'Atualizar Depreciação',
     'depreciation_min' => 'Valor Mínimo após Depreciação',

@@ -14,6 +14,8 @@ return [
         'confirm' => 'Вы действительно хотите удалить этот тип обслуживания?',
         'error' => 'Возникла проблема с удалением этого типа обслуживания. Пожалуйста, попробуйте еще раз.',
         'success' => 'Тип обслуживания успешно обновлен.',
+        'bulk_success' => 'Maintenance type deleted successfully.|:count maintenance types were deleted successfully.',
+        'partial_success' => 'Maintenance type deleted successfully. See additional information below. | :count maintenance types were deleted successfully. See additional information below.',
     ],
     'complete' => [
         'success' => 'Обслуживание отмечено как завершенное.',

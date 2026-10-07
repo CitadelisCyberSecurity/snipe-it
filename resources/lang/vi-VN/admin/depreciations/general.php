@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Khấu hao tài sản',
     'create' => 'Tạo khấu hao',
     'depreciation_name' => 'Tên khấu hao',
-    'depreciation_min' => 'Floor Value of Depreciation',
     'number_of_months' => 'Số lượng tháng',
     'update' => 'Cập nhật khấu hao',
     'depreciation_min' => 'Minimum Value after Depreciation',

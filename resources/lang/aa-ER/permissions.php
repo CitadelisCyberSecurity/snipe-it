@@ -41,7 +41,7 @@ return [
 
     'assetsview' => [
         'name' => 'crwdns13932:0crwdne13932:0',
-        'note' => 'crwdns15201:0crwdne15201:0',
+        'note' => 'crwdns17169:0crwdne17169:0',
     ],
 
     'assetscreate' => [
@@ -72,8 +72,8 @@ return [
     ],
 
     'assetsviewrequestable' => [
-        'name' => 'crwdns13952:0crwdne13952:0',
-        'note' => 'crwdns13954:0crwdne13954:0',
+        'name' => 'crwdns16211:0crwdne16211:0',
+        'note' => 'crwdns16213:0crwdne16213:0',
     ],
 
     'assetsviewencrypted-custom-fields' => [
@@ -256,6 +256,7 @@ return [
     ],
     'usersview' => [
         'name' => 'crwdns14072:0crwdne14072:0',
+        'note' => 'crwdns17171:0crwdne17171:0',
     ],
     'userscreate' => [
         'name' => 'crwdns14074:0crwdne14074:0',

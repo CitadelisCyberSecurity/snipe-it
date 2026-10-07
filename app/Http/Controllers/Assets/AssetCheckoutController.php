@@ -10,10 +10,12 @@ use App\Http\Requests\AssetCheckoutRequest;
 use App\Http\Traits\CheckInOutTrait;
 use App\Models\Asset;
 use App\Models\CheckoutAcceptance;
+use App\Models\CheckoutRequest;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class AssetCheckoutController extends Controller
@@ -32,7 +34,7 @@ class AssetCheckoutController extends Controller
      *
      * @return View
      */
-    public function create(Asset $asset): View|RedirectResponse
+    public function create(Request $request, Asset $asset): View|RedirectResponse
     {
 
         $this->authorize('checkout', $asset);
@@ -56,10 +58,24 @@ class AssetCheckoutController extends Controller
         }
 
         if ($asset->availableForCheckout()) {
+            // Optional ?request_id hint. Present when the admin
+            // reached this screen from a /requests row. Drives the
+            // side-panel context box (who asked + waiting list).
+            // CheckoutRequest::contextForCheckout handles the URL-
+            // twiddle guards; a miss returns nulls / empty so the
+            // panel renders nothing.
+            $context = CheckoutRequest::contextForCheckout(
+                $request->integer('request_id') ?: null,
+                Asset::class,
+                $asset->id,
+            );
+
             return view('hardware/checkout', compact('asset'))
                 ->with('statusLabel_list', Helper::deployableStatusLabelList())
                 ->with('table_name', 'Assets')
-                ->with('item', $asset);
+                ->with('item', $asset)
+                ->with('checkoutRequest', $context['checkoutRequest'])
+                ->with('otherPendingRequests', $context['otherPendingRequests']);
         }
 
         return redirect()->route('hardware.index')
@@ -92,6 +108,26 @@ class AssetCheckoutController extends Controller
             $admin = auth()->user();
 
             $target = $this->determineCheckoutTarget();
+
+            // Company-boundary gate has to fire before any DB write. The
+            // updateAssetLocation() helper mass-updates child assets'
+            // location_id when the target is a location, and the license-seat
+            // loop below persists $seat->assigned_to = $target->id. Both are
+            // real writes with nothing to roll them back if canCheckoutTo
+            // subsequently rejects a cross-company target.
+            if (! $asset->canCheckoutTo($target)) {
+                $targetType = match (class_basename($target)) {
+                    'User' => trans('general.user'),
+                    'Location' => trans('general.location'),
+                    default => trans('general.asset'),
+                };
+
+                return redirect()->route('hardware.checkout.create', $asset)->with('error', trans('general.error_checkout_company_mismatch', [
+                    'item' => trans('general.asset').' "'.$asset->display_name.'"',
+                    'item_company' => $asset->company?->name ?? trans('general.unassigned'),
+                    'target' => $targetType.' "'.($target->name ?? $target->username ?? $target->id).'"',
+                ]));
+            }
 
             $asset = $this->updateAssetLocation($asset, $target);
 
@@ -126,20 +162,6 @@ class AssetCheckoutController extends Controller
 
             // Add any custom fields that should be included in the checkout
             $asset->customFieldsForCheckinCheckout('display_checkout');
-
-            if (! $asset->canCheckoutTo($target)) {
-                $targetType = match (class_basename($target)) {
-                    'User' => trans('general.user'),
-                    'Location' => trans('general.location'),
-                    default => trans('general.asset'),
-                };
-
-                return redirect()->route('hardware.checkout.create', $asset)->with('error', trans('general.error_checkout_company_mismatch', [
-                    'item' => trans('general.asset').' "'.$asset->display_name.'"',
-                    'item_company' => $asset->company?->name ?? trans('general.unassigned'),
-                    'target' => $targetType.' "'.($target->name ?? $target->username ?? $target->id).'"',
-                ]));
-            }
 
             session()->put([
                 'redirect_option' => $request->input('redirect_option'),

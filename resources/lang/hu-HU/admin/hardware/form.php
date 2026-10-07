@@ -51,7 +51,7 @@ return [
     'tag' => 'Eszköz azonosító',
     'update' => 'Eszköz frissítés',
     'warranty' => 'Garancia',
-    'warranty_months' => 'Warranty Months',
+    'warranty_months' => 'Garancia hónapok',
     'warranty_expires' => 'Jótállás érvényessége',
     'years' => 'évek',
     'asset_location' => 'Eszköz helyszín frissítése',

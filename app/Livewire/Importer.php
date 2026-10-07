@@ -14,6 +14,7 @@ use App\Models\Import;
 use App\Models\License;
 use App\Models\Location;
 use App\Models\Manufacturer;
+use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Support\Facades\Storage;
@@ -102,6 +103,12 @@ class Importer extends Component
     public $statusText;
 
     public $update;
+
+    // When true, blank CSV cells during an update pass are ignored (the DB
+    // value stays put). Default false matches the legacy behavior: a
+    // present-but-empty cell clears the corresponding DB column. Only the
+    // update flow reads it. New-row inserts ignore it entirely.
+    public $preserve_blanks = false;
 
     public $send_welcome;
 
@@ -347,6 +354,7 @@ class Importer extends Component
     public function mount()
     {
         $this->authorize('import');
+        $this->refreshExistingImportFiles();
         $this->importTypes = [
             'accessory' => trans('general.accessories'),
             'asset' => trans('general.assets'),
@@ -617,6 +625,16 @@ class Importer extends Component
             'email' => trans('general.email'),
             'checkout_date' => trans('admin/hardware/table.checkout_date'),
             'checkin_date' => trans('admin/hardware/form.checkin_date'),
+            // Optional. Values "user" or "location" (case-insensitive)
+            // disambiguate what Name should resolve to. Absent or empty
+            // falls back to user for CSVs authored before the location
+            // branch existed.
+            'target_type' => trans('general.importer.checkout_type'),
+            // Optional per-row note that lands on the checkout
+            // actionlog. Legacy systems often carried a per-checkout
+            // narrative ("student damaged screen", "shipped to remote
+            // site"), and the column lets that history migrate through.
+            'notes' => trans('general.notes'),
         ];
 
         /**
@@ -639,6 +657,11 @@ class Importer extends Component
                 'name',
                 'supplier name',
                 'location name',
+                trans('general.name'),
+                trans('general.asset_name'),
+                trans('general.item_name'),
+                trans('general.model_name'),
+                trans('admin/hardware/form.name'),
             ],
             'item_no' => [
                 'item number',
@@ -843,8 +866,11 @@ class Importer extends Component
             return;
         }
 
-        $path = config('app.private_uploads').'/imports/'.$this->activeFile->file_path;
-        if (! is_file($path)) {
+        // Existence via Storage so the check routes to whichever
+        // driver PRIVATE_FILESYSTEM_DISK resolves to, instead of only
+        // looking at the local filesystem.
+        $storedPath = 'private_uploads/imports/'.$this->activeFile->file_path;
+        if (! Storage::exists($storedPath)) {
             $this->message = trans('admin/hardware/message.import.file_missing_on_disk');
             $this->message_type = 'danger';
 
@@ -1097,13 +1123,19 @@ class Importer extends Component
             return [];
         }
 
-        $path = config('app.private_uploads').'/imports/'.$this->activeFile->file_path;
-        if (! is_file($path)) {
+        // Reader::createFromStream so League CSV reads through the
+        // Storage abstraction. On local this is effectively the same
+        // as the old createFromPath. On s3_private the stream pulls
+        // bytes directly from S3 via the SDK so we never need the
+        // file to touch local disk.
+        $storedPath = 'private_uploads/imports/'.$this->activeFile->file_path;
+        $stream = Storage::readStream($storedPath);
+        if ($stream === null) {
             return [];
         }
 
         try {
-            $reader = Reader::createFromPath($path);
+            $reader = Reader::createFromStream($stream);
             $reader->setHeaderOffset(0);
 
             $rows = [];
@@ -1120,6 +1152,10 @@ class Importer extends Component
             return $rows;
         } catch (\Throwable $e) {
             return [];
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
         }
     }
 
@@ -1136,13 +1172,15 @@ class Importer extends Component
             return 0;
         }
 
-        $path = config('app.private_uploads').'/imports/'.$this->activeFile->file_path;
-        if (! is_file($path)) {
+        // Same disk-aware read path as loadPreviewRows.
+        $storedPath = 'private_uploads/imports/'.$this->activeFile->file_path;
+        $stream = Storage::readStream($storedPath);
+        if ($stream === null) {
             return 0;
         }
 
         try {
-            $reader = Reader::createFromPath($path);
+            $reader = Reader::createFromStream($stream);
             $reader->setHeaderOffset(0);
 
             $count = 0;
@@ -1155,6 +1193,10 @@ class Importer extends Component
             return $count;
         } catch (\Throwable $e) {
             return 0;
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
         }
     }
 
@@ -1212,6 +1254,7 @@ class Importer extends Component
             $this->message_type = 'success';
 
             unset($this->files);
+            unset($this->existingImportFiles[$import->file_path]);
 
             return;
         }
@@ -1258,6 +1301,10 @@ class Importer extends Component
         }
 
         unset($this->files);
+        // New uploads land during this cycle. Repopulate the set so
+        // fileMissingOnDisk sees them without waiting for the next
+        // mount.
+        $this->refreshExistingImportFiles();
 
         // Fire-and-forget signal to the JS side to schedule the
         // clear-highlights timeout. Doing the delay client-side keeps
@@ -1321,6 +1368,27 @@ class Importer extends Component
         return false;
     }
 
+    /**
+     * True when the current user's FMCS memberships restrict what they
+     * can import into. Superusers, and empty-pivot floater actors skip this.
+     */
+    #[Computed]
+    public function showFmcsRestrictionNotice(): bool
+    {
+        if (auth()->user()->isSuperUser()) {
+            return false;
+        }
+
+        $settings = Setting::getSettings();
+        if (! $settings->full_multiple_companies_support) {
+            return false;
+        }
+
+        $userCompanyIds = auth()->user()->companies()->pluck('companies.id')->all();
+
+        return ! (empty($userCompanyIds) && $settings->null_company_is_floater);
+    }
+
     #[Computed]
     public function files()
     {
@@ -1356,7 +1424,43 @@ class Importer extends Component
      */
     public function fileMissingOnDisk(Import $import): bool
     {
-        return ! is_file(config('app.private_uploads').'/imports/'.$import->file_path);
+        // Read against the cached set of file basenames rather than
+        // firing an S3 request per render. The set is populated once
+        // at mount and refreshed only when this component causes a
+        // mutation (uploadSucceeded, destroy, bulkDestroy). Every
+        // other re-render (selectAll toggle, individual row check,
+        // pagination, wizard step change) reads the cached array
+        // without any S3 traffic, which was previously stretching a
+        // simple checkbox click into a multi-second round-trip on
+        // buckets with a few thousand import files.
+        return ! isset($this->existingImportFiles[$import->file_path]);
+    }
+
+    /**
+     * Basename-keyed set of files currently in
+     * private_uploads/imports on the configured private disk.
+     * Serialized as component state so subsequent renders don't need
+     * to re-list the disk. Callers that mutate the imports dir
+     * (upload success + delete paths) invoke refreshExistingImportFiles
+     * to keep this in sync.
+     *
+     * @var array<string, true>
+     */
+    public array $existingImportFiles = [];
+
+    /**
+     * Re-scan the imports dir on the configured private disk and
+     * rebuild the basename set. Called from mount() so the initial
+     * render has a fresh view, and from uploadSucceeded / destroy /
+     * bulkDestroy so post-mutation renders reflect the change.
+     */
+    public function refreshExistingImportFiles(): void
+    {
+        $set = [];
+        foreach (Storage::files('private_uploads/imports') as $path) {
+            $set[basename($path)] = true;
+        }
+        $this->existingImportFiles = $set;
     }
 
     public function canDeleteFile(Import $import): bool
@@ -1433,6 +1537,7 @@ class Importer extends Component
 
             Storage::delete('private_uploads/imports/'.$import->file_path);
             $import->delete();
+            unset($this->existingImportFiles[$import->file_path]);
             $deleted++;
         }
 

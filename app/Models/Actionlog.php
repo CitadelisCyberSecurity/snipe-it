@@ -8,6 +8,7 @@ use App\Models\Traits\Searchable;
 use App\Presenters\ActionlogPresenter;
 use App\Presenters\Presentable;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -419,6 +420,70 @@ class Actionlog extends SnipeModel
     public function target()
     {
         return $this->morphTo('target')->withTrashed();
+    }
+
+    /**
+     * Extend the Searchable trait to also LIKE-search across the
+     * polymorphic target column. The trait's built-in
+     * searchRelations walks $searchableRelations, all of which are
+     * keyed on item_id (Actionlog::assets, ::users, ::licenses etc.
+     * hasMany the related model where id = item_id). That misses
+     * every log where the row's TARGET carries the identifier the
+     * caller is searching for, notably component checkouts whose
+     * item is the Component and whose target is the Asset it was
+     * checked out to.
+     *
+     * Mirrors the trait's searchAssignedToRelation helper: iterate
+     * the same three assignee morph types (User, Asset, Location)
+     * and LIKE across each type's identifier columns.
+     */
+    public function advancedTextSearch(Builder $query, array $terms)
+    {
+        return $query->orWhereHasMorph(
+            'target',
+            [User::class, Asset::class, Location::class],
+            function (Builder $targetQuery, string $targetType) use ($terms) {
+                $columns = match ($targetType) {
+                    User::class => ['first_name', 'last_name', 'username', 'email', 'employee_num'],
+                    Asset::class => ['asset_tag', 'name', 'serial'],
+                    Location::class => ['name'],
+                    default => [],
+                };
+
+                if (empty($columns)) {
+                    return;
+                }
+
+                $table = (new $targetType)->getTable();
+                $firstConditionAdded = false;
+
+                foreach ($columns as $column) {
+                    foreach ($terms as $term) {
+                        if (! $firstConditionAdded) {
+                            $targetQuery->where($table.'.'.$column, 'LIKE', '%'.$term.'%');
+                            $firstConditionAdded = true;
+
+                            continue;
+                        }
+
+                        $targetQuery->orWhere($table.'.'.$column, 'LIKE', '%'.$term.'%');
+                    }
+                }
+
+                // First+last concat so "John Smith" matches a
+                // targeted user split across the two columns, same
+                // treatment the trait applies for adminuser / user
+                // relations and searchAssignedToRelation.
+                if ($targetType === User::class) {
+                    foreach ($terms as $term) {
+                        $targetQuery->orWhereRaw(
+                            $this->buildMultipleColumnSearch(['users.first_name', 'users.last_name']),
+                            ["%{$term}%"]
+                        );
+                    }
+                }
+            }
+        );
     }
 
     /**

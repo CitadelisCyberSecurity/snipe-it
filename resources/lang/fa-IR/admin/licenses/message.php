@@ -63,4 +63,8 @@ return [
         'success' => 'مجوز بررسی شده با موفقیت',
     ],
 
+    'import' => [
+        'no_free_seats' => 'License ":license" has no free seats. ":target" was not assigned to a seat.',
+    ],
+
 ];

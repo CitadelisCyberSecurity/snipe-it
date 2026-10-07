@@ -4,18 +4,18 @@ return [
 
     'accepted' => 'Sie haben diesen Gegenstand erfolgreich angenommen.',
     'declined' => 'Sie haben diesen Gegenstand erfolgreich abgelehnt.',
-    'accept_signature_write_failed' => 'Your acceptance signature could not be saved to storage. Acceptance was not recorded. Please contact your administrator.',
-    'accept_pdf_write_failed' => 'The acceptance PDF could not be saved to storage. Acceptance was not recorded. Please contact your administrator.',
+    'accept_signature_write_failed' => 'Ihre Annahmesignatur konnte nicht gespeichert werden. Annahme wurde nicht aufgezeichnet. Bitte kontaktieren Sie Ihren Administrator.',
+    'accept_pdf_write_failed' => 'Die Annahme PDF konnte nicht gespeichert werden. Annahme wurde nicht gespeichert. Bitte kontaktieren Sie Ihren Administrator.',
     'bulk_manager_warn' => 'Benutzer erfolgreich geändert. Vorgesetzter sollte auch bearbeitet werden und konnte nicht angepasst werden, weil er sich nicht selbst als Vorgesetzter eingetragen haben kann. Bitte Benutzer ohne den Vorgesetzten nochmal bearbeiten.',
     'user_exists' => 'Benutzer existiert bereits!',
     'cannot_delete' => 'Benutzer existiert nicht oder Sie haben nicht die Berechtigung, den Benutzer zu löschen.',
     'user_not_found' => 'Benutzer existiert nicht oder Sie haben keine Berechtigung, ihn anzusehen.',
     'user_login_required' => 'Das Loginfeld ist erforderlich',
     'user_has_no_assets_assigned' => 'Derzeit sind keine Assets dem Benutzer zugewiesen.',
-    'nothing_currently_assigned' => 'Nothing currently assigned.',
+    'nothing_currently_assigned' => 'Derzeit ist nichts zugewiesen.',
     'user_password_required' => 'Das Passswortfeld ist erforderlich.',
     'insufficient_permissions' => 'Unzureichende Berechtigungen.',
-    'auth_fields_denied' => 'You do not have permission to modify credential or activation fields on this user. Requested fields not updated: :fields',
+    'auth_fields_denied' => 'Sie haben keine Berechtigung, Anmeldeinformationen oder Aktivierungsfelder für diesen Benutzer zu ändern. Angeforderte Felder wurden nicht aktualisiert: :fields',
     'user_deleted_warning' => 'Dieser Benutzer wurde gelöscht. Sie müssen ihn wiederherstellen, um ihn zu bearbeiten oder neue Assets zuzuweisen.',
     'ldap_not_configured' => 'LDAP Integration wurde für diese Installation nicht konfiguriert.',
     'password_resets_sent' => 'Den ausgewählten Benutzern, die aktiviert sind und eine gültige E-Mail-Adresse haben, wurde ein Link zum Zurücksetzen des Passworts gesendet.',
@@ -25,12 +25,12 @@ return [
     'log_record_not_found' => 'Ein passender Logeintrag für diesen Benutzer konnte nicht gefunden werden.',
 
     'impersonate' => [
-        'started' => 'You are now logged in as :name.',
-        'stopped' => 'You are back to your own account.',
-        'cannot_impersonate_self' => 'You cannot log in as yourself.',
-        'cannot_impersonate_superuser' => 'You cannot log in as another superuser.',
-        'target_not_active' => 'That user is deactivated or deleted and cannot be logged in as.',
-        'impersonator_missing' => 'The original account for this impersonation session no longer exists. Please log in again.',
+        'started' => 'Sie sind jetzt als :name eingeloggt.',
+        'stopped' => 'Sie sind zurück zu Ihrem eigenen Konto.',
+        'cannot_impersonate_self' => 'Sie können sich nicht als sich selbst anmelden.',
+        'cannot_impersonate_superuser' => 'Sie können sich nicht als ein anderer Superuser anmelden.',
+        'target_not_active' => 'Der Benutzer ist deaktiviert oder gelöscht und kann nicht zum Identitätswechsel benutzt werden.',
+        'impersonator_missing' => 'Das ursprüngliche Konto für diesen Identitätswechsel existiert nicht mehr. Bitte melden Sie sich erneut an.',
     ],
 
     'success' => [
@@ -44,7 +44,7 @@ return [
         'unsuspend' => 'Der Benutzer wurde erfolgreich reaktiviert.',
         'restored' => 'Benutzer wurde erfolgreich wiederhergestellt.',
         'import' => 'Benutzer erfolgreich Importiert.',
-        'acceptance_reminder_sent' => 'Acceptance reminder sent for :count pending item.|Acceptance reminder sent for :count pending items.',
+        'acceptance_reminder_sent' => 'Annahme-Erinnerung für :count ausstehendes Element gesendet.|Annahme-Erinnerung gesendet für :count ausstehende Elemente.',
     ],
 
     'error' => [
@@ -70,7 +70,7 @@ return [
         'password_ldap' => 'Das Passwort für diesen Account wird vom LDAP/Active Directory verwaltet. Bitte kontaktieren Sie Ihre IT-Abteilung, um Ihr Passwort zu ändern. ',
         'multi_company_items_assigned' => 'Diesem Benutzer sind Dinge zugewiesen, die zu einer anderen Firma gehören. Bitte checken Sie sie ein oder bearbeiten Sie Ihre Firma.',
         'no_pending_acceptances' => 'Dieser Benutzer hat keine ausstehenden Übernahmen, an die er erinnert werden könnte.',
-        'company_not_permitted' => 'One or more requested company assignments are outside your permitted company scope.',
+        'company_not_permitted' => 'Eine oder mehrere beantragte Unternehmenszuweisungen liegen außerhalb Ihres zulässigen Unternehmensbereichs.',
     ],
 
     'deletefile' => [

@@ -25,4 +25,11 @@ return [
         'partial_success' => 'Категорію успішно видалено. Дивіться додаткову інформацію нижче. | Успішно видалено :count категорій. Дивіться додаткову інформацію нижче.',
     ],
 
+    'bulkedit' => [
+        'warn' => 'You are about to edit the properties of the following category:|You are about to edit the properties of the following :count categories:',
+        'no_selection' => 'You must select at least one category to edit.',
+        'no_changes' => 'Немає змінених полів, тому нічого не було оновлено.',
+        'success' => 'Category successfully updated.|:count categories successfully updated.',
+    ],
+
 ];

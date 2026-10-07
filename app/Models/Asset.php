@@ -8,6 +8,7 @@ use App\Helpers\Helper;
 use App\Http\Traits\UniqueUndeletedTrait;
 use App\Models\Traits\Acceptable;
 use App\Models\Traits\CompanyableTrait;
+use App\Models\Traits\HasCalendarEvents;
 use App\Models\Traits\HasOrders;
 use App\Models\Traits\HasUploads;
 use App\Models\Traits\Loggable;
@@ -30,6 +31,14 @@ use Watson\Validating\ValidatingTrait;
  * Model for Assets.
  *
  * @version v1.0
+ *
+ * @property ?int $location_id
+ * @property Carbon|string|null $next_audit_date
+ * @property Carbon|string|null $last_audit_date
+ * @property Carbon|string|null $asset_eol_date
+ * @property ?int $company_id
+ * @property Carbon|string|null $last_checkin
+ * @property bool $requestable
  */
 class Asset extends Depreciable
 {
@@ -38,6 +47,7 @@ class Asset extends Depreciable
     // protected $with = ['model', 'adminuser', 'location', 'company'];
 
     use CompanyableTrait;
+    use HasCalendarEvents;
     use HasFactory;
     use HasOrders;
     use HasUploads;
@@ -244,6 +254,7 @@ class Asset extends Depreciable
         'category' => ['name'],
         'manufacturer' => ['name'],
         'assigned_to' => ['name'],
+        'externalSource' => ['primary_mac', 'primary_ip', 'os', 'os_version'],
     ];
 
     /**
@@ -335,11 +346,19 @@ class Asset extends Depreciable
      * Returns the warranty expiration date as Carbon object
      *
      * @return Attribute<Carbon|null, never>
+     *
+     * @SuppressWarnings("PHPMD.UnusedFormalParameter")
+     * `$value` is unused because this is a computed accessor - the
+     * warranty expiration is derived from purchase_date +
+     * warranty_months, not stored as its own column. Laravel's
+     * Attribute closure signature is positional though (`$value` must
+     * be the first parameter), so we can't drop it. Suppression tells
+     * PHPMD / Codacy to stop flagging.
      */
     protected function warrantyExpires(): Attribute
     {
         return Attribute::make(
-            get: fn (mixed $value, array $attributes) => ($attributes['warranty_months'] && $attributes['purchase_date']) ? Carbon::parse($attributes['purchase_date'])->addMonths((int) $attributes['warranty_months']) : null,
+            get: fn (mixed $value, array $attributes) => (! empty($attributes['warranty_months']) && ! empty($attributes['purchase_date'])) ? Carbon::parse($attributes['purchase_date'])->addMonths((int) $attributes['warranty_months']) : null,
         );
     }
 
@@ -595,7 +614,7 @@ class Asset extends Depreciable
      * @param  Carbon  $checkout_at
      * @param  Carbon  $expected_checkin
      * @param  string  $note
-     * @param  null  $name
+     * @param  string|null  $name
      * @return bool
      *
      * @since  [v3.0]
@@ -1188,6 +1207,18 @@ class Asset extends Depreciable
     }
 
     /**
+     * Sync-adapter side row: identity (source + external_id) plus
+     * last-known network / OS inventory (primary MAC / IP / OS /
+     * OS version / last seen). Nullable relation: only assets that
+     * have been synced from an adapter have a row. Detail view +
+     * assets table render these fields when the relation is present.
+     */
+    public function externalSource()
+    {
+        return $this->hasOne(AssetExternalSource::class);
+    }
+
+    /**
      * Establishes the asset -> aupplier relationship
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
@@ -1727,6 +1758,19 @@ class Asset extends Depreciable
     }
 
     /**
+     * Query builder scope for Assets whose asset_eol_date is in the past. Used by
+     * the NeedsAttention dashboard tile count and the hardware/past-eol view.
+     *
+     * @return \Illuminate\Database\Query\Builder Modified query builder
+     */
+    public function scopePastEol($query)
+    {
+        return $query->whereNotNull('assets.asset_eol_date')
+            ->where('assets.asset_eol_date', '<', Carbon::now()->format('Y-m-d'))
+            ->NotArchived();
+    }
+
+    /**
      * Query builder scope for Assets that are due for auditing OR overdue, based on the assets.next_audit_date
      * and settings.audit_warning_days.
      *
@@ -1835,6 +1879,52 @@ class Asset extends Depreciable
      * @param  \Illuminate\Database\Query\Builder  $query  Query builder instance
      * @return \Illuminate\Database\Query\Builder Modified query builder
      */
+    public function calendarEventDefinitions(): array
+    {
+        // Most entries are marked all_day: true because they represent
+        // date-only obligations (an audit due on 2026-09-15, an EOL
+        // date, a warranty expiration). The mixed cast metadata on
+        // Asset (next_audit_date is 'datetime:m-d-Y', expected_checkin
+        // and last_checkout are 'datetime', asset_eol_date has no cast)
+        // means cast-based auto-detection wouldn't catch them
+        // uniformly, so the flag is explicit per entry.
+        //
+        // last_checkout is the one exception. Checkout happens at a
+        // specific moment in time, so the calendar shows it at that
+        // hour rather than as an all-day marker. The transformer's
+        // isAllDayField() reads all_day directly from this array, so
+        // flipping the flag here is all that's needed to switch the
+        // rendered event's shape.
+        return [
+            [
+                'field' => 'next_audit_date',
+                'event_type' => 'asset.audit_due',
+                'all_day' => true,
+            ],
+            [
+                'field' => 'expected_checkin',
+                'event_type' => 'asset.expected_checkin',
+                'all_day' => true,
+            ],
+            [
+                'field' => 'last_checkout',
+                'event_type' => 'asset.checkout',
+                'all_day' => false,
+            ],
+            [
+                'field' => 'asset_eol_date',
+                'event_type' => 'asset.eol',
+                'all_day' => true,
+            ],
+            [
+                'field' => 'warranty_expires',
+                'event_type' => 'asset.warranty_expiration',
+                'trigger_fields' => ['purchase_date', 'warranty_months'],
+                'all_day' => true,
+            ],
+        ];
+    }
+
     public function scopeAssetsForShow($query)
     {
         // Pluck IDs then whereIn — do NOT replace with whereHas. whereHas generates a correlated EXISTS per row and causes severe slowdowns in withCount contexts.
@@ -1878,7 +1968,7 @@ class Asset extends Depreciable
      * @param  \Illuminate\Database\Query\Builder  $query  Query builder instance
      * @return \Illuminate\Database\Query\Builder Modified query builder
      */
-    public function scopeRequestableAssets($query): Builder
+    public function scopeRequestable($query): Builder
     {
         $table = $query->getModel()->getTable();
 
@@ -2121,6 +2211,32 @@ class Asset extends Depreciable
     public function scopeOrderCompany($query, $order)
     {
         return $query->leftJoin('companies as company_sort', 'assets.company_id', '=', 'company_sort.id')->orderBy('company_sort.name', $order);
+    }
+
+    /**
+     * Sort by a sync-adapter external-source column (primary_mac,
+     * primary_ip, os, os_version, last_seen). LeftJoin so unsynced
+     * assets sort as nulls rather than dropping out. Join is on the
+     * unique asset_id index in asset_external_sources, so cost is
+     * an index lookup per row.
+     *
+     * Column argument is whitelisted by the caller (AssetsController's
+     * sort switch) so it's never user-controlled at this layer, but
+     * we still validate against the known column set as defense-in-
+     * depth against a caller regression.
+     */
+    public function scopeOrderExternalSource($query, string $order, string $column)
+    {
+        if (! in_array($column, ['primary_mac', 'primary_ip', 'os', 'os_version', 'last_seen'], true)) {
+            return $query;
+        }
+
+        return $query->leftJoin(
+            'asset_external_sources as ext_src_sort',
+            'assets.id',
+            '=',
+            'ext_src_sort.asset_id',
+        )->orderBy('ext_src_sort.'.$column, $order);
     }
 
     /**

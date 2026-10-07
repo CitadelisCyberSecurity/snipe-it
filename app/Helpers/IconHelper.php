@@ -47,6 +47,8 @@ class IconHelper
                 return 'fa-solid fa-store';
             case 'restore':
                 return 'fa-solid fa-trash-arrow-up';
+            case 'sync':
+                return 'fa-solid fa-rotate';
             case 'external-link':
                 return 'fa fa-external-link';
             case 'link':
@@ -65,6 +67,8 @@ class IconHelper
                 return 'fas fa-download';
             case 'checkmark':
                 return 'fas fa-check';
+            case 'merge':
+                return 'fa-solid fa-code-merge';
             case 'x':
                 return 'fas fa-times';
             case 'logout':
@@ -102,6 +106,8 @@ class IconHelper
             case 'request':
             case 'requested':
                 return 'fa-solid fa-bell-concierge';
+            case 'fulfill_multiple':
+                return 'fa-solid fa-arrows-down-to-people';
             case 'reports':
                 return 'fas fa-chart-bar';
             case 'heart':
@@ -297,6 +303,8 @@ class IconHelper
             case 'models':
             case 'model':
                 return 'fa-solid fa-boxes-stacked';
+            case 'dungeon':
+                return 'fa-solid fa-dungeon';
             case 'min-qty':
                 return 'fa-solid fa-chart-pie';
 

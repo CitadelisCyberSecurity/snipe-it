@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Амортизация на активи',
     'create' => 'Създаване на амортизация',
     'depreciation_name' => 'Амортизация',
-    'depreciation_min' => 'Минимална амортизационна стойност',
     'number_of_months' => 'Брой месеци',
     'update' => 'Обновяване на амортизация',
     'depreciation_min' => 'Минимална стойност след амортизация',

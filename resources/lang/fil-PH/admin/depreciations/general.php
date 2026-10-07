@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Ang Depresasyon ng Asset',
     'create' => 'Magsagawa ng Depresasyon',
     'depreciation_name' => 'Ang Pangalan ng Depresasyon',
-    'depreciation_min' => 'Floor Value of Depreciation',
     'number_of_months' => 'Ang Bilang ng mga Buwan',
     'update' => 'I-update ang Depresasyon',
     'depreciation_min' => 'Minimum Value after Depreciation',

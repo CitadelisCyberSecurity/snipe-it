@@ -17,7 +17,7 @@ return [
     'name' => 'Название категории',
     'require_acceptance' => 'Требовать от пользователей подтверждения приёма активов в этой категории.',
     'required_acceptance' => 'Этому пользователю будет выслано электронное письмо со ссылкой для подтверждения получения этого предмета.',
-    'global_signature_required_notice' => 'Подписи пользователя в настоящее время требуется глобально через настройки администратора,, чтобы подписи были обязательны независимо от того, какая категория будет выбрана, если элемент будет выключен для пользователя (против местоположения и т. д.).',
+    'global_signature_required_notice' => 'The global "Require Signature" setting is on. Signatures only apply when this category also has "Require acceptance" turned on: enable both to require users to sign when accepting items from this category.',
     'required_eula' => 'Пользователю будет отправлена копия пользовательского соглашения',
     'required_acceptance_component' => 'If the target asset is currently assigned to a user, that user will be emailed with a link to confirm acceptance of this component.',
     'required_eula_component' => 'If the target asset is currently assigned to a user, that user will be emailed a copy of the EULA.',

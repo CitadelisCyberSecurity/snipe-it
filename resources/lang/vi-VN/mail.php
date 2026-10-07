@@ -93,7 +93,7 @@ return [
     'read_the_terms' => 'Vui lòng đọc các điều khoản sử dụng bên dưới.',
     'read_the_terms_and_click' => 'Please read the terms of use below, and click on the link at the bottom to confirm that you read and agree to the terms of use, and have received the item.',
     'click_here_to_review_terms_and_accept_item' => 'Click here to review the terms of use and accept the item|Click here to review the terms of use and accept the items',
-    'requested' => 'Đã yêu cầu',
+    'requested' => 'Yêu cầu',
     'reset_link' => 'Liên kết Đặt lại Mật khẩu của bạn',
     'reset_password' => 'Nhấn vào đây để đặt lại mật khẩu của bạn:',
     'rights_reserved' => 'Bản quyền được bảo hộ.',
@@ -116,5 +116,5 @@ return [
     'welcome_to' => 'Chào mừng đến với: web!',
     'your_assets' => 'Xen qua tài sản của bạn',
     'your_credentials' => 'Thông tin về Snipe-IT của bạn',
-    'mail_sent' => 'Mail sent successfully!',
+    'mail_sent' => 'Đã gửi thư thành công!',
 ];

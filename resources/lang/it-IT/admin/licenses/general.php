@@ -50,8 +50,8 @@ return [
         ],
 
         'delete_with_checkin' => [
-            'label' => 'Check in seats and delete',
-            'log_msg' => 'Checked in via bulk delete-with-checkin in license index',
+            'label' => 'Restituisci slot ed elimina',
+            'log_msg' => 'Restituzione effettuata tramite "eliminazione con restituzione" massiva dall\'indice delle Licenze',
         ],
     ],
 

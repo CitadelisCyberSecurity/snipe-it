@@ -6,7 +6,6 @@ return [
     'asset_depreciations' => 'Qiimo dhaca Hantida',
     'create' => 'Samee Qiimo Dhac',
     'depreciation_name' => 'Magaca Qiimo dhaca',
-    'depreciation_min' => 'Qiimaha Dabaqa ee Qiima dhaca',
     'number_of_months' => 'Tirada Bilaha',
     'update' => 'Cusbooneysii Qiima dhaca',
     'depreciation_min' => 'Qiimaha Ugu Yar Kadib Qiima Dhaca',

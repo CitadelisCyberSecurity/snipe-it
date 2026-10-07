@@ -41,7 +41,7 @@ return [
 
     'assetsview' => [
         'name' => '查看资产',
-        'note' => 'Note that users with this permission will also be able to see (not modify or delete) files uploaded to the asset model as well. This is to make it easier to share common documents like user manuals across assets without having to upload them to every asset, and to avoid having to grant the user permission to modify asset files.',
+        'note' => 'Note that users with this permission will also be able to see (not modify or delete) files uploaded to the asset model as well. This is to make it easier to share common documents like user manuals across assets without having to upload them to every asset, and to avoid having to grant the user permission to modify asset files. Users with this permission will also be able to view edit and checkin history.',
     ],
 
     'assetscreate' => [
@@ -72,8 +72,8 @@ return [
     ],
 
     'assetsviewrequestable' => [
-        'name' => '查看可请求资源',
-        'note' => '允许用户查看被标记为可请求的资产。',
+        'name' => 'View Requestable Items',
+        'note' => 'Allows the user to view items that are marked as requestable.',
     ],
 
     'assetsviewencrypted-custom-fields' => [
@@ -256,6 +256,7 @@ return [
     ],
     'usersview' => [
         'name' => '查看用户',
+        'note' => 'Note that users with this permission will also be able to see (not modify or delete) files uploaded to the user as well. Users with this permission will also be able to view edit and checkin history.',
     ],
     'userscreate' => [
         'name' => '创建新用户',

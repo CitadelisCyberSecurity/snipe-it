@@ -17,10 +17,10 @@ return [
     ],
     'restore' => [
         'success' => 'Jūsų sistemos atsarginė kopija buvo atkurta. Prisijunkite iš naujo.',
-        'archive_invalid' => 'The selected backup file (:filename) is not a valid zip archive. Restore aborted before touching the database.',
-        'zip_extension_missing' => 'PHP zip extension is not loaded on this server. Cannot validate the backup archive, and restore has been aborted to prevent data loss. Ask your server administrator to install ext-zip.',
-        'pre_backup_failed' => 'Could not create a pre-restore safety backup. Restore aborted so that the existing database is not destroyed without a recovery path.',
-        'failed_with_backup' => 'Restore failed. The pre-existing database was wiped as part of the restore attempt, but a pre-restore backup was saved to :backup and can be used to recover.',
+        'archive_invalid' => 'Pasirinktas atsarginės kopijos failas (:filename) nėra tinkamas ZIP archyvas. Atkūrimas nutrauktas dar nepradėjus dirbti su duomenų baze.',
+        'zip_extension_missing' => 'PHP ZIP plėtinys nėra įdiegtas šiame serveryje. Nepavyko patvirtinti atsarginės kopijos archyvo, todėl atkūrimas buvo nutrauktas siekiant išvengti duomenų praradimo. Paprašykite serverio administratoriaus įdiegti „ext-zip“.',
+        'pre_backup_failed' => 'Nepavyko sukurti atsarginės kopijos, skirtos apsaugai prieš atkūrimą. Atkūrimas nutrauktas, kad esama duomenų bazė nebūtų sunaikinta be galimybės ją atkurti.',
+        'failed_with_backup' => 'Atkūrimas nepavyko. Bandant atkurti duomenis, esama duomenų bazė buvo ištrinta, tačiau prieš atkūrimą sukurta atsarginė kopija buvo išsaugota kataloge :backup ir ją galima naudoti duomenims atkurti.',
     ],
     'purge' => [
         'error' => 'Valymo metu įvyko klaida. ',
