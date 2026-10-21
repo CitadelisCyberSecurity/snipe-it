@@ -61,6 +61,7 @@ return [
     'modify'                   => 'Modify',
     'remove'                   => 'Remove',
     'progress'                 => 'Progression of access review',
+    'progress_count'           => ':reviewed of :total reviewed',
     'no_active_reviews'        => 'You have no active reviews.',
     'campaign_not_active'      => 'This campaign is no longer active.',
     'no_items_for_manager'     => 'You have no items to review for this campaign.',
