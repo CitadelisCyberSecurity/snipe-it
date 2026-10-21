@@ -126,6 +126,50 @@ class Helper
         );
     }
 
+    /**
+     * Return every item on a single page when the API call passes
+     * `?all=true` on the request. Used by the select2-checkboxes
+     * "Select all" button so it can pull the full filtered result set
+     * in one call instead of walking paginated pages.
+     *
+     * Caps the response at $cap items as a guardrail against runaway
+     * reads. The explicit $cap argument lets a controller pin a lower
+     * ceiling it knows is appropriate for its shape. Omitted, the
+     * default is `config('app.max_unpaginated_records')` (operator
+     * knob via MAX_UNPAGINATED, same lever the Groups bulk-user
+     * picker respects).
+     *
+     * A client-provided `?cap=` on the request is honored only as a
+     * CEILING SUGGESTION: it can lower the effective cap but never
+     * raise it. A malicious `?cap=99999999` is silently limited to
+     * the server-side value above. This is what lets per-widget
+     * data-max-select-all attributes work without opening a runaway
+     * surface.
+     *
+     * Falls through to paginateCollection() for everything else so
+     * existing callers keep working.
+     */
+    public static function paginateCollectionOrAll(Collection $items, ?int $cap = null): LengthAwarePaginator
+    {
+        if (! request()->boolean('all')) {
+            return self::paginateCollection($items);
+        }
+
+        $cap ??= (int) config('app.max_unpaginated_records', 5000);
+        $clientCap = (int) request()->integer('cap', PHP_INT_MAX);
+        if ($clientCap > 0) {
+            $cap = min($cap, $clientCap);
+        }
+        $capped = $items->take($cap)->values();
+
+        return new LengthAwarePaginator(
+            $capped,
+            $capped->count(),
+            max($capped->count(), 1),
+            1,
+        );
+    }
+
     public static function parseEscapedMarkedownInline($str = null)
     {
         $Parsedown = new \Parsedown;
@@ -824,7 +868,8 @@ class Helper
         $deprecations = [
             'ms_teams_deprecated' => [
                 'check' => ! Str::contains(Setting::getSettings()->webhook_endpoint, 'workflows') && (Setting::getSettings()->webhook_selected === 'microsoft'),
-                'message' => 'The Microsoft Teams webhook URL being used will be deprecated Dec 31st, 2025. <a class="btn btn-primary" href="'.route('settings.slack.index').'">Change webhook endpoint</a>'],
+                'message' => 'The Microsoft Teams webhook URL being used will be deprecated Dec 31st, 2025. <a class="btn btn-primary" href="'.route('settings.integrations.index').'">Change webhook endpoint</a>',
+            ],
         ];
 
         // if item of concern is being used and its being used with the deprecated values return the notification array.
@@ -866,16 +911,28 @@ class Helper
         // when a correlated subquery is in the SELECT list (withCount
         // generates one). Since id is unique, adding the other columns
         // is a cardinality no-op and works on every engine + sql_mode.
+        // Low-stock alert fires when the "still-in-play" count drops
+        // below (min_amt + threshold). Still-in-play means not yet
+        // marked consumed, so an outstanding distribution (handed out,
+        // not yet reported used up) still counts against min_amt
+        // rather than tripping the alert. This matches the Consumable
+        // policy decision that consumed is terminal and permanent.
         $consumables = Consumable::select('id', 'name', 'qty', 'min_amt')
-            ->withCount('consumableAssignments as consumables_users_count')
+            ->withCount(['consumableAssignments as consumed_count' => function ($query) {
+                $query->whereNotNull('consumed_at');
+            }])
             ->whereNotNull('min_amt')
             ->groupBy('consumables.id', 'consumables.name', 'consumables.qty', 'consumables.min_amt')
-            ->havingRaw('(qty - consumables_users_count) < (min_amt + ?)', [$alert_threshold])
+            ->havingRaw('(qty - consumed_count) < (min_amt + ?)', [$alert_threshold])
             ->get();
 
+        // Archived accessories are retired from active inventory and
+        // should not drive low-stock alerts even when they fall below
+        // their min_amt threshold.
         $accessories = Accessory::select('id', 'name', 'qty', 'min_amt')
             ->withCount('checkouts as checkouts_count')
             ->whereNotNull('min_amt')
+            ->notArchived()
             ->groupBy('accessories.id', 'accessories.name', 'accessories.qty', 'accessories.min_amt')
             ->havingRaw('(qty - checkouts_count) < (min_amt + ?)', [$alert_threshold])
             ->get();
@@ -891,9 +948,13 @@ class Helper
         // stock the same way the model method does. coalesce() maps
         // "no assignments" (SUM returns NULL) back to 0 so the
         // havingRaw comparison stays numeric.
+        // Archived components are retired from active inventory and
+        // should not drive low-stock alerts even when they fall below
+        // their min_amt threshold.
         $components = Component::select('id', 'name', 'qty', 'min_amt')
             ->withSum('unconstrainedAssets as sum_unconstrained_assets', 'components_assets.assigned_qty')
             ->whereNotNull('min_amt')
+            ->notArchived()
             ->groupBy('components.id', 'components.name', 'components.qty', 'components.min_amt')
             ->havingRaw('(qty - COALESCE(sum_unconstrained_assets, 0)) < (min_amt + ?)', [$alert_threshold])
             ->get();
@@ -1008,7 +1069,7 @@ class Helper
      *
      * @since [v3.0]
      *
-     * @param  File  $file
+     * @param  string  $file
      * @return string | bool
      */
     public static function checkUploadIsImage($file)
@@ -1027,7 +1088,7 @@ class Helper
     /**
      * Check if the file is a video, so we can show a preview
      *
-     * @param  File  $file
+     * @param  string  $file
      * @return string | bool
      *
      * @author [B. Wetherington] [<bwetherington@grokability.com>]
@@ -1050,7 +1111,7 @@ class Helper
     /**
      * Check if the file is audio, so we can show a preview
      *
-     * @param  File  $file
+     * @param  string  $file
      * @return string | bool
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
@@ -1161,7 +1222,13 @@ class Helper
 
                     return false;
                 } else {
-                    if (strpos($rule, 'required') !== false) {
+                    // Pipe-delimited rules like "nullable|max:10|required_with:depreciation_id"
+                    // contain the substring "required" even when the only
+                    // required-family rule is conditional. Split on `|` and
+                    // match the bare `required` token so conditional
+                    // variants (required_with, required_if, required_unless, etc.)
+                    // don't flip the UI's unconditional-required indicator.
+                    if (in_array('required', explode('|', $rule), true)) {
                         return true;
                     }
                     if (strpos($rule, 'fmcs_company') !== false && self::fmcsCompanyIsCurrentlyRequired()) {
@@ -1830,7 +1897,7 @@ class Helper
 
         // Reject scheme-only URLs with no authority (e.g. "https:evil.com",
         // "https:/evil.com", "http:@evil.com").
-        if (isset($parts['scheme']) && !isset($parts['host'])) {
+        if (isset($parts['scheme']) && ! isset($parts['host'])) {
             return null;
         }
 

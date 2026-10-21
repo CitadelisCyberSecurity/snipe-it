@@ -2,6 +2,7 @@
 
 namespace App\SyncAdapters\Unifi;
 
+use App\SyncAdapters\Traits\RetriesTransientHttpErrors;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 
@@ -26,11 +27,32 @@ use Illuminate\Support\Facades\Http;
  */
 class UnifiClient
 {
+    use RetriesTransientHttpErrors;
+
     public function __construct(
         private readonly string $baseUrl,
         private readonly string $apiKey,
-        private readonly string $siteId,
+        private readonly ?string $siteId = null,
     ) {}
+
+    /**
+     * List every site visible to the API key. Used to populate the
+     * Site ID picker on the adapter settings page so admins don't have
+     * to copy the UUID out of UniFi's admin console by hand. One shot,
+     * site lists for a single controller never run long enough to
+     * justify pagination.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function sites(): array
+    {
+        $response = $this->request()
+            ->get('/proxy/network/integration/v1/sites')
+            ->throw()
+            ->json();
+
+        return $response['data'] ?? [];
+    }
 
     /**
      * List every managed device in the configured UniFi site (APs,
@@ -71,10 +93,12 @@ class UnifiClient
 
     private function request(): PendingRequest
     {
-        return Http::baseUrl(rtrim($this->baseUrl, '/'))
-            ->withOptions(['allow_redirects' => false])
-            ->withHeaders(['X-API-KEY' => $this->apiKey])
-            ->acceptJson()
-            ->timeout(30);
+        return $this->withTransientRetry(
+            Http::baseUrl(rtrim($this->baseUrl, '/'))
+                ->withOptions(['allow_redirects' => false])
+                ->withHeaders(['X-API-KEY' => $this->apiKey])
+                ->acceptJson()
+                ->timeout(30)
+        );
     }
 }

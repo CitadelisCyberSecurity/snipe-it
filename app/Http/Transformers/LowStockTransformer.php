@@ -2,11 +2,13 @@
 
 namespace App\Http\Transformers;
 
+use App\Http\Controllers\Controller;
 use App\Models\Accessory;
 use App\Models\AssetModel;
 use App\Models\Component;
 use App\Models\Consumable;
 use App\Models\License;
+use App\Models\User;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -120,5 +122,31 @@ class LowStockTransformer
             AssetModel::class,
             License::class,
         ];
+    }
+
+    /**
+     * Drop rows from a Helper::checkLowInventory() result the given
+     * viewer can't `view` per the model's policy. A viewer with only
+     * accessories.view sees only accessory rows. Null viewer sees
+     * nothing. The plural type-to-class map lives on Controller as
+     * $map_object_type (shared across the app). Rows whose plural
+     * type isn't in that map fall through gated on nothing, matching
+     * pre-filter behavior.
+     *
+     * @param  array<int, array{type: string}>  $rows
+     * @return array<int, array<string, mixed>>
+     */
+    public static function viewableByCaller(array $rows, ?User $viewer): array
+    {
+        if ($viewer === null) {
+            return [];
+        }
+
+        $map = Controller::$map_object_type;
+
+        return array_values(array_filter(
+            $rows,
+            fn ($row) => ! isset($map[$row['type']]) || $viewer->can('view', $map[$row['type']]),
+        ));
     }
 }

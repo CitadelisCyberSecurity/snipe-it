@@ -13,11 +13,12 @@ return [
     'no_default_eula' => 'Varsayılan sözleşme bulunamadı. Lütfen Ayarlar\'dan ekleyiniz.',
     'total' => 'Toplam',
     'remaining' => 'Fayda',
-    'requestable' => 'Users may request this accessory',
+    'requestable' => 'Kullanıcılar bu aksesuarı talep edebilir',
     'update' => 'Aksesuar Güncelleştirme',
     'use_default_eula' => '<a href="#" data-toggle="modal" data-target="#eulaModal">\'yı Varsayılan Sözleşme</a> yerine kullan.',
     'use_default_eula_disabled' => '<del>Varsayılan sözleşmeyi kullan</del> Varsayılan sözleşme tanımlı değil. Lütfen Ayarlar\'dan ekleyiniz.',
     'clone' => 'Aksesuarı çoğalt',
     'delete_disabled' => 'Bu aksesuar henüz silinemiyor çünkü bazı öğeler hâlâ kontrol ediliyor.',
+    'accessory_deleted_warning' => 'This accessory has been deleted. You must restore it before you can assign it.',
 
 ];

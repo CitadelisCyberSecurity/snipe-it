@@ -649,10 +649,25 @@ class BulkUsersController extends Controller
                 $managedLocation->save();
             }
 
-            // Carry over company pivot memberships from the merged user into the target.
-            $mergedCompanyIds = $user_to_merge->companies()->pluck('companies.id')->toArray();
+            // Carry over company pivot memberships from the merged
+            // user into the target.
+            $mergedCompanyIds = Company::getIdsForCurrentUser(
+                DB::table('company_user')
+                    ->where('user_id', $user_to_merge->id)
+                    ->pluck('company_id')
+                    ->map(fn($id) => (int) $id)
+                    ->all()
+            );
             if (! empty($mergedCompanyIds)) {
-                $merge_into_user->companies()->syncWithoutDetaching($mergedCompanyIds);
+                $now = now();
+                DB::table('company_user')->insertOrIgnore(
+                    array_map(fn($companyId) => [
+                        'company_id' => $companyId,
+                        'user_id' => $merge_into_user->id,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ], $mergedCompanyIds)
+                );
                 $merge_into_user->syncLegacyCompanyIdMirror();
             }
 

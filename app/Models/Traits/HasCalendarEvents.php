@@ -104,13 +104,19 @@ trait HasCalendarEvents
                 // additional model events fires here - the source's
                 // own save() during restore() already ran through the
                 // saved observer for anything date-related that
-                // changed. Corner case where dates changed between
-                // delete and restore is handled by the reconcile
-                // command.
+                // changed.
                 CalendarEvent::withTrashed()
                     ->where('source_type', $model::class)
                     ->where('source_id', $model->getKey())
                     ->restore();
+
+                // Also force a full re-sync so dates that drifted
+                // between delete and restore get corrected, and so
+                // the one-shot cleanup migration's force-deleted
+                // calendar_events (see issue #19760) get rebuilt
+                // from scratch on restore instead of coming back
+                // empty.
+                $model->forceSyncCalendarEvents();
             });
         }
     }
@@ -131,6 +137,16 @@ trait HasCalendarEvents
     {
         $definitions = $this->calendarEventDefinitions();
         if (empty($definitions)) {
+            return;
+        }
+
+        // Short-circuit for trashed sources so backfills, reconciles,
+        // and stray saves on soft-deleted rows never create or revive
+        // calendar_events. The deleted observer already soft-deleted
+        // the matching rows when the source was soft-deleted, and the
+        // restored observer re-syncs on restore, so leaving this
+        // branch dark on trashed() is safe. See issue #19760.
+        if (in_array(SoftDeletes::class, class_uses_recursive($this), true) && $this->trashed()) {
             return;
         }
 
@@ -164,6 +180,17 @@ trait HasCalendarEvents
         $changes = $this->getChanges();
         if (empty($changes)) {
             return false;
+        }
+
+        // company_id is an implicit trigger across every definition
+        // because it writes to the denormalized calendar_events.company_id
+        // the FMCS read filter runs against. Sources that resolve their
+        // company from a parent (Maintenance via Asset) rely on the
+        // parent model's own observer to cascade re-syncs, not on this
+        // check, since the parent column isn't on the source's own
+        // getChanges() payload.
+        if (array_key_exists('company_id', $changes)) {
+            return true;
         }
 
         foreach ($definitions as $definition) {
@@ -215,6 +242,7 @@ trait HasCalendarEvents
         }
 
         $end = $endField ? $this->{$endField} : null;
+        $companyId = $this->calendarEventCompanyId();
 
         $existing = CalendarEvent::withTrashed()
             ->where('source_type', static::class)
@@ -227,6 +255,7 @@ trait HasCalendarEvents
                 'event_type' => $eventType,
                 'start' => $start,
                 'end' => $end,
+                'company_id' => $companyId,
                 'deleted_at' => null,
             ])->save();
 
@@ -240,7 +269,28 @@ trait HasCalendarEvents
             'event_type' => $eventType,
             'start' => $start,
             'end' => $end,
+            'company_id' => $companyId,
         ]);
+    }
+
+    /**
+     * Resolve the company_id this source model's calendar events belong
+     * to under FMCS. Written to the denormalized `calendar_events.company_id`
+     * column on every observer-driven write, so the read path can filter
+     * at the SQL level before count / order / limit. The read-path null
+     * handling mirrors CompanyableTrait: a null company_id means
+     * "unscoped" and whether the event surfaces to a given caller depends
+     * on the `null_company_is_floater` setting.
+     *
+     * Default is null for sources that don't have a single parent
+     * company (users have the company_user pivot, requests derive their
+     * company from the requestable). Source models with a direct
+     * company_id column or a CompanyableChildTrait parent override this
+     * to return the resolved id.
+     */
+    public function calendarEventCompanyId(): ?int
+    {
+        return null;
     }
 
     /**

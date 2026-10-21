@@ -296,7 +296,7 @@
                 var colMap = {};
                 this.columns.forEach(c => colMap[c.field] = c.title);
                 var op = this.getAdvancedSearchOperator();
-                var html = '<span class="label label-warning" style="font-size: 11px; margin-right:6px;display:inline-block;margin-bottom:6px;">' +
+                var html = '<span class="label label-warning" style="font-size: 12px; margin-right:6px;display:inline-block;margin-bottom:6px; padding: 4px;">' +
                     advancedSearchOperatorLabel + ': ' + (op === 'or' ? advancedSearchOrText : advancedSearchAndText) + '</span>';
 
                 Object.keys(filters).forEach(f => {
@@ -310,10 +310,10 @@
                     // jQuery.html() would then parse and execute).
                     var safeLabel = escapeAdvancedSearchValue(colMap[f] || f);
                     var safeField = escapeAdvancedSearchAttr(f);
-                    html += '<span class="label label-primary" style="font-size: 11px; margin-right:6px;display:inline-block;margin-bottom:6px;"><b>' +
+                    html += '<span class="label label-primary" style="font-size: 12px; margin-right:6px;display:inline-block;margin-bottom:6px; padding: 4px;"><b>' +
                         safeLabel + ':</b> ' + escapeAdvancedSearchValue(filters[f]) +
                         ' <a href="javascript:void(0)" class="snipe-advanced-search-tag-remove" data-field="' + safeField +
-                        '" style="color:#fff;margin-left:6px;text-decoration:none;">&times;</a></span>';
+                        '" style="font-size: 12px; margin-right:6px;display:inline-block;color:#fff;text-decoration:none;">&times;</a></span>';
                 });
 
                 // "Clear all" pill: same shortcut as opening the modal and hitting
@@ -323,7 +323,7 @@
                 html += '<a href="javascript:void(0)" class="label label-danger snipe-advanced-search-tags-clear-all"' +
                     ' title="' + safeClearAllLabel + '"' +
                     ' aria-label="' + safeClearAllLabel + '"' +
-                    ' style="font-size: 11px; margin-right:6px; display:inline-block; margin-bottom:6px; color:#fff; text-decoration:none; cursor:pointer;">' +
+                    ' style="font-size: 12px; margin-right:6px; display:inline-block; margin-bottom:6px; color:#fff; text-decoration:none; cursor:pointer; padding: 4px;">' +
                     '<i class="fas fa-trash" aria-hidden="true" style="margin-right:4px;"></i>' + safeClearAllLabel +
                     '</a>';
 
@@ -397,7 +397,16 @@
                 var html = [`<form class="form-horizontal toolbar-model-form" action="${this.options.actionForm}">`];
                 var operator = this.getAdvancedSearchOperator();
 
-                html.push('<div class="form-group row"><div class="col-sm-12"><p class="help-block"><i class="fa fa-solid fa-lightbulb text-info" aria-hidden="true"></i> {!! trans('general.search_tip') !!}</p></div></div>');
+                {{-- search_tip is dropped through @js so the translation is
+                     JS-safe (escapes quotes, embedded newlines, unicode).
+                     The German locales de-DE / de-if used to carry a
+                     literal newline in this key which turned the whole
+                     inline script into a SyntaxError and left the table
+                     un-initialized. See issue #19736. Any other locale
+                     that grows a newline or apostrophe here (French,
+                     Italian, etc.) is now safe by construction. --}}
+                var searchTipHtml = @js(trans('general.search_tip'));
+                html.push('<div class="form-group row"><div class="col-sm-12"><p class="help-block"><i class="fa fa-solid fa-lightbulb text-info" aria-hidden="true"></i> ' + searchTipHtml + '</p></div></div>');
 
                 html.push(`
                     <div class="form-group row">
@@ -829,6 +838,7 @@
                 buttonsOrder: [
                     'columns',
                     'btnAdd',
+                    'btnShowArchived',
                     'btnShowDeleted',
                     'btnToggleCompleted',
                     'btnDue',
@@ -1381,6 +1391,21 @@
         },
     }); // end access review campaigns table buttons
 
+    // Unaccepted-acceptances table buttons
+    window.acceptanceButtons = () => ({
+        btnShowDeleted: {
+            text: '{{ request('deleted') === 'deleted' ? trans('general.hide_deleted') : trans('general.show_deleted') }}',
+            icon: 'fa-solid fa-trash',
+            event () {
+                window.location.href = '{{ request('deleted') === 'deleted' ? route('unaccepted-acceptances.index') : route('unaccepted-acceptances.index', ['deleted' => 'deleted']) }}';
+            },
+            attributes: {
+                class: '{{ request('deleted') === 'deleted' ? ' btn-selected' : '' }}',
+                title: '{{ request('deleted') === 'deleted' ? trans('general.hide_deleted') : trans('general.show_deleted') }}',
+            }
+        },
+    });
+
     // Oauth table buttons
     window.oauthButtons = () => ({
 
@@ -1556,6 +1581,30 @@
                 @endif
             }
         },
+
+        btnShowArchived: {
+            text: '{{ (request()->input('status') == "Archived") ? trans('general.show_current') : trans('general.show_archived') }}',
+            icon: '{{ \App\Helpers\IconHelper::icon('archived') }}',
+            event () {
+                window.location.href = '{{ (request()->input('status') == "Archived") ? route('accessories.index') : route('accessories.index', ['status' => 'Archived']) }}';
+            },
+            attributes: {
+                class: '{{ (request()->input('status') == "Archived") ? 'btn-selected' : '' }}',
+                title: '{{ (request()->input('status') == "Archived") ? trans('general.show_current') : trans('general.show_archived') }}',
+            }
+        },
+
+        btnShowDeleted: {
+            text: '{{ (request()->input('status') == "Deleted") ? trans('general.show_current') : trans('general.show_deleted') }}',
+            icon: 'fa-solid fa-trash',
+            event () {
+                window.location.href = '{{ (request()->input('status') == "Deleted") ? route('accessories.index') : route('accessories.index', ['status' => 'Deleted']) }}';
+            },
+            attributes: {
+                class: '{{ (request()->input('status') == "Deleted") ? 'btn-selected' : '' }}',
+                title: '{{ (request()->input('status') == "Deleted") ? trans('general.show_current') : trans('general.show_deleted') }}',
+            }
+        },
     });
     @endcan
 
@@ -1647,6 +1696,30 @@
                 title: '{{ trans('general.custom_component_report') }}',
             }
         },
+
+        btnShowArchived: {
+            text: '{{ (request()->input('status') == "Archived") ? trans('general.show_current') : trans('general.show_archived') }}',
+            icon: '{{ \App\Helpers\IconHelper::icon('archived') }}',
+            event () {
+                window.location.href = '{{ (request()->input('status') == "Archived") ? route('components.index') : route('components.index', ['status' => 'Archived']) }}';
+            },
+            attributes: {
+                class: '{{ (request()->input('status') == "Archived") ? 'btn-selected' : '' }}',
+                title: '{{ (request()->input('status') == "Archived") ? trans('general.show_current') : trans('general.show_archived') }}',
+            }
+        },
+
+        btnShowDeleted: {
+            text: '{{ (request()->input('status') == "Deleted") ? trans('general.show_current') : trans('general.show_deleted') }}',
+            icon: 'fa-solid fa-trash',
+            event () {
+                window.location.href = '{{ (request()->input('status') == "Deleted") ? route('components.index') : route('components.index', ['status' => 'Deleted']) }}';
+            },
+            attributes: {
+                class: '{{ (request()->input('status') == "Deleted") ? 'btn-selected' : '' }}',
+                title: '{{ (request()->input('status') == "Deleted") ? trans('general.show_current') : trans('general.show_deleted') }}',
+            }
+        },
     });
     @endcan
 
@@ -1665,6 +1738,30 @@
                 @if ($snipeSettings->shortcuts_enabled == 1)
                 accesskey: 'n'
                 @endif
+            }
+        },
+
+        btnShowArchived: {
+            text: '{{ (request()->input('status') == "Archived") ? trans('general.show_current') : trans('general.show_archived') }}',
+            icon: '{{ \App\Helpers\IconHelper::icon('archived') }}',
+            event () {
+                window.location.href = '{{ (request()->input('status') == "Archived") ? route('consumables.index') : route('consumables.index', ['status' => 'Archived']) }}';
+            },
+            attributes: {
+                class: '{{ (request()->input('status') == "Archived") ? 'btn-selected' : '' }}',
+                title: '{{ (request()->input('status') == "Archived") ? trans('general.show_current') : trans('general.show_archived') }}',
+            }
+        },
+
+        btnShowDeleted: {
+            text: '{{ (request()->input('status') == "Deleted") ? trans('general.show_current') : trans('general.show_deleted') }}',
+            icon: 'fa-solid fa-trash',
+            event () {
+                window.location.href = '{{ (request()->input('status') == "Deleted") ? route('consumables.index') : route('consumables.index', ['status' => 'Deleted']) }}';
+            },
+            attributes: {
+                class: '{{ (request()->input('status') == "Deleted") ? 'btn-selected' : '' }}',
+                title: '{{ (request()->input('status') == "Deleted") ? trans('general.show_current') : trans('general.show_deleted') }}',
             }
         },
     });
@@ -1912,6 +2009,32 @@
         },
     });
     @endcan
+        window.labelButtons = () => ({
+        btnAdd: {
+            icon: 'fa fa-plus',
+            text: 'Create New Label',
+            title: 'Create New Label',
+            event() {
+                $('#new-label-modal').modal('show');
+            },
+            attributes: {
+                class: 'btn-info',
+                title: 'Create New Label'
+            }
+        },
+        btnImport: {
+            icon: 'fa-solid fa-file-import',
+            text: 'Import Label',
+            title: 'Import Label',
+            event() {
+                $('#import-label-modal').modal('show');
+            },
+            attributes: {
+                class: 'btn-info',
+                title: 'Import Label'
+            }
+        }
+    });
 
     @can('create', \App\Models\Statuslabel::class)
     // Status label table buttons
@@ -2144,7 +2267,41 @@
         var action = $select.val();
         if (!action) return;
 
-        // Use uncheck(index) instead of uncheckBy(field, values). bs-table's
+        // Track IDs we auto-unchecked so switching back to an action
+        // where they ARE eligible re-checks them automatically. Without
+        // this, a select-all → delete (3 rows auto-unchecked as not
+        // deletable) → edit cycle leaves those 3 rows unchecked even
+        // though edit accepts them. Keyed per-table so sibling bulk
+        // tables don't cross-contaminate.
+        var autoUnchecked = $table.data('mutexAutoUnchecked') || {};
+        var data = $table.bootstrapTable('getData');
+
+        // Mark the batch as in-flight so our own check/uncheck events
+        // short-circuit the per-row handlers below.
+        $table.data('mutexAutoInFlight', true);
+
+        // Styling pass FIRST for the new action: enables any
+        // previously-disabled checkboxes that are now compatible
+        // (e.g. a row disabled under "delete" that supports "edit").
+        // bootstrapTable's internal check/uncheck toggles no-op on
+        // disabled DOM checkboxes, so Phase 1 below would silently
+        // fail to re-check those rows otherwise.
+        applyActionDependentRowStyling($table, action);
+
+        // Phase 1: re-check any previously auto-unchecked rows that
+        // now support this action.
+        for (var r = 0; r < data.length; r++) {
+            var rid = data[r].id;
+            if (!autoUnchecked[rid]) continue;
+            var supportsNow = (data[r].available_actions && data[r].available_actions.bulk_selectable) || {};
+            if (supportsNow[action] === true) {
+                $table.bootstrapTable('check', r);
+                delete autoUnchecked[rid];
+            }
+        }
+
+        // Phase 2: standard incompatible-row auto-uncheck. Use
+        // uncheck(index) instead of uncheckBy(field, values). bs-table's
         // uncheckBy at bootstrap-table.js line 10791 filters on ':enabled',
         // which means once applyActionDependentRowStyling disables the
         // checkbox on an incompatible row (or a prior refresh cycle did),
@@ -2161,14 +2318,69 @@
             }
         }
 
-        var data = $table.bootstrapTable('getData');
         for (var j = 0; j < data.length; j++) {
             if (idsToUncheck[data[j].id]) {
                 $table.bootstrapTable('uncheck', j);
+                autoUnchecked[data[j].id] = true;
             }
         }
 
+        $table.data('mutexAutoUnchecked', autoUnchecked);
+        $table.data('mutexAutoInFlight', false);
+
+        // The per-row check/uncheck handlers short-circuit while
+        // mutexAutoInFlight is true (prevents per-row refresh thrash
+        // and the re-entry bug that would stop phase 1 after one row).
+        // Run the deferred bookkeeping once now that the batch is
+        // done so the hidden ids[] inputs, selected-count readout,
+        // and dropdown eligibility all match the new selection.
+        syncBulkInputsForTable($table);
+        updateSelectedCount($table[0]);
+        refreshDynamicBulkActions($table[0]);
+
         applyActionDependentRowStyling($table, action);
+    }
+
+    // Rebuilds the hidden ids[] inputs after a batch check/uncheck
+    // pass. Mirrors the add + remove logic the per-row check/uncheck
+    // handlers would do, but as a single sweep rather than one event
+    // per row.
+    function syncBulkInputsForTable($table) {
+        var tableId = $table.data('id-table');
+        var buttonId = $table.data('bulk-button-id');
+        var $button = $(buttonId);
+        var $form = $($table.data('bulk-form-id'));
+        if (!tableId || !$button.length || !$form.length) return;
+
+        var selectedIds = {};
+        $table.bootstrapTable('getSelections').forEach(function (row) {
+            selectedIds[row.id] = true;
+        });
+
+        // Remove hidden inputs for rows no longer selected.
+        $form.find('input[name="ids[]"]').each(function () {
+            if (! selectedIds[this.value]) {
+                $(this).remove();
+            }
+        });
+
+        // Add hidden inputs for newly-selected rows that don't have one.
+        Object.keys(selectedIds).forEach(function (id) {
+            if (! document.getElementById(tableId + '_checkbox_' + id)) {
+                $button.after($('<input/>', {
+                    id: tableId + '_checkbox_' + id,
+                    type: 'hidden',
+                    name: 'ids[]',
+                    value: id,
+                }));
+            }
+        });
+
+        if (Object.keys(selectedIds).length > 0) {
+            $button.removeAttr('disabled');
+        } else {
+            $button.attr('disabled', 'disabled');
+        }
     }
 
     // Toggle a visual disabled state on rows that don't support the
@@ -2223,6 +2435,15 @@
     // doesn't sneak past the guard that fired on dropdown pick.
     function reapplyAutoUncheckForTable(table) {
         var $table = $(table);
+        // Guard re-entry while a batch auto-uncheck/re-check pass is
+        // mid-flight. The check/uncheck events fired by our own
+        // bootstrapTable('check'/'uncheck') calls bubble back through
+        // the handlers below and would recursively re-call this,
+        // flipping the in-flight flag off before the outer loop
+        // finishes, which caused only one row to re-check instead of
+        // the whole set.
+        if ($table.data('mutexAutoInFlight')) return;
+
         var formId = $table.data('bulk-form-id');
         if (!formId) return;
 
@@ -2285,6 +2506,29 @@
             name: 'ids[]',
             value: $element.id
         }));
+
+        // Skip the expensive bulk-actions refresh + re-entry when
+        // this check is being fired by our own batch auto-uncheck /
+        // re-check pass. The outer autoUncheckIncompatibleRowsFor
+        // finishes the whole batch and runs refreshDynamicBulkActions /
+        // applyActionDependentRowStyling once at the end. Without this
+        // short-circuit, every row we re-check triggered a full refresh
+        // cycle, which both caused the "only one row re-selects" bug
+        // (re-entry flipped the in-flight flag off mid-loop) and made
+        // the whole interaction visibly laggy.
+        if ($(this).data('mutexAutoInFlight')) {
+            return;
+        }
+
+        // User-initiated check acknowledges this row explicitly. Drop
+        // it from auto-uncheck tracking so an action switch doesn't
+        // treat it as "we unchecked this" when it was them.
+        var auto = $(this).data('mutexAutoUnchecked') || {};
+        if (auto[$element.id]) {
+            delete auto[$element.id];
+            $(this).data('mutexAutoUnchecked', auto);
+        }
+
         updateSelectedCount(this);
         refreshDynamicBulkActions(this);
         reapplyAutoUncheckForTable(this);
@@ -2307,6 +2551,14 @@
             }
         }
 
+        // Check-all is an explicit "take everything" from the user,
+        // so wipe the auto-uncheck tracking set. reapplyAutoUncheckForTable
+        // below will then re-run the gate against the picked action
+        // and populate the set fresh.
+        if (! $(this).data('mutexAutoInFlight')) {
+            $(this).data('mutexAutoUnchecked', {});
+        }
+
         if ($(this).bootstrapTable('getSelections').length > 0) {
             $(buttonName).removeAttr('disabled');
         }
@@ -2320,11 +2572,39 @@
         var tableId =  $(this).data('id-table');
         $( "#" + tableId + "_checkbox_" + $element.id).remove();
         updateSelectedCount(this);
+
+        // Skip the auto-uncheck bookkeeping when our own batch pass
+        // is firing this event. The outer function tracks adds / drops
+        // directly and shouldn't interact with the per-event handler.
+        if ($(this).data('mutexAutoInFlight')) {
+            return;
+        }
+
+        // Drop this id from the auto-uncheck tracking set when the
+        // user is the one unchecking. Without this, a user who
+        // manually unchecks a row after a prior auto-uncheck cycle
+        // would see it resurrected the next time they picked an action
+        // that accepts it.
+        var auto = $(this).data('mutexAutoUnchecked') || {};
+        if (auto[$element.id]) {
+            delete auto[$element.id];
+            $(this).data('mutexAutoUnchecked', auto);
+        }
     });
 
 
     // Handle whether the edit button should be disabled
     $('.snipe-table').on('uncheck.bs.table', function () {
+        // Short-circuit while a batch auto-uncheck/re-check pass is
+        // mid-flight. Same reason as the sibling check/uncheck
+        // handlers above: our own programmatic uncheck calls bubble
+        // through here and would run refreshDynamicBulkActions per
+        // row, both re-entering autoUncheckIncompatibleRowsFor and
+        // thrashing the dropdown.
+        if ($(this).data('mutexAutoInFlight')) {
+            return;
+        }
+
         var buttonName =  $(this).data('bulk-button-id');
 
         if ($(this).bootstrapTable('getSelections').length == 0) {
@@ -2335,6 +2615,13 @@
     });
 
     $('.snipe-table').on('uncheck-all.bs.table', function (event, rowsAfter, rowsBefore) {
+
+        // Uncheck-all is an explicit "clear everything" from the user,
+        // so the auto-uncheck tracking resets too. Otherwise a prior
+        // auto-unchecked set could spring back on the next action switch.
+        if (! $(this).data('mutexAutoInFlight')) {
+            $(this).data('mutexAutoUnchecked', {});
+        }
 
         var buttonName =  $(this).data('bulk-button-id');
         $(buttonName).attr('disabled', 'disabled');
@@ -2495,12 +2782,13 @@
         if (destination == 'maintenanceTypes') {
             destination = 'maintenance-types';
         }
-        return function (value,row) {
+        return function (value) {
             if ((value) && (value.status_meta)) {
 
-                var text_color;
+                var color_style;
                 var icon_style;
                 var text_help;
+                var square_tag = '';
                 var status_meta = {
                   'deployed': '{{ strtolower(trans('general.deployed')) }}',
                   'deployable': '{{ strtolower(trans('admin/hardware/general.deployable')) }}',
@@ -2511,27 +2799,37 @@
 
                 switch (value.status_meta) {
                     case 'deployed':
-                        text_color = 'blue';
+                        color_style = 'text-blue';
                         icon_style = 'fa-circle';
                         text_help = '<label class="label label-default">{{ trans('general.deployed') }}</label>';
                     break;
                     case 'deployable':
-                        text_color = 'green';
+                        color_style = 'text-green';
                         icon_style = 'fa-circle';
                         text_help = '';
                     break;
                     case 'pending':
-                        text_color = 'orange';
+                        color_style = 'text-orange';
                         icon_style = 'fa-circle';
                         text_help = '';
                         break;
                     default:
-                        text_color = 'red';
+                        color_style = 'text-red';
                         icon_style = 'fa-times';
                         text_help = '';
                 }
 
-                return '<nobr><a href="{{ config('app.url') }}/' + destination + '/' + value.id + '" data-tooltip="true" title="'+ status_meta[value.status_meta] + '"> <i class="fa ' + icon_style + ' text-' + text_color + '"></i> ' + value.name + ' ' + text_help + ' </a> </nobr>';
+                if (value.tag_color) {
+                    square_tag = "<i class='fa-solid fa-fw fa-square' style='color: " + value.tag_color + "' aria-hidden='true'></i> ";
+                }
+
+                return '<nobr><a href="{{ config('app.url') }}/' + destination + '/' + value.id + '" data-tooltip="true" title="' + status_meta[value.status_meta] + '">'
+                    + '<i class="fa ' + icon_style + ' ' + color_style + '"></i> ' + square_tag
+                    + value.name
+                    + ' '
+                    + text_help
+                    + ' '
+                    + '</a> </nobr> ';
             } else if ((value) && (value.name)) {
 
                 // Add some overrides for any funny urls we have
@@ -2643,27 +2941,34 @@
             // available_actions.adjust_quantity (accessories, consumables,
             // components). The click handler in snipeit.js reads the
             // data-* attrs and shows blade/modals/adjust-quantity.
+            // Archived components keep the button rendered but
+            // disabled so admins see the control is unavailable
+            // for retired inventory rather than wondering where it
+            // went.
             if ((row.available_actions) && (row.available_actions.adjust_quantity === true)) {
+                var adjustDeleted = !!row.deleted_at;
+                var adjustDisabled = adjustDeleted || row.archived === true;
+                var adjustReason = adjustDeleted
+                    ? '{{ trans('general.component_deleted_warning') }}'
+                    : '{{ trans('general.archived_item_label', ['item_type' => trans('general.component')]) }}';
                 actions += window.renderAdjustQuantityButton({
                     dest: dest,
                     id: row.id,
                     name: row.name || '',
                     available: row.remaining,
+                    disabled: adjustDisabled,
+                    disabledReason: adjustReason,
                 }) + '&nbsp;';
             }
 
-            if ((row.available_actions) && (row.available_actions.delete === true)) {
-
+            if ((row.available_actions) && (row.available_actions.update === true)) {
                 // use the asset tag if no name is provided
-
                 if (row.name) {
                     var name_for_box = row.name
                 } else if (row.asset_tag) {
                     var name_for_box = row.asset_tag
                 }
 
-
-                
                 actions += '<a href="{{ config('app.url') }}/' + dest + '/' + row.id + '" '
                     + ' class="actions btn btn-danger btn-sm delete-asset hidden-print" data-tooltip="true"  '
                     + ' data-toggle="modal" data-icon="fa-trash"'
@@ -2882,6 +3187,52 @@
         return '<a href="' + value.url + '">' + name + '</a>';
     }
 
+    // Renders the per-row action cluster for /unaccepted-acceptances:
+    // Send Reminder (POST form) + Delete (DELETE form via the shared
+    // dataConfirmModal). Buttons are rendered conditionally on
+    // row.available_actions so a row without an assignee email loses
+    // its reminder affordance and a soft-deleted row loses both.
+    function acceptanceActionsFormatter(value, row) {
+        if (!row) {
+            return '';
+        }
+        var permissions = (row.available_actions || {});
+        var actions = '';
+
+        if (permissions.send_reminder) {
+            var reminderUrl = '{{ route('unaccepted-acceptances.send-reminder') }}';
+            actions += '<form method="post" style="display:inline;" action="' + reminderUrl + '">' +
+                '<input type="hidden" name="_token" value="{{ csrf_token() }}">' +
+                '<input type="hidden" name="acceptance_id" value="' + row.id + '">' +
+                '<button type="submit" class="btn btn-sm btn-warning" data-tooltip="true" data-title="{{ trans('admin/reports/general.send_reminder') }}">' +
+                '<i class="fa fa-repeat" aria-hidden="true"></i>' +
+                '<span class="sr-only">{{ trans('admin/reports/general.send_reminder') }}</span>' +
+                '</button>' +
+                '</form>';
+        }
+
+        if (permissions.delete) {
+            var deleteUrl = '{{ url('/') }}/unaccepted-acceptances/' + row.id;
+            // Pipe through the shared dataConfirmModal so this acts
+            // like every other destructive action in the app
+            // (delete-asset class + data-href + data-content).
+            actions += ' <a href="' + deleteUrl + '"' +
+                ' class="btn btn-sm btn-danger delete-asset"' +
+                ' data-toggle="modal"' +
+                ' data-content="{{ trans('general.delete_confirm', ['item' => trans('admin/reports/general.acceptance_request')]) }}"' +
+                ' data-title="{{ trans('general.delete') }}"' +
+                ' data-icon="fa-trash"' +
+                ' data-tooltip="true"' +
+                ' title="{{ trans('general.delete') }}"' +
+                ' onClick="return false;">' +
+                '<i class="fa fa-trash" aria-hidden="true"></i>' +
+                '<span class="sr-only">{{ trans('general.delete') }}</span>' +
+                '</a>';
+        }
+
+        return actions;
+    }
+
     // Renders the per-row action cluster: admin-cancel form + a
     // checkout / checkin button per available_actions. All destination
     // ids come from the transformer output, so no per-type URL
@@ -2911,11 +3262,9 @@
             if (!typeSlug) {
                 return actions; // Unknown type, don't render a broken cancel button.
             }
-            // Same shape the old blade posted to. Includes the fifth
-            // "requestingUser" segment so an admin cancels the
-            // specific user's request rather than their own.
+            
             var cancelUrl = '{{ config('app.url') }}/account/request/' +
-                typeSlug + '/' + row.requestable.id + '/1/' + row.user.id;
+                typeSlug + '/' + row.requestable.id + '/' + row.user.id;
             // Pipe through the shared dataConfirmModal so this
             // behaves like every other destructive action in the
             // app (delete-asset class + data-href + data-content).
@@ -3177,6 +3526,15 @@
             // a checkin action. Segment appended to the URL to match
             // the /{destination}/{id}/checkin/{backto?} route.
             var backto = row.checkin_backto ? '/' + row.checkin_backto : '';
+
+            // Soft-deleted rows render a disabled checkout stand-in
+            // instead of the active link so the Deleted-index view
+            // keeps the control visible but inert. row.deleted_at is
+            // populated by the transformer whenever the model uses
+            // SoftDeletes.
+            if (row.deleted_at && (row.available_actions.checkout == true)) {
+                return '<span data-tooltip="true" title="{{ trans('general.cannot_be_checked_out') }}"><a class="btn btn-sm bg-maroon btn-checkout disabled">{{ trans('general.checkout') }}</a></span>';
+            }
 
             // The user is allowed to check items out, AND the item is deployable
             if ((row.available_actions.checkout == true) && (row.user_can_checkout == true) && ((!row.asset_id) && (!row.assigned_to))) {
@@ -3473,6 +3831,26 @@
         return actions;
     };
 
+    // Actions column for the Assigned tab on the consumable show page.
+    // The Assigned tab only lists outstanding rows, so when the consume
+    // action isn't available the row shouldn't be here at all. Fail
+    // closed to an empty cell.
+    window.consumablesConsumeActionFormatter = function (value, row) {
+        if (!row.available_actions || !row.available_actions.consume) {
+            return '';
+        }
+        return '<form style="display:inline;" method="POST"'
+            + ' action="{{ config('app.url') }}/consumables/' + row.consumable_id + '/consume/' + row.id + '"'
+            + ' accept-charset="utf-8">'
+            + '<input type="hidden" name="_token" value="' + $('meta[name="csrf-token"]').attr('content') + '">'
+            + '<button type="submit" class="btn btn-sm bg-purple hidden-print"'
+            + ' data-tooltip="true" title="{{ trans('admin/consumables/general.mark_consumed') }}">'
+            + '<x-icon type="checkmark" class="fa-fw" />'
+            + '<span class="sr-only">{{ trans('admin/consumables/general.mark_consumed') }}</span>'
+            + '</button>'
+            + '</form>';
+    };
+
     // Shared markup for the adjust-quantity plus-minus button. Used by
     // genericActionsFormatter's adjust_quantity branch above AND by
     // lowStockActionsFormatter below so both call sites render an
@@ -3482,7 +3860,13 @@
     // for the modal header, and the available count for the modal help
     // text.
     window.renderAdjustQuantityButton = function (opts) {
-        return '<button type="button" class="actions btn btn-sm btn-primary hidden-print adjust-quantity" data-tooltip="true" title="{{ trans('general.adjust_quantity') }}"'
+        var disabled = opts.disabled === true;
+        var title = disabled && opts.disabledReason
+            ? opts.disabledReason
+            : '{{ trans('general.adjust_quantity') }}';
+        return '<button type="button" class="actions btn btn-sm btn-primary hidden-print adjust-quantity'
+            + (disabled ? ' disabled' : '') + '" data-tooltip="true" title="' + title + '"'
+            + (disabled ? ' disabled' : '')
             + ' data-adjust-url="{{ config('app.url') }}/' + opts.dest + '/' + opts.id + '/adjust-quantity"'
             + ' data-item-name="' + (opts.name || '') + '"'
             + ' data-available="' + (opts.available != null ? opts.available : '') + '">'
@@ -3769,6 +4153,30 @@
         }
     }
 
+    function companyWebhookActionsFormatter(value, row) {
+        return '<a href="{{ config('app.url') }}/companies/' + row.id + '/edit" ' +
+            'class="btn btn-sm btn-warning" ' +
+            'title="Edit">' +
+            '<i class="fas fa-pencil" aria-hidden="true"></i>' +
+            '<span class="sr-only">{{ trans('general.edit') }}</span>' +
+            '</a>';
+    }
+    function companyWebhookIntegrationFormatter(value) {
+        switch (value) {
+            case 'slack':
+                return '<i class="fa-brands fa-slack fa-lg" title="Slack"></i>';
+
+            case 'google':
+                return '<i class="fa-brands fa-google fa-lg" title="Google Chat"></i>';
+
+            case 'microsoft':
+                return '<i class="fa-brands fa-microsoft fa-lg" title="Microsoft Teams"></i>';
+
+            default:
+                return '<i class="fa-solid fa-webhook fa-lg" title="Webhook"></i>';
+        }
+    }
+
     // Renders a single company tag. `isInherited` is decided by the caller —
     // it's true only when (a) we're on the companies show page (viewing context
     // is set), (b) the row didn't get included via direct membership, and (c)
@@ -3934,16 +4342,21 @@
     }
 
 
-    function filePreviewFormatter(row, value) {
+    // bootstrap-table formatter signature is (value, row, index, field).
+    // The `image` column backing this formatter is a placeholder: no
+    // `image` key is emitted by UploadedFilesTransformer, so `value` is
+    // always undefined. The preview data (url, mediatype, inlineable)
+    // lives at the row root, so the formatter drives off `row` directly.
+    function filePreviewFormatter(value, row) {
 
-        if ((value) && (value.url) && (value.inlineable)) {
+        if ((row) && (row.url) && (row.inlineable)) {
 
-            if (value.mediatype == 'image') {
-                return '<a href="' + value.url + '?inline=true" data-toggle="lightbox" data-type="image"><img src="' + value.url + '" style="max-height: {{ $snipeSettings->thumbnail_max_h }}px; width: auto;" class="img-responsive" alt=""></a>';
-            } else if (value.mediatype == 'video') {
-                return '<a href="' + value.url + '?inline=true" data-toggle="lightbox" data-type="video"><video style="max-height: {{ $snipeSettings->thumbnail_max_h }}px; width: auto;" class="img-responsive"><source src="' + value.url + '?inline=true"></video></a>';
-            } else if (value.mediatype == 'audio') {
-                return '<audio controls><source src="' + value.url + '?inline=true" type="audio/mp3">Your browser does not support the audio element.</audio>';
+            if (row.mediatype == 'image') {
+                return '<a href="' + row.url + '?inline=true" data-toggle="lightbox" data-type="image"><img src="' + row.url + '" style="max-height: {{ $snipeSettings->thumbnail_max_h }}px; width: auto;" class="img-responsive" alt=""></a>';
+            } else if (row.mediatype == 'video') {
+                return '<a href="' + row.url + '?inline=true" data-toggle="lightbox" data-type="video"><video style="max-height: {{ $snipeSettings->thumbnail_max_h }}px; width: auto;" class="img-responsive"><source src="' + row.url + '?inline=true"></video></a>';
+            } else if (row.mediatype == 'audio') {
+                return '<audio controls><source src="' + row.url + '?inline=true" type="audio/mp3">Your browser does not support the audio element.</audio>';
             }
             return '{{ trans('general.preview_not_available') }}';
         }
@@ -4085,6 +4498,76 @@
 
     function linkNumberToUserAssignedMaintenancesFormatter(value, row) {
         return linkToUserSectionBasedOnCount(value, row.id, 'maintenances');
+    }
+
+    function labelActionsFormatter(value, row) {
+        if (!row.name) return '';
+
+        const createUrl = '{{ route('settings.labels.create') }}';
+        // Clone Button
+        let cloneHref;
+
+        if (row.source === 'custom') {
+            cloneHref = createUrl + '?custom_label_id=' + row.custom_label_id;
+        } else {
+            cloneHref = createUrl + '?label=' + encodeURIComponent(row.name);
+        }
+
+        let actions = '<a href="' + cloneHref + '" '
+            + 'class="actions btn btn-sm btn-primary hidden-print" '
+            + 'data-tooltip="true" '
+            + 'title="{{ trans('general.clone') }}">'
+            + '<i class="fa-regular fa-clone"></i>'
+            + '<span class="sr-only">{{ trans('general.clone') }}</span>'
+            + '</a>&nbsp;';
+        // Only allow delete, share or edit for custom labels
+        if (row.source === 'custom') {
+            // Update Button
+            var editUrl = editLabelUrlTemplate.replace('label_id', row.custom_label_id);
+
+            actions += '<a href="' + editUrl + '" '
+                + 'class="actions btn btn-sm btn-warning hidden-print" '
+                + 'data-tooltip="true" '
+                + 'title="{{ trans('general.update') }}">'
+                + '<x-icon type="edit" class="fa-fw" />'
+                + '<span class="sr-only">{{ trans('general.update') }}</span>'
+                + '</a>&nbsp;';
+            // Share button
+            var encodedJson = encodeURIComponent(JSON.stringify(row.config_snapshot || {}, null, 2));
+
+            actions += '<button type="button" '
+                + 'class="btn btn-primary btn-sm export-label-json hidden-print" '
+                + 'data-json="' + encodedJson + '" '
+                + 'data-name="' + encodeURIComponent(row.name || "label") + '" '
+                + 'title="Export Label" '
+                + 'data-tooltip="true">'
+                + '<i class="fa-solid fa-file-export"></i>'
+                + '<span class="sr-only">Export Label</span>'
+                + '</button>&nbsp;';
+
+            // Delete button
+            var safeName = $('<div>').text(row.name || 'this label').html().replace(/"/g, '&quot;');
+            var deleteUrl = deleteLabelUrlTemplate.replace('label_id', row.custom_label_id);
+
+            actions += '<a href="' + deleteUrl + '" '
+                + 'class="actions btn btn-danger btn-sm delete-custom-label hidden-print" '
+                + 'data-tooltip="true" '
+                + 'data-icon="fa-trash" '
+                + 'data-content="{{ trans('general.sure_to_delete') }}: ' + safeName + '?" '
+                + 'data-title="{{ trans('general.delete') }}">'
+                + '<x-icon type="delete" class="fa-fw" />'
+                + '<span class="sr-only">{{ trans('general.delete') }}</span>'
+                + '</a>&nbsp;';
+        }
+
+
+        return actions;
+    }
+
+    function labelNameFormatter(value) {
+        if (!value) return '';
+        value = String(value).replace(/\//g, '\\').replace(/^(Sheets|Tapes)\\/, '');
+        return $('<div/>').text(value).html();
     }
 
     function labelPerPageFormatter(value, row, index, field) {

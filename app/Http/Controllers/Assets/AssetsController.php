@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Assets;
 
+use App\Enums\FileStorage;
 use App\Events\CheckoutableCheckedIn;
 use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
@@ -363,8 +364,6 @@ class AssetsController extends Controller
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
      *
-     * @param  int  $assetId
-     *
      * @since [v1.0]
      *
      * @return View
@@ -440,7 +439,6 @@ class AssetsController extends Controller
     /**
      * Validate and process asset edit form.
      *
-     * @param  int  $assetId
      *
      * @since [v1.0]
      *
@@ -506,7 +504,7 @@ class AssetsController extends Controller
 
         if ($request->filled('image_delete')) {
             try {
-                unlink(public_path().'/uploads/assets/'.basename($asset->image));
+                Storage::disk('public')->delete(FileStorage::Assets->publicPath().basename($asset->image));
                 $asset->image = '';
             } catch (\Exception $e) {
                 Log::info($e);
@@ -592,8 +590,6 @@ class AssetsController extends Controller
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
      *
-     * @param  int  $assetId
-     *
      * @since [v1.0]
      */
     public function destroy(Request $request, Asset $asset): RedirectResponse
@@ -672,8 +668,6 @@ class AssetsController extends Controller
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
      *
-     * @param  int  $assetId
-     *
      * @since [v1.0]
      */
     public function getQrCode(Asset $asset): Response|BinaryFileResponse|string|bool
@@ -684,20 +678,24 @@ class AssetsController extends Controller
 
             if ($asset) {
                 $size = Helper::barcodeDimensions($settings->label2_2d_type);
-                $qr_file = public_path().'/uploads/barcodes/qr-'.str_slug($asset->asset_tag).'-'.str_slug($asset->id).'.png';
+                $qr_key = FileStorage::Barcodes->publicPath().'qr-'.str_slug($asset->asset_tag).'-'.str_slug($asset->id).'.png';
 
                 if (isset($asset->id, $asset->asset_tag)) {
-                    if (file_exists($qr_file)) {
-                        $header = ['Content-type' => 'image/png'];
-
-                        return response()->file($qr_file, $header);
-                    } else {
+                    if (! Storage::disk('public')->exists($qr_key)) {
                         $barcode = new Barcode;
                         $barcode_obj = $barcode->getBarcodeObj($settings->label2_2d_type, route('hardware.show', $asset->id), $size['height'], $size['width'], 'black', [-2, -2, -2, -2]);
-                        file_put_contents($qr_file, $barcode_obj->getPngData());
-
-                        return response($barcode_obj->getPngData())->header('Content-type', 'image/png');
+                        Storage::disk('public')->put($qr_key, $barcode_obj->getPngData());
                     }
+
+                    // Buffered rather than StreamedResponse or a redirect
+                    // to the storage URL. StreamedResponse was truncating
+                    // bodies on S3, and a 302 to the storage URL leaves
+                    // Safari with a text/html 302 body on the img fetch
+                    // which it refuses to render as an image. QR PNGs
+                    // are a few KB, in-memory is fine.
+                    return response(Storage::disk('public')->get($qr_key), 200, [
+                        'Content-type' => 'image/png',
+                    ]);
                 }
             }
 
@@ -730,29 +728,29 @@ class AssetsController extends Controller
             // tags.
             $this->authorize('view', $asset);
 
-            $barcode_file = public_path().'/uploads/barcodes/'.str_slug($settings->label2_1d_type).'-'.str_slug($asset->asset_tag).'.png';
+            $barcode_key = FileStorage::Barcodes->publicPath().str_slug($settings->label2_1d_type).'-'.str_slug($asset->asset_tag).'.png';
 
             if (isset($asset->id, $asset->asset_tag)) {
-                if (file_exists($barcode_file)) {
-                    $header = ['Content-type' => 'image/png'];
-
-                    return response()->file($barcode_file, $header);
-                } else {
+                if (! Storage::disk('public')->exists($barcode_key)) {
                     // Calculate barcode width in pixel based on label width (inch)
                     $barcode_width = ($settings->labels_width - $settings->labels_display_sgutter) * 200.000000000001;
 
                     $barcode = new Barcode;
                     try {
                         $barcode_obj = $barcode->getBarcodeObj($settings->label2_1d_type, $asset->asset_tag, ($barcode_width < 300 ? $barcode_width : 300), 50);
-                        file_put_contents($barcode_file, $barcode_obj->getPngData());
-
-                        return response($barcode_obj->getPngData())->header('Content-type', 'image/png');
+                        Storage::disk('public')->put($barcode_key, $barcode_obj->getPngData());
                     } catch (\Exception|TypeError $e) {
                         Log::debug('The barcode format is invalid.');
 
-                        return response(file_get_contents(public_path('uploads/barcodes/invalid_barcode.gif')))->header('Content-type', 'image/gif');
+                        return response(Storage::disk('public')->get(FileStorage::Barcodes->publicPath().'invalid_barcode.gif'))->header('Content-type', 'image/gif');
                     }
                 }
+
+                // Buffered rather than StreamedResponse or a redirect.
+                // See getQrCode() for the Safari-img-tag context.
+                return response(Storage::disk('public')->get($barcode_key), 200, [
+                    'Content-type' => 'image/png',
+                ]);
             }
         }
 
@@ -787,8 +785,6 @@ class AssetsController extends Controller
      * Returns a view that presents a form to clone an asset.
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
-     *
-     * @param  int  $assetId
      *
      * @since [v1.0]
      *
@@ -986,9 +982,9 @@ class AssetsController extends Controller
         if ($asset->isValid() && $asset->save()) {
 
             $file_name = null;
-            // Create the image (if one was chosen.)
-            if ($request->hasFile('image')) {
-                $file_name = $request->handleFile('private_uploads/audits/', 'audit-'.$asset->id, $request->file('image'));
+            // Field name changed from `image` to the `file[]` shape UploadFileRequest actually validates.
+            if ($request->hasFile('file.0')) {
+                $file_name = $request->handleFile(FileStorage::Audits->privateStorageKey(), 'audit-'.$asset->id, $request->file('file.0'));
             }
 
             $asset->logAudit($request->input('note'), $request->input('location_id'), $file_name, $originalValues);
@@ -1034,7 +1030,7 @@ class AssetsController extends Controller
                 ]));
         }
 
-        $requests = CheckoutRequest::with('requestedItem')
+        $requests = CheckoutRequest::with('requestedItem', 'user')
             ->whereIn('id', $ids)
             ->whereNull('canceled_at')
             ->get();
@@ -1049,6 +1045,16 @@ class AssetsController extends Controller
             }
 
             if (! Company::isCurrentUserHasAccess($requestable)) {
+                continue;
+            }
+
+            // For AssetModel-parent requests, Company::isCurrentUserHasAccess
+            // short-circuits to true because AssetModel has no
+            // company_id column. Fall back to the requesting user's
+            // tenant visibility.
+            if ($checkoutRequest->requestable_type === AssetModel::class
+                && (! $checkoutRequest->user || ! Company::isCurrentUserHasAccess($checkoutRequest->user))
+            ) {
                 continue;
             }
 

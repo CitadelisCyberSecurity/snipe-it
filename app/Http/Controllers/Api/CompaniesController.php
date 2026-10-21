@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\FileStorage;
 use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\FilterRequest;
@@ -96,7 +97,10 @@ class CompaniesController extends Controller
                 $companies->where('parent_id', '=', (int) $parentId);
             }
         }
-
+        if ($request->boolean('has_webhook')) {
+            $companies->whereNotNull('webhook_endpoint')
+                ->where('webhook_endpoint', '!=', '');
+        }
         // Make sure the offset and limit are actually integers and do not exceed system limits
         $total = $companies->count();
         $offset = ($request->input('offset') > $total) ? $total : app('api_offset_value');
@@ -116,7 +120,6 @@ class CompaniesController extends Controller
                 $companies = $companies->orderBy($column_sort, $order);
                 break;
         }
-
 
         $companies = $companies->skip($offset)->take($limit)->get();
 
@@ -292,7 +295,7 @@ class CompaniesController extends Controller
             // Searching breaks hierarchy display anyway — render flat results.
             foreach ($companies as $company) {
                 $company->use_image = ($company->image)
-                    ? Storage::disk('public')->url('companies/'.$company->image)
+                    ? Storage::disk('public')->url(FileStorage::Companies->publicPath().$company->image)
                     : null;
             }
             $sorted = $companies;
@@ -318,6 +321,6 @@ class CompaniesController extends Controller
             $sorted = new Collection(Company::indenter($companies_by_parent));
         }
 
-        return (new SelectlistTransformer)->transformSelectlist(Helper::paginateCollection($sorted));
+        return (new SelectlistTransformer)->transformSelectlist(Helper::paginateCollectionOrAll($sorted));
     }
 }

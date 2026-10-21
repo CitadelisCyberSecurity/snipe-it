@@ -153,7 +153,7 @@ class BulkAuditAssetsTest extends TestCase
             ->post($this->bulkUrl(), [
                 'ids' => [$a->id, $b->id],
                 'note' => 'batch w/ photo',
-                'image' => UploadedFile::fake()->image('audit.jpg'),
+                'file' => [UploadedFile::fake()->image('audit.jpg')],
             ])
             ->assertOk()
             ->assertJsonPath('status', 'success');

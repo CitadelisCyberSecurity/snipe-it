@@ -301,6 +301,30 @@ class UsersController extends Controller
             $users = $users->where('users.end_date', '=', $request->input('end_date'));
         }
 
+        if ($request->filled('end_date_within')) {
+            // Window filter for the dashboard's offboarding tile. Range
+            // comparison instead of whereDate so the index on
+            // users.end_date (added in the 2026_08_14_170000 migration)
+            // can actually be used.
+            $days = (int) $request->input('end_date_within');
+            $users = $users->whereBetween('users.end_date', [
+                now()->startOfDay(),
+                now()->addDays($days)->endOfDay(),
+            ]);
+        }
+
+        if ($request->boolean('with_assignments')) {
+            // Narrow to users who still hold at least one assigned
+            // item. Matches the NeedsAttention widget's offboarding
+            // count so the tile's click-through lands on the same set.
+            $users = $users->where(function ($query) {
+                $query->has('assets')
+                    ->orHas('licenses')
+                    ->orHas('accessories')
+                    ->orHas('consumables');
+            });
+        }
+
         if ($request->filled('assets_count')) {
             $users->has('assets', '=', $request->input('assets_count'));
         }
@@ -444,7 +468,20 @@ class UsersController extends Controller
         }
 
         $users = $users->orderBy('display_name', 'asc')->orderBy('last_name', 'asc')->orderBy('first_name', 'asc');
-        $users = $users->paginate(50);
+
+        // ?all=1 opts into the single-page response the select2-checkboxes-scrollbox /
+        // select2-checkboxes pickers use for Select All. Capped by
+        // config('app.max_unpaginated_records'), bounded further by any
+        // ?cap=N the client sends (never higher than the config value).
+        if (request()->boolean('all')) {
+            $serverCap = (int) config('app.max_unpaginated_records', 5000);
+            $clientCap = (int) request()->integer('cap', PHP_INT_MAX);
+            $cap = $clientCap > 0 ? min($serverCap, $clientCap) : $serverCap;
+            $perPage = max($cap, 1);
+            $users = $users->paginate($perPage);
+        } else {
+            $users = $users->paginate(50);
+        }
 
         foreach ($users as $user) {
             $name_str = $user->display_name;
@@ -603,7 +640,6 @@ class UsersController extends Controller
      * @since [v4.0]
      *
      * @param  Request  $request
-     * @param  int  $id
      */
     public function update(SaveUserRequest $request, User $user): JsonResponse
     {
@@ -672,7 +708,6 @@ class UsersController extends Controller
             'remember_token',
             'two_factor_secret',
             'two_factor_enrolled',
-            'two_factor_optin',
         ])));
 
         if ($canEditAuthFields) {

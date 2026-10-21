@@ -35,20 +35,6 @@ class LowStockController extends Controller
      */
     private const SORTABLE_COLUMNS = ['name', 'type', 'qty', 'min_amt', 'remaining', 'percent'];
 
-    /**
-     * Plural type discriminator from Helper::checkLowInventory() rows
-     * mapped to the model class the row represents. Used to filter
-     * results by per-type view permission so an accessory-only viewer
-     * doesn't see consumable / component rows through this widget.
-     */
-    private const TYPE_TO_CLASS = [
-        'consumables' => Consumable::class,
-        'accessories' => Accessory::class,
-        'components' => Component::class,
-        'models' => AssetModel::class,
-        'licenses' => License::class,
-    ];
-
     public function index(Request $request): JsonResponse|array
     {
         // Base access gate. Anyone who can view any of the source types
@@ -66,18 +52,12 @@ class LowStockController extends Controller
             abort(403);
         }
 
-        $rows = Helper::checkLowInventory();
-
         // Filter rows to types the caller can view so a viewer with
         // only e.g. accessories.view doesn't get consumable / component
-        // rows leaked through the shared widget endpoint. Rows whose
-        // plural type isn't in the map (future addition) fall through
-        // gated on nothing, matching pre-filter behavior.
-        $rows = array_values(array_filter(
-            $rows,
-            fn ($row) => ! isset(self::TYPE_TO_CLASS[$row['type']])
-                || $viewer->can('view', self::TYPE_TO_CLASS[$row['type']]),
-        ));
+        // rows leaked through the shared widget endpoint. Shared with
+        // AlertMenu so both surfaces agree on which rows a given user
+        // can see.
+        $rows = LowStockTransformer::viewableByCaller(Helper::checkLowInventory(), $viewer);
 
         $search = trim((string) $request->input('search', ''));
         if ($search !== '') {

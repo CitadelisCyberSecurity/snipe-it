@@ -248,7 +248,202 @@ abstract class SyncAdapter
      */
     public function extraFields(): array
     {
+        return $this->presetExtraFields() + $this->adminDefinedExtraFields();
+    }
+
+    /**
+     * Vendor-specific extras the adapter extracts in its own normalize()
+     * from well-known API fields. Default empty - adapters that emit
+     * extras override this with their preset keys (e.g. Intune's
+     * compliance_state, Jamf's building, Kandji's blueprint).
+     *
+     * This replaced the old extraFields() hook when admin-defined extras
+     * were added. extraFields() now composes presets with admin extras
+     * so Blade / mapping-targets consumers see the union.
+     *
+     * @return array<string, string|array{label?: string, label_key?: string, type?: string, admin_defined?: bool}>
+     */
+    public function presetExtraFields(): array
+    {
         return [];
+    }
+
+    /**
+     * Admin-defined extras surfaced as mapping targets. Every adapter
+     * gets a Custom Extras widget below its mapping table where admins
+     * can pair a Snipe-IT destination (custom:X or native:X) with a
+     * vendor-record dot-path. extraFields() includes these alongside
+     * the adapter's own presetExtraFields() so the mapping picker
+     * shows both groups.
+     *
+     * @return array<string, array{label: string, admin_defined: true}>
+     */
+    public function adminDefinedExtraFields(): array
+    {
+        $out = [];
+        foreach (array_keys($this->adminDefinedExtras()) as $key) {
+            $out[$key] = ['label' => $key, 'admin_defined' => true];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Admin-configured extras rows for this instance: destination key
+     * (`custom:X` / `native:X`) mapped to a dot-path into the vendor
+     * record. Shared with CustomHttpAdapter's existing Vendor Response
+     * Paths widget via the same `field_paths` config key. Entries whose
+     * destination is a HostInventoryRecord slot (hostname / serial /
+     * etc.) are filtered out here - those are CustomHttp-specific and
+     * driven by its own normalize path, not the admin-extras overlay.
+     *
+     * @return array<string, string>
+     */
+    public function adminDefinedExtras(): array
+    {
+        $raw = SyncAdapterConfig::get($this->instance->id, 'field_paths');
+        if (! is_string($raw) || trim($raw) === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (! is_array($decoded)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($decoded as $key => $path) {
+            if (! is_string($key) || ! is_string($path) || $path === '') {
+                continue;
+            }
+            if (! str_starts_with($key, 'custom:') && ! str_starts_with($key, 'native:')) {
+                continue;
+            }
+            $out[$key] = $path;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Overlay admin-defined extras onto an adapter's preset extras.
+     * Called from each adapter's normalize() after assembling the
+     * preset extras, right before yielding the HostInventoryRecord.
+     * Walks every configured dot-path against the raw vendor record
+     * and populates the corresponding extras key.
+     *
+     * @param  array<string, mixed>  $extra
+     * @param  array<string, mixed>  $vendorRecord
+     * @return array<string, mixed>
+     */
+    protected function applyAdminExtras(array $extra, array $vendorRecord): array
+    {
+        foreach ($this->adminDefinedExtras() as $key => $path) {
+            $extra[$key] = self::dotPathGet($vendorRecord, $path);
+        }
+
+        return $extra;
+    }
+
+    /**
+     * Which destination options to expose in this adapter's Custom
+     * Extras widget. Named adapters only let admins add new custom:X
+     * / native:X mappings so they can't accidentally remap an identity
+     * field (serial, hostname, etc.) that the adapter's normalize()
+     * owns. CustomHttp overrides this to include HostInventoryRecord
+     * slots because for that adapter, admins ARE the ones defining
+     * where every field comes from.
+     *
+     * @return array<string, string>
+     */
+    public function customExtrasDestinationOptions(): array
+    {
+        $options = [
+            'native:notes' => trans('admin/settings/sync_adapters.target_native_notes'),
+            'native:purchase_date' => MappingTargets::labelFor('native:purchase_date'),
+            'native:order_number' => MappingTargets::labelFor('native:order_number'),
+        ];
+
+        foreach (\App\Models\CustomField::whereIn('element', ['text', 'textarea', 'markdown-textarea', 'checkbox'])->orderBy('name')->get() as $cf) {
+            $options['custom:'.$cf->id] = trans('admin/settings/sync_adapters.target_custom_prefix').': '.$cf->name;
+        }
+
+        return $options;
+    }
+
+    /**
+     * CustomHttp drives its field_paths widget via its own schema
+     * entry (type: field_map) because that widget predates admin-
+     * extras and also exposes HostInventoryRecord slots. Named
+     * adapters opt into the shared Custom Extras widget by leaving
+     * this at its default of false.
+     */
+    public function rendersFieldPathsInSchema(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Whether the shared "Custom Extras" fieldset renders on this
+     * adapter's settings page. Default off so adapters that haven't
+     * been wired up (no applyAdminExtras() call in their normalize())
+     * don't advertise a widget that then does nothing at sync time.
+     * Adapters opt in once their normalize() is calling
+     * applyAdminExtras() by overriding this to true.
+     */
+    public function supportsAdminDefinedExtras(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Hook for an adapter-specific "fetch extra details per device"
+     * toggle in the shared settings UI. When this returns a label +
+     * help string, the base saveConfig persists the posted
+     * `{slug}_fetch_per_device_details` boolean and the shared Blade
+     * renders a checkbox row. Adapters that don't need the toggle
+     * (every adapter whose LIST endpoint already returns everything)
+     * leave this at the default null.
+     *
+     * @return array{label: string, help: string}|null
+     */
+    public function perDeviceDetailsToggle(): ?array
+    {
+        return null;
+    }
+
+    /**
+     * Walk a dot-separated path into a nested array structure. Empty
+     * path returns the input unchanged. Numeric segments (like
+     * "data.0.serial") index into sequential arrays. Returns null for
+     * any miss so downstream null-guards do the right thing.
+     */
+    public static function dotPathGet(mixed $data, string $path): mixed
+    {
+        if ($path === '') {
+            return $data;
+        }
+
+        $current = $data;
+        foreach (explode('.', $path) as $segment) {
+            if (! is_array($current)) {
+                return null;
+            }
+            if (array_key_exists($segment, $current)) {
+                $current = $current[$segment];
+
+                continue;
+            }
+            if (ctype_digit($segment) && array_key_exists((int) $segment, $current)) {
+                $current = $current[(int) $segment];
+
+                continue;
+            }
+
+            return null;
+        }
+
+        return $current;
     }
 
     /**
@@ -368,12 +563,27 @@ abstract class SyncAdapter
             $slug.'_asset_tag_pattern' => ['nullable', 'string', 'max:191', new \App\Rules\AssetTagPatternRule],
             $slug.'_default_category_id' => ['nullable', 'integer', 'exists:categories,id'],
             $slug.'_default_status_id' => ['required', 'integer', 'exists:status_labels,id'],
+            $slug.'_default_fieldset_id' => ['nullable', 'integer', 'exists:custom_fieldsets,id'],
             $slug.'_user_match_strategy' => ['nullable', 'string', 'in:none,email,username,username_then_email'],
             $slug.'_adopt_by_serial' => ['nullable', 'boolean'],
+            $slug.'_create_snipeit_assets_on_pull' => ['nullable', 'boolean'],
         ];
 
+        // Admin-defined extras widget. Posts as an associative array
+        // of {destination: vendor_path}. Only rendered for adapters
+        // that opt in via supportsAdminDefinedExtras(), but the rule
+        // itself is cheap and harmless when absent.
+        if ($this->supportsAdminDefinedExtras()) {
+            $rules[$slug.'_field_paths'] = ['nullable', 'array'];
+            $rules[$slug.'_field_paths.*'] = ['nullable', 'string', 'max:191'];
+        }
+
+        if ($this->perDeviceDetailsToggle() !== null) {
+            $rules[$slug.'_fetch_per_device_details'] = ['nullable', 'boolean'];
+        }
+
         if ($this->usesConfigurableUrl()) {
-            $rules[$slug.'_url'] = ['required', new ExternalUrl];
+            $rules[$slug.'_url'] = ['required', new ExternalUrl('app.sync_adapter_allow_internal_targets')];
         }
 
         foreach ($this->settingsSchema() as $field) {
@@ -441,11 +651,49 @@ abstract class SyncAdapter
             $this->persistGroupMappings($request, $slug);
         }
 
+        if ($this->supportsAdminDefinedExtras()) {
+            $this->persistAdminDefinedExtras($request, $slug);
+        }
+
         $validFields = $this->validMappingFields();
         $this->persistFieldMappings($request, $slug, $validFields);
         $this->persistFieldDirections($request, $slug, $validFields);
 
         $this->afterSaveConfig();
+    }
+
+    /**
+     * Persist the Custom Extras widget's rows. Posted shape is an
+     * associative array mapping destination (`custom:X` or `native:X`)
+     * to a vendor-record dot-path. Stored as a JSON blob in
+     * `field_paths` and also written as self-routing mapping entries
+     * (mapping.<key> = <key>) so the framework's extras loop writes
+     * each extracted value to its target at sync time.
+     */
+    private function persistAdminDefinedExtras(Request $request, string $slug): void
+    {
+        $posted = (array) $request->input($slug.'_field_paths', []);
+        $cleaned = [];
+        foreach ($posted as $key => $path) {
+            if (! is_string($key) || ! is_string($path)) {
+                continue;
+            }
+            $path = trim($path);
+            if ($path === '') {
+                continue;
+            }
+            if (! str_starts_with($key, 'custom:') && ! str_starts_with($key, 'native:')) {
+                continue;
+            }
+            $cleaned[$key] = $path;
+            SyncAdapterConfig::put($this->instance->id, 'mapping.'.$key, $key);
+        }
+
+        SyncAdapterConfig::put(
+            $this->instance->id,
+            'field_paths',
+            $cleaned === [] ? '' : json_encode($cleaned, JSON_UNESCAPED_SLASHES),
+        );
     }
 
     /**
@@ -589,6 +837,17 @@ abstract class SyncAdapter
             (string) $request->input($slug.'_default_status_id', ''),
         );
 
+        // Default fieldset for AssetModels auto-created from this
+        // adapter. Empty leaves fieldset_id null on new models (today's
+        // behavior). Admins pick a fieldset here so custom fields show
+        // on devices discovered by the adapter without having to
+        // revisit each new model by hand.
+        SyncAdapterConfig::put(
+            $this->instance->id,
+            'default_fieldset_id',
+            (string) $request->input($slug.'_default_fieldset_id', ''),
+        );
+
         // User match strategy for sync-driven assignments. 'none'
         // disables the lookup entirely. Anything else the accessor
         // doesn't recognize also degrades to 'none'.
@@ -632,6 +891,29 @@ abstract class SyncAdapter
             $request->boolean($slug.'_adopt_by_serial') ? '1' : '0',
         );
 
+        // Opt-out: skip asset creation on pull when the vendor record
+        // has no existing Snipe-IT counterpart. Default on so existing
+        // installs keep the "vendor row with no match creates a fresh
+        // asset" behavior. Off = update rows already linked via
+        // asset_external_sources, log and skip anything with no match.
+        SyncAdapterConfig::put(
+            $this->instance->id,
+            'create_snipeit_assets_on_pull',
+            $request->boolean($slug.'_create_snipeit_assets_on_pull', true) ? '1' : '0',
+        );
+
+        // Per-device enrichment opt-in. Only persisted for adapters
+        // that declare a perDeviceDetailsToggle(). Default off so
+        // large-fleet installs don't eat an extra Graph call per
+        // device unless the admin explicitly opts in.
+        if ($this->perDeviceDetailsToggle() !== null) {
+            SyncAdapterConfig::put(
+                $this->instance->id,
+                'fetch_per_device_details',
+                $request->boolean($slug.'_fetch_per_device_details') ? '1' : '0',
+            );
+        }
+
         // Push dry-run flag. When on, adapters log the push payload
         // instead of sending it, so admins can verify mapping +
         // direction config against real assets without any vendor
@@ -640,6 +922,17 @@ abstract class SyncAdapter
             $this->instance->id,
             'push_dry_run',
             $request->boolean($slug.'_push_dry_run') ? '1' : '0',
+        );
+
+        // Pull dry-run flag. When on, Sync Now still calls pull() so
+        // vendor-side fetch, mapping, and normalization all run - but
+        // the consumer logs each HostInventoryRecord instead of handing
+        // it to syncFromRecord, so no asset is created, updated, or
+        // linked. Mirror of push_dry_run on the other direction.
+        SyncAdapterConfig::put(
+            $this->instance->id,
+            'pull_dry_run',
+            $request->boolean($slug.'_pull_dry_run') ? '1' : '0',
         );
 
         // Push notes template. Blade-ish {placeholder} string that
@@ -770,12 +1063,26 @@ abstract class SyncAdapter
             }
         }
 
+        // Standard-field pushability gate. Adapters that only know
+        // how to push a subset of fields (CustomHttp) coerce
+        // push/both on non-pushable standard fields down to pull so
+        // we don't persist an unenforceable direction. Extras are
+        // defined by the adapter and assumed pushable.
+        $pushable = $this->pushableFields();
+
         foreach ($posted as $field => $direction) {
             if (! in_array($field, $validFields, true)) {
                 continue;
             }
             if (! in_array($direction, ['pull', 'push', 'skip', 'both'], true)) {
                 continue;
+            }
+            if (
+                in_array($field, MappingTargets::FIELDS, true)
+                && ! in_array($field, $pushable, true)
+                && in_array($direction, ['push', 'both'], true)
+            ) {
+                $direction = 'pull';
             }
             SyncAdapterConfig::put($this->instance->id, 'direction.'.$field, (string) $direction);
         }
@@ -812,7 +1119,55 @@ abstract class SyncAdapter
      */
     public function isPushDryRun(): bool
     {
+        if ($this->pushDryRunOverride !== null) {
+            return $this->pushDryRunOverride;
+        }
+
         return SyncAdapterConfig::get($this->instance->id, 'push_dry_run') === '1';
+    }
+
+    /**
+     * Dry-run mode for pull: when true, Sync Now still fetches from
+     * the vendor and runs the adapter's normalization, but the pull
+     * consumers (PullInventory CLI + SyncAdapterController UI) log
+     * each HostInventoryRecord instead of handing it to
+     * SyncFromRecord. No asset is created, updated, or linked.
+     * Mirror of isPushDryRun() on the other direction. Off by default.
+     */
+    public function isPullDryRun(): bool
+    {
+        if ($this->pullDryRunOverride !== null) {
+            return $this->pullDryRunOverride;
+        }
+
+        return SyncAdapterConfig::get($this->instance->id, 'pull_dry_run') === '1';
+    }
+
+    /**
+     * Per-request override for the dry-run flags. Set by callers that
+     * want to force a dry run without flipping the persisted config
+     * (CLI --dry-run flag on snipeit:pull-inventory /
+     * snipeit:push-inventory, UI toggle inside a single click, etc.).
+     * Null means "fall back to the persisted config value". Lives on
+     * the adapter instance so it's scoped to one adapter object for
+     * the current request.
+     */
+    protected ?bool $pushDryRunOverride = null;
+
+    protected ?bool $pullDryRunOverride = null;
+
+    public function withPushDryRunOverride(?bool $override): static
+    {
+        $this->pushDryRunOverride = $override;
+
+        return $this;
+    }
+
+    public function withPullDryRunOverride(?bool $override): static
+    {
+        $this->pullDryRunOverride = $override;
+
+        return $this;
     }
 
     /**
@@ -871,11 +1226,63 @@ abstract class SyncAdapter
      *
      * @return array<int, string>
      */
+    /**
+     * Standard fields this adapter actually knows how to push TO the
+     * vendor. The direction dropdown in the settings UI only offers
+     * push/both for fields in this list - picking push for a field
+     * the adapter can't push would silently drop at buildPushPayload
+     * time, confusing the admin.
+     *
+     * Default: every MappingTargets::FIELDS entry, which matches the
+     * behavior adapters had before this hook existed. CustomHttp
+     * overrides to just its hard-coded PUSHABLE_STANDARD_FIELDS set
+     * (hostname / serial / asset_tag / model - the only four we can
+     * resolve to an Asset-side value). Other adapters that fully
+     * handle every standard field don't need to override.
+     *
+     * @return array<int, string>
+     */
+    /**
+     * Whether this adapter's settings form should render the
+     * "<Adapter>-specific fields" mapping-picker section. True by
+     * default - the picker lets admins route adapter-declared extras
+     * to Snipe-IT slots. CustomHttp returns false because its extras
+     * are admin-defined via the field_paths widget rather than
+     * declared statically by the adapter: the picker there would just
+     * duplicate what Vendor Response Paths already captures.
+     */
+    public function rendersExtrasPicker(): bool
+    {
+        return true;
+    }
+
+    public function pushableFields(): array
+    {
+        return MappingTargets::FIELDS;
+    }
+
     public function pushDirectedFields(): array
     {
         $out = [];
         $candidates = array_merge(MappingTargets::FIELDS, array_keys($this->extraFields()));
         foreach ($candidates as $field) {
+            // Standard-field target "Skip (do not sync)" wins over
+            // whatever the paired direction dropdown says - the field
+            // is explicitly opted out of syncing in either direction.
+            // The direction value may still be 'push' in the stored
+            // config from before the target was flipped to skip, but
+            // we treat the field as excluded from the push set
+            // regardless. Also protects against stale state on
+            // direction=push + mapping=skip combos the UI used to be
+            // able to produce.
+            //
+            // Extras skip this gate because their mapping default is
+            // 'skip' (no stored row = "not configured, not synced")
+            // and their direction toggle is the only control the
+            // admin has to pick push on them.
+            if (in_array($field, MappingTargets::FIELDS, true) && $this->mappingFor($field) === 'skip') {
+                continue;
+            }
             if (in_array($this->directionFor($field), ['push', 'both'], true)) {
                 $out[] = $field;
             }
@@ -899,15 +1306,64 @@ abstract class SyncAdapter
      */
     protected function assetValueForSourceField(Asset $asset, string $field): mixed
     {
-        return match ($field) {
-            'hostname' => $asset->name,
-            'name' => $asset->name,
+        // Native fast-path: the four fields every adapter can push
+        // without consulting a mapping target. Pre-dates the mapping-
+        // target resolver below so adapters that call this with
+        // non-mapped fields (test harnesses, future callers) still get
+        // a sensible answer.
+        $native = match ($field) {
+            'hostname', 'name' => $asset->name,
             'serial' => $asset->serial,
             'asset_tag' => $asset->asset_tag,
             'model' => $asset->model?->name,
             'notes' => $asset->notes,
             default => null,
         };
+        if ($native !== null) {
+            return $native;
+        }
+
+        // For other source fields (os, os_version, last_seen, mac,
+        // custom:X, etc.) consult the per-field mapping target so the
+        // middleman push scenario (pull from vendor A, push to vendor
+        // B) can actually surface the stored value. The mapping is
+        // the admin's choice of "where in Snipe-IT does this field
+        // live" - we read from that slot.
+        $target = $this->mappingFor($field);
+        if ($target === '' || $target === 'skip') {
+            return null;
+        }
+
+        if (str_starts_with($target, 'custom:')) {
+            $customFieldId = (int) substr($target, 7);
+            $customField = CustomField::find($customFieldId);
+            if ($customField === null || $customField->db_column === null) {
+                return null;
+            }
+
+            return $asset->getAttribute($customField->db_column);
+        }
+
+        if (str_starts_with($target, 'external:')) {
+            $column = substr($target, 9);
+            $row = \Illuminate\Support\Facades\DB::table('asset_external_sources')
+                ->where('asset_id', $asset->id)
+                ->where('source', $this->name())
+                ->first();
+
+            return $row->{$column} ?? null;
+        }
+
+        if (str_starts_with($target, 'native:')) {
+            // Direct read from the asset column named after the
+            // target. The sync writers use the same convention, so
+            // native:foo stored by pull is readable as $asset->foo.
+            $column = substr($target, 7);
+
+            return $asset->getAttribute($column);
+        }
+
+        return null;
     }
 
     /**
@@ -1026,18 +1482,49 @@ abstract class SyncAdapter
         $notesConfigured = $this->hasComposedNotesConfigured();
 
         if ($pushFields === [] && ! $notesConfigured) {
+            // Nothing directed push and no composed-notes template.
+            // Logged at info because this is a config-shape issue
+            // the admin should see in the per-run log + file log
+            // instead of just "0 pushed, N skipped" with no reason.
+            Log::channel('sync-adapters')->info(sprintf(
+                '%s push: skipped asset %d (asset_tag=%s) - no push-directed fields and no composed-notes template configured',
+                $this->name(),
+                $asset->id,
+                $asset->asset_tag ?? '(none)',
+            ));
+
             return null;
         }
 
         if ($pushFields !== [] && $changedFields !== []
             && array_intersect($changedFields, $pushFields) === []) {
+            Log::channel('sync-adapters')->info(sprintf(
+                '%s push: skipped asset %d (asset_tag=%s) - changed fields [%s] do not intersect push-directed fields [%s]',
+                $this->name(),
+                $asset->id,
+                $asset->asset_tag ?? '(none)',
+                implode(', ', $changedFields),
+                implode(', ', $pushFields),
+            ));
+
             return null;
         }
 
-        return \App\Models\AssetExternalSource::query()
+        $externalSource = \App\Models\AssetExternalSource::query()
             ->where('asset_id', $asset->id)
             ->where('source', $this->name())
             ->first();
+
+        if ($externalSource === null) {
+            Log::channel('sync-adapters')->info(sprintf(
+                '%s push: skipped asset %d (asset_tag=%s) - no asset_external_sources row for this adapter instance',
+                $this->name(),
+                $asset->id,
+                $asset->asset_tag ?? '(none)',
+            ));
+        }
+
+        return $externalSource;
     }
 
     /**
@@ -1064,11 +1551,33 @@ abstract class SyncAdapter
     {
         $template = (string) SyncAdapterConfig::get($this->instance->id, 'push_notes_template');
         if (trim($template) === '') {
+            // Blank template is the common "feature not in use" case,
+            // so log at debug - skipping it on every asset push would
+            // just noise up the file log on fleets that haven't set
+            // up composed notes.
+            Log::channel('sync-adapters')->debug(sprintf(
+                '%s push: asset %d (asset_tag=%s) - composed notes not applied: push_notes_template is blank',
+                $this->name(),
+                $asset->id,
+                $asset->asset_tag ?? '(none)',
+            ));
+
             return null;
         }
 
         $target = $this->resolveComposedNotesTarget();
         if ($target === null) {
+            // Template is set but target field path is not. This IS
+            // worth surfacing at info - the admin wrote a template
+            // expecting it to be pushed somewhere and the destination
+            // config is missing.
+            Log::channel('sync-adapters')->info(sprintf(
+                '%s push: asset %d (asset_tag=%s) - composed notes not applied: push_notes_template is set but no target field is configured (push_notes_target)',
+                $this->name(),
+                $asset->id,
+                $asset->asset_tag ?? '(none)',
+            ));
+
             return null;
         }
 
@@ -1223,6 +1732,22 @@ abstract class SyncAdapter
     }
 
     /**
+     * Whether the composed-notes push UI should appear on this
+     * adapter's settings page. Default is "yes if the adapter is
+     * pushable at all" so existing adapters stay unchanged. Adapters
+     * targeting APIs that have no notes-like field anywhere in their
+     * push payload (Mosyle Manager v2's push elements, for example)
+     * override this to false so admins don't fill in a template that
+     * can never land. notesFieldTarget() returning null doesn't carry
+     * this meaning (Workspace ONE / NinjaOne return null legitimately
+     * because the admin picks the target).
+     */
+    public function supportsComposedNotesPush(): bool
+    {
+        return $this instanceof PushableAdapter && $this->canPush();
+    }
+
+    /**
      * Currently-selected target for a field, or the shipped default
      * when no per-instance override exists. Standard fields fall back
      * to MappingTargets::defaultTarget(). extras fall back to skip.
@@ -1312,6 +1837,21 @@ abstract class SyncAdapter
     }
 
     /**
+     * Default fieldset for AssetModels auto-created from this adapter.
+     * When set, resolveModelIdByName stamps this id on the new model's
+     * fieldset_id so custom fields show on synced devices without the
+     * admin revisiting each new model after a pull. Null leaves
+     * fieldset_id unset (today's behavior for installs that haven't
+     * configured this).
+     */
+    public function defaultFieldsetId(): ?int
+    {
+        $stored = SyncAdapterConfig::get($this->instance->id, 'default_fieldset_id');
+
+        return $stored === null || $stored === '' ? null : (int) $stored;
+    }
+
+    /**
      * How the sync path resolves a Snipe-IT user from the vendor's
      * assigned-user data. Returns one of:
      * - 'none'                 no assignment attempted (default)
@@ -1365,7 +1905,6 @@ abstract class SyncAdapter
      * Migration aid: when on, the sync loop looks for an existing
      * Snipe-IT asset with a matching serial before creating a new
      * shell asset for a first-time sync vendor host.
-     *
      */
     public function adoptsBySerial(): bool
     {
@@ -1375,6 +1914,21 @@ abstract class SyncAdapter
         }
 
         return $this->instance->last_synced_at === null;
+    }
+
+    /**
+     * When off, pull-side vendor records with no `asset_external_sources`
+     * link are logged and skipped rather than creating a new Snipe-IT
+     * asset. Default on so existing installs behave unchanged. Admins
+     * flip it off when their vendor data contains rows that shouldn't
+     * become Snipe-IT assets (e.g. Intune devices with generic serials
+     * that would duplicate manually-entered rows).
+     */
+    public function createsSnipeitAssetsOnPull(): bool
+    {
+        $stored = SyncAdapterConfig::get($this->instance->id, 'create_snipeit_assets_on_pull');
+
+        return $stored === null ? true : $stored === '1';
     }
 
     /**
@@ -1483,6 +2037,66 @@ abstract class SyncAdapter
     public function cachedGroups(): array
     {
         $stored = SyncAdapterConfig::get($this->instance->id, 'cached_groups');
+        if ($stored === null || $stored === '') {
+            return [];
+        }
+        $decoded = json_decode($stored, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Whether the adapter's vendor exposes a tenant / site / workspace
+     * concept that scopes the pull to one chosen entry. UniFi
+     * Network's Site, Jamf School's Location, Microsoft Entra Tenant,
+     * etc. Different from supportsGroupScoping(): sites choose ONE
+     * entry to pull from, groups map many vendor groups to Snipe-IT
+     * companies. Adapters that opt in render Site ID as a select
+     * backed by cachedSites() and implement fetchSites().
+     */
+    public function supportsSiteScoping(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Vendor's own terminology for the site concept. Mirrors
+     * vendorGroupLabel() so admins see wording they recognize in the
+     * refresh button and empty-state copy.
+     */
+    public function vendorSiteLabel(): string
+    {
+        return 'Site';
+    }
+
+    /**
+     * Live-fetch the current list of sites from the vendor. Returns
+     * an array of ['id' => '...', 'label' => '...']. Called from the
+     * settings page's "refresh sites" button. $overrides lets the
+     * caller supply the base URL and credentials from the pending
+     * form so a brand-new adapter can discover its sites before the
+     * admin saves anything. Keys match the schema field keys the
+     * adapter declares (e.g. 'url', 'api_key'). Default throws so
+     * adapters that opt into supportsSiteScoping have to implement it.
+     *
+     * @param  array<string, string|null>  $overrides
+     * @return array<int, array{id: string, label: string}>
+     */
+    public function fetchSites(array $overrides = []): array
+    {
+        throw new \RuntimeException(static::class.' declared site scoping support but did not implement fetchSites().');
+    }
+
+    /**
+     * Cached copy of the last fetchSites() result, so the settings
+     * page renders the Site ID select without hitting the vendor on
+     * every page load.
+     *
+     * @return array<int, array{id: string, label: string}>
+     */
+    public function cachedSites(): array
+    {
+        $stored = SyncAdapterConfig::get($this->instance->id, 'cached_sites');
         if ($stored === null || $stored === '') {
             return [];
         }

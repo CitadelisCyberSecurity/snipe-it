@@ -111,6 +111,33 @@ class AssetTagPatternTest extends TestCase
         ]);
     }
 
+    public function test_whitespace_only_vendor_asset_tag_falls_through_to_synthetic_tag()
+    {
+        // Regression pin: a Jamf (or any adapter) record carrying a
+        // single-space asset_tag used to pass the "non-empty" guard
+        // in SyncsHostFromRecord::applyNativeFieldWrite, overwrite the
+        // resolveAssetTag fallback, and then fail asset validation
+        // because asset_tag can't be blank. The record never synced.
+        // Trimming before the empty check lets whitespace-only values
+        // fall back to the synthetic `{source}-{sourceId}` tag like
+        // null and '' already did.
+        $this->configuredFleet();
+
+        SyncAdapter::syncFromRecord(new HostInventoryRecord(
+            sourceKey: 'fleet',
+            sourceId: 'ws-only',
+            hostname: 'wksn-whitespace',
+            hardwareSerial: 'SN-WS',
+            hardwareModel: 'MacBook Pro',
+            assetTag: '   ',
+        ));
+
+        $this->assertDatabaseHas('assets', [
+            'name' => 'wksn-whitespace',
+            'asset_tag' => 'fleet-ws-only',
+        ]);
+    }
+
     public function test_pattern_does_not_retag_existing_asset_on_update_sync()
     {
         $fleet = $this->configuredFleet();

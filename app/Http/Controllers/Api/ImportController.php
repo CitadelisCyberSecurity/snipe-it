@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\FileStorage;
 use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ItemImportRequest;
@@ -43,8 +44,6 @@ class ImportController extends Controller
 
     /**
      * Process and store a CSV upload file.
-     *
-     * @param  \Illuminate\Http\Request  $request
      */
     public function store(): JsonResponse
     {
@@ -53,9 +52,8 @@ class ImportController extends Controller
             $files = Request::file('files');
             // Path inside the private disk. Under PRIVATE_FILESYSTEM_DISK=local this resolves to
             // storage/private_uploads/imports, and under s3_private it lands at <bucket>/private_uploads/imports
-            $diskPath = 'private_uploads/imports';
+            $diskPath = rtrim(FileStorage::Imports->privateStorageKey(), '/');
             $results = [];
-            $import = new Import;
             $detector = new EncodingDetector;
 
             // No file uploaded
@@ -64,6 +62,8 @@ class ImportController extends Controller
             }
 
             foreach ($files as $file) {
+                // Fresh model per file.
+                $import = new Import;
                 // Reject phantoms and fail early if the file is invalid (e.g. exceeds the server upload limit).
                 // The CSV reader below will reject anything that isn't actually parseable with a more precise error.
                 if (! $file instanceof UploadedFile || ! $file->isValid()) {
@@ -172,6 +172,15 @@ class ImportController extends Controller
                             $tmpname = tempnam(sys_get_temp_dir(), '');
                             $tmpresults = file_put_contents($tmpname, $transliterated);
                             $transliterated = null; // save on memory?
+
+                            // Clean up the UTF-8 copy at request end so we don't
+                            // leave the transliterated bytes sitting in sys_get_temp_dir()
+                            register_shutdown_function(static function () use ($tmpname) {
+                                if (is_file($tmpname)) {
+                                    @unlink($tmpname);
+                                }
+                            });
+
                             if ($tmpresults !== false) {
                                 $newfile = new UploadedFile($tmpname, $file->getClientOriginalName(), null, null, true); // WARNING: this is enabling 'test mode' - which is gross, but otherwise the file won't be treated as 'uploaded'
                                 if ($newfile->isValid()) {
@@ -197,20 +206,21 @@ class ImportController extends Controller
                     );
                 }
 
-                // duplicate headers check
+                // duplicate headers check: single-pass seen-map keyed by
+                // header name recording the first-seen column index. The
+                // previous shape ran in_array + array_search for every
+                // header, and each of those scans the full array of
+                // values on every call. For N headers that was roughly
+                // N x N comparisons even when no duplicates existed.
                 $duplicate_headers = [];
+                $seen = [];
+                foreach ($import->header_row as $i => $header) {
+                    if (array_key_exists($header, $seen)) {
+                        $duplicate_headers[] = "Duplicate header '$header' detected, first at column: ".($seen[$header] + 1).', repeats at column: '.($i + 1);
 
-                for ($i = 0; $i < count($import->header_row); $i++) {
-                    $header = $import->header_row[$i];
-                    if (in_array($header, $import->header_row)) {
-                        $found_at = array_search($header, $import->header_row);
-                        if ($i > $found_at) {
-                            // avoid reporting duplicates twice, e.g. "1 is same as 17! 17 is same as 1!!!"
-                            // as well as "1 is same as 1!!!" (which is always true)
-                            // has to be > because otherwise the first result of array_search will always be $i itself(!)
-                            array_push($duplicate_headers, "Duplicate header '$header' detected, first at column: ".($found_at + 1).', repeats at column: '.($i + 1));
-                        }
+                        continue;
                     }
+                    $seen[$header] = $i;
                 }
                 if (count($duplicate_headers) > 0) {
                     return response()->json(Helper::formatStandardApiResponse('error', null, implode('; ', $duplicate_headers)), 422);
@@ -230,14 +240,17 @@ class ImportController extends Controller
                     );
                 }
 
-                $date = date('Y-m-d-his');
-
+                // Namespace the storage key by the uploader so two users
+                // posting the same filename in the same second can never clobber
+                // each other's bytes on disk. H is 24-hour so AM/PM do not
+                // alias to the same timestamp either.
+                $date = now()->format('Y-m-d-His');
                 $fixed_filename = Str::of($file->getClientOriginalName())->basename('.csv').'.csv';
-                $file_name = $date . '-' . $fixed_filename;
+                $file_name = auth()->id().'-'.$date.'-'.$fixed_filename;
 
                 // Storage::putFileAs routes through the Filesystem abstraction so it works
                 // uniformly against local and s3_private drivers.
-                if (!Storage::putFileAs($diskPath, $file, $file_name)) {
+                if (! Storage::putFileAs($diskPath, $file, $file_name)) {
                     $results['error'] = trans('admin/hardware/message.upload.error');
 
                     return response()->json(Helper::formatStandardApiResponse('error', null, $results['error']), 500);
@@ -464,7 +477,7 @@ class ImportController extends Controller
                 // the default (private) disk. The pre-fix path 'imports/'
                 // missed the 'private_uploads/' prefix and silently
                 // no-op'd on both drivers.
-                Storage::delete('private_uploads/imports/' . $import->file_path);
+                Storage::delete(FileStorage::Imports->privateStorageKey().$import->file_path);
                 $import->delete();
 
                 return response()->json(Helper::formatStandardApiResponse('success', null, trans('admin/hardware/message.import.file_delete_success')));

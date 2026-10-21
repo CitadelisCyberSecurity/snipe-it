@@ -56,6 +56,37 @@ class CalendarEventsApiTest extends TestCase implements TestsFullMultipleCompani
         $this->assertNotEmpty($matching['url']);
     }
 
+    public function test_array_shaped_start_param_falls_back_to_default_without_500()
+    {
+        // Regression pin: a probe URL like
+        // `?start[$ptt]=2026-10-01T00:00:00Z` makes $request->input('start')
+        // return an array, which Carbon::parse would reject with a
+        // TypeError and bubble out as a 500. resolveRange() now
+        // coerces non-string input to the default window, so the
+        // probe gets a normal 200 instead of a stack trace. Same
+        // guard on `end`.
+        $actor = User::factory()->superuser()->create();
+
+        $this->actingAsForApi($actor)
+            ->getJson('/api/v1/calendar/events?start[$ptt]=2026-10-01T00:00:00Z&end=2026-10-08T00:00:00Z')
+            ->assertOk();
+
+        $this->actingAsForApi($actor)
+            ->getJson('/api/v1/calendar/events?start=2026-10-01T00:00:00Z&end[$ptt]=2026-10-08T00:00:00Z')
+            ->assertOk();
+    }
+
+    public function test_unparseable_start_param_falls_back_to_default_without_500()
+    {
+        // Companion guard: non-array garbage like `?start=not-a-date`
+        // also hits the catch block instead of 500ing out.
+        $actor = User::factory()->superuser()->create();
+
+        $this->actingAsForApi($actor)
+            ->getJson('/api/v1/calendar/events?start=not-a-date&end=also-garbage')
+            ->assertOk();
+    }
+
     public function test_range_filter_hides_events_outside_visible_window()
     {
         $actor = User::factory()->superuser()->create();

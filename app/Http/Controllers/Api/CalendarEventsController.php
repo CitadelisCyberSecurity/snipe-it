@@ -74,18 +74,26 @@ class CalendarEventsController extends Controller
             fn (string $sourceClass) => Gate::allows('view', $sourceClass),
         ));
 
+        // CompanyableTrait on CalendarEvent installs the global
+        // CompanyableScope, so count / order / limit below run against
+        // a company-scoped query. `total` reflects only rows this
+        // caller is allowed to see and `limit` cannot be consumed by
+        // rows the per-row filter would strip later. The per-row
+        // filter below still runs as defense in depth to catch cases
+        // the SQL filter can't express (per-location scoping on top of
+        // FMCS, soft-deleted sources, etc.).
         $baseQuery = $this->buildBaseQuery($rangeStart, $rangeEnd, $eventTypes)
             ->whereIn('source_type', $viewableSourceTypes);
         $total = (clone $baseQuery)->count();
         $rows = $baseQuery->orderBy('start')->limit($limit)->get();
 
-        // Whether we hit the query limit. Honest signal for "there
-        // might be more events after this batch". Comparing $total to
-        // count($events) post-per-row-filter would report truncated=
-        // true any time an FMCS-filtered event brought the returned
-        // count below $total, misleading users into clicking "+N more"
-        // links for events they never had permission to see.
-        $hitLimit = $rows->count() >= $limit;
+        // Now that count and fetch run against the same company-scoped
+        // query, `truncated` can honestly reflect "more authorized
+        // events exist beyond this batch" rather than the earlier
+        // proxy that reported true whenever the pre-filter batch was
+        // full, even when per-row filtering reduced the response to
+        // fewer than $limit rows.
+        $hitLimit = $total > $limit;
 
         $sourcesByType = $this->batchLoadSources($rows);
         $authorizedRows = $this->filterAuthorizedRows($rows, $sourcesByType, $request);
@@ -113,13 +121,26 @@ class CalendarEventsController extends Controller
     protected function resolveRange(Request $request): array
     {
         return [
-            $request->filled('start')
-                ? Carbon::parse($request->input('start'))
-                : now()->subMonths(3)->startOfDay(),
-            $request->filled('end')
-                ? Carbon::parse($request->input('end'))
-                : now()->addMonths(3)->endOfDay(),
+            $this->parseDateOrDefault($request->input('start'), fn () => now()->subMonths(3)->startOfDay()),
+            $this->parseDateOrDefault($request->input('end'), fn () => now()->addMonths(3)->endOfDay()),
         ];
+    }
+
+    /**
+     * Force a `start` / `end` query param to a Carbon or fall back
+     * to the provided default.
+     */
+    private function parseDateOrDefault(mixed $value, callable $default): Carbon
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return $default();
+        }
+
+        try {
+            return Carbon::parse($value);
+        } catch (\Throwable) {
+            return $default();
+        }
     }
 
     /**
@@ -225,7 +246,21 @@ class CalendarEventsController extends Controller
         return $rows->filter(function (CalendarEvent $row) use ($sourcesByType, $viewer) {
             $source = $sourcesByType[$row->source_type][$row->source_id] ?? null;
 
-            return $source && $viewer?->can('view', $source);
+            if (! $source) {
+                return false;
+            }
+
+            // Belt and suspenders against issue #19760: hide events
+            // whose source has been soft-deleted. The display is the
+            // user-visible symptom. The sync-path gate in
+            // HasCalendarEvents::syncCalendarEvents prevents new ones
+            // from being written in the first place, and the cleanup
+            // migration soft-deletes any already written.
+            if (method_exists($source, 'trashed') && $source->trashed()) {
+                return false;
+            }
+
+            return $viewer?->can('view', $source);
         })->values();
     }
 }
