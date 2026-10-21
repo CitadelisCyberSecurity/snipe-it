@@ -902,4 +902,37 @@ class StoreAssetTest extends TestCase
         // $this->assertEquals('3d67fb99a0b6926e350f7b71397525d7a6b936c1', sha1($image_data)); //this doesn't work because the image gets resized - use the resized hash instead
         $this->assertEquals('db2e13ba04318c99058ca429d67777322f48566b', sha1($image_data));
     }
+
+    public function test_api_rejects_asset_create_without_serial_when_model_requires_serial(): void
+    {
+        $model = AssetModel::factory()->create(['require_serial' => 1]);
+        $status = Statuslabel::factory()->create();
+
+        $this->actingAsForApi(User::factory()->superuser()->create())
+            ->postJson(route('api.assets.store'), [
+                'model_id' => $model->id,
+                'status_id' => $status->id,
+                'asset_tag' => 'NEEDS-SERIAL-1',
+                // 'serial' intentionally omitted
+            ])
+            ->assertStatusMessageIs('error');
+
+        $this->assertDatabaseMissing('assets', ['asset_tag' => 'NEEDS-SERIAL-1']);
+    }
+
+    public function test_api_accepts_asset_create_without_serial_when_model_does_not_require_serial(): void
+    {
+        $model = AssetModel::factory()->create(['require_serial' => 0]);
+        $status = Statuslabel::factory()->create();
+
+        $this->actingAsForApi(User::factory()->superuser()->create())
+            ->postJson(route('api.assets.store'), [
+                'model_id' => $model->id,
+                'status_id' => $status->id,
+                'asset_tag' => 'OPTIONAL-SERIAL-1',
+            ])
+            ->assertStatusMessageIs('success');
+
+        $this->assertDatabaseHas('assets', ['asset_tag' => 'OPTIONAL-SERIAL-1']);
+    }
 }

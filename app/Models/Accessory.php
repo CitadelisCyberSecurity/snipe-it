@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\FileStorage;
+use App\Models\Builders\AccessoryQueryBuilder;
 use App\Models\Traits\Acceptable;
 use App\Models\Traits\AdjustsQuantity;
 use App\Models\Traits\CompanyableTrait;
@@ -12,12 +14,14 @@ use App\Models\Traits\Requestable;
 use App\Models\Traits\Searchable;
 use App\Presenters\AccessoryPresenter;
 use App\Presenters\Presentable;
+use App\Rules\RequestableArchivedMutex;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Watson\Validating\ValidatingTrait;
 
@@ -25,6 +29,8 @@ use Watson\Validating\ValidatingTrait;
  * Model for Accessories.
  *
  * @version v1.0
+ *
+ * @mixin IdeHelperAccessory
  */
 class Accessory extends SnipeModel
 {
@@ -45,7 +51,9 @@ class Accessory extends SnipeModel
 
     protected $casts = [
         'purchase_date' => 'datetime',
-        'requestable' => 'boolean',    ];
+        'requestable' => 'boolean',
+        'archived' => 'boolean',
+    ];
 
     protected $presenter = AccessoryPresenter::class;
 
@@ -101,7 +109,39 @@ class Accessory extends SnipeModel
         'purchase_date' => 'date_format:Y-m-d|nullable',
         'default_supplier_id' => 'nullable|integer|exists:suppliers,id',
         'default_purchase_cost' => 'numeric|nullable|gte:0|max:99999999999999999.99',
+        'requestable' => ['nullable', 'boolean'],
+        'archived' => ['nullable', 'boolean'],
     ];
+
+    /**
+     * PHP 8.2 blocks `new X` in property defaults, so the rule object
+     * gets spliced in here rather than in $rules above. Mirrors
+     * Component::getRules() so the mutex and the no-archive-with-
+     * checkouts guard behave identically across checkoutable items.
+     */
+    public function getRules(): array
+    {
+        $rules = $this->rules ?? [];
+        $mutex = new RequestableArchivedMutex;
+
+        $noArchivingWithCheckouts = function (string $attribute, mixed $value, \Closure $fail): void {
+            if (filter_var($value, FILTER_VALIDATE_BOOLEAN) && $this->exists && $this->checkouts()->count() > 0) {
+                // $attribute passed through to trans() so phpmd sees
+                // the param as used. The translation string ignores
+                // the extra key today, but future refinements can
+                // reference it if we want field-specific phrasing.
+                $fail(trans('general.archived_blocked_by_checkouts', [
+                    'item_type' => trans('general.accessory'),
+                    'attribute' => $attribute,
+                ]));
+            }
+        };
+
+        $rules['requestable'] = array_merge((array) ($rules['requestable'] ?? []), [$mutex]);
+        $rules['archived'] = array_merge((array) ($rules['archived'] ?? []), [$mutex, $noArchivingWithCheckouts]);
+
+        return $rules;
+    }
 
     /**
      * Whether the model should inject it's identifier to the unique
@@ -138,6 +178,7 @@ class Accessory extends SnipeModel
         'qty',
         'min_amt',
         'requestable',
+        'archived',
         'notes',
         'default_supplier_id',
         'default_purchase_cost',
@@ -149,6 +190,37 @@ class Accessory extends SnipeModel
     // over the lifetime) or `$accessory->lastOrderDefaults()` (most
     // recent acquisition context, falling back to the parent's
     // default_* template fields on items with no order history yet).
+
+    /**
+     * On hard-delete, wipe the image file and Files-tab attachments.
+     * Soft-delete leaves everything alone so a restore comes back with
+     * the image + files intact. The attachment action_log rows get
+     * soft-deleted (not hard-deleted) so the audit trail of what was
+     * attached-and-when survives even after the parent is gone.
+     */
+    protected static function booted(): void
+    {
+        static::forceDeleted(function (self $accessory) {
+            if ($accessory->image) {
+                try {
+                    Storage::disk('public')->delete(FileStorage::Accessories->publicPath().$accessory->image);
+                } catch (\Exception $e) {
+                    Log::info($e->getMessage());
+                }
+            }
+
+            foreach ($accessory->uploads as $upload) {
+                if (($path = $upload->uploads_file_path()) !== null) {
+                    try {
+                        Storage::delete($path);
+                    } catch (\Exception $e) {
+                        Log::info($e->getMessage());
+                    }
+                }
+                $upload->delete();
+            }
+        });
+    }
 
     /**
      * Parent-level "typical supplier" template. Distinct from
@@ -169,13 +241,20 @@ class Accessory extends SnipeModel
     /**
      * Sets the requestable attribute on the accessory
      *
+     * Kept as the legacy magic-method form rather than the modern
+     * Attribute::make accessor. Requestable() is also a query scope on
+     * AccessoryQueryBuilder, and `Accessory::Requestable()` resolves
+     * through Model::__callStatic → __call → forwardCallTo(newQuery(),
+     * ...) only when the method doesn't exist on the model. An
+     * `Attribute`-returning method shadows that forwarder and crashes
+     * with "Call to undefined method Attribute::count()". See
+     * Component::setRequestableAttribute for the same comment.
+     *
      * @author [A. Gianotto] [<snipe@snipe.net>]
      *
      * @since  [v4.0]
-     *
-     * @return void
      */
-    public function setRequestableAttribute($value)
+    public function setRequestableAttribute($value): void
     {
         if ($value == '') {
             $value = null;
@@ -184,12 +263,16 @@ class Accessory extends SnipeModel
     }
 
     /**
-     * Scope query to only requestable accessories. Unlike assets, accessories
-     * have no deployable status to check, so the flag is all we need here.
+     * Mirror for the archived flag. Normalizes empty-string / null /
+     * missing-column CSV cells to false so the NOT NULL `archived`
+     * column never receives a literal null.
      */
-    public function scopeRequestable($query)
+    public function setArchivedAttribute($value): void
     {
-        return $query->where('accessories.requestable', '1');
+        if ($value == '') {
+            $value = null;
+        }
+        $this->attributes['archived'] = filter_var($value, FILTER_VALIDATE_BOOLEAN);
     }
 
     /**
@@ -294,7 +377,7 @@ class Accessory extends SnipeModel
     public function getImageUrl($path = null)
     {
         if ($this->image) {
-            return Storage::disk('public')->url(app('accessories_upload_path').$this->image);
+            return Storage::disk('public')->url(FileStorage::Accessories->publicPath().$this->image);
         }
 
         return false;
@@ -452,17 +535,27 @@ class Accessory extends SnipeModel
     /**
      * Run after the checkout acceptance was declined by the user
      *
-     * @param  User  $acceptedBy
      * @param  string  $signature
      */
     public function declinedCheckout(User $declinedBy, $signature)
     {
-        if (is_null($accessory_checkout = AccessoryCheckout::userAssigned()->where('assigned_to', $declinedBy->id)->where('accessory_id', $this->id)->latest('created_at'))) {
-            // Redirect to the accessory management page with error
-            return redirect()->route('accessories.index')->with('error', trans('admin/accessories/message.does_not_exist'));
+        // ->latest() on a builder is never null, so the previous
+        // `is_null($query_builder)` guard was dead code and the subsequent
+        // `->limit(1)->delete()` ran unconditionally. Resolve the row first
+        // and delete by model so the no-match path is explicit.
+        $accessory_checkout = AccessoryCheckout::userAssigned()
+            ->where('assigned_to', $declinedBy->id)
+            ->where('accessory_id', $this->id)
+            ->latest('created_at')
+            ->first();
+
+        if ($accessory_checkout === null) {
+            Log::warning('No AccessoryCheckout row found to decline for accessory '.$this->id.' and user '.$declinedBy->id);
+
+            return;
         }
 
-        $accessory_checkout->limit(1)->delete();
+        $accessory_checkout->delete();
     }
 
     /**
@@ -489,116 +582,8 @@ class Accessory extends SnipeModel
         $this->attributes['qty'] = (! $value) ? 0 : intval($value);
     }
 
-    /**
-     * -----------------------------------------------
-     * BEGIN QUERY SCOPES
-     * -----------------------------------------------
-     **/
-
-    /**
-     * Query builder scope to order on created_by name
-     */
-    public function scopeOrderByCreatedByName($query, $order)
+    public function newEloquentBuilder($query): AccessoryQueryBuilder
     {
-        return $query->leftJoin('users as admin_sort', 'accessories.created_by', '=', 'admin_sort.id')->select('accessories.*')->orderBy('admin_sort.first_name', $order)->orderBy('admin_sort.last_name', $order);
-    }
-
-    /**
-     * Query builder scope to order on company
-     *
-     * @param  Builder  $query  Query builder instance
-     * @param  text  $order  Order
-     * @return Builder Modified query builder
-     */
-    public function scopeOrderCompany($query, $order)
-    {
-        return $query->leftJoin('companies', 'accessories.company_id', '=', 'companies.id')
-            ->orderBy('companies.name', $order);
-    }
-
-    /**
-     * Query builder scope to order on category
-     *
-     * @param  Builder  $query  Query builder instance
-     * @param  text  $order  Order
-     * @return Builder Modified query builder
-     */
-    public function scopeOrderCategory($query, $order)
-    {
-        return $query->leftJoin('categories', 'accessories.category_id', '=', 'categories.id')
-            ->orderBy('categories.name', $order);
-    }
-
-    /**
-     * Query builder scope to order on location
-     *
-     * @param  Builder  $query  Query builder instance
-     * @param  text  $order  Order
-     * @return Builder Modified query builder
-     */
-    public function scopeOrderLocation($query, $order)
-    {
-        return $query->leftJoin('locations', 'accessories.location_id', '=', 'locations.id')
-            ->orderBy('locations.name', $order);
-    }
-
-    /**
-     * Query builder scope to order on manufacturer
-     *
-     * @param  Builder  $query  Query builder instance
-     * @param  text  $order  Order
-     * @return Builder Modified query builder
-     */
-    public function scopeOrderManufacturer($query, $order)
-    {
-        return $query->leftJoin('manufacturers', 'accessories.manufacturer_id', '=', 'manufacturers.id')->orderBy('manufacturers.name', $order);
-    }
-
-    /**
-     * Query builder scope to order on supplier
-     *
-     * @param  Builder  $query  Query builder instance
-     * @param  text  $order  Order
-     * @return Builder Modified query builder
-     */
-    public function scopeOrderSupplier($query, $order)
-    {
-        return $query->leftJoin('suppliers', 'accessories.default_supplier_id', '=', 'suppliers.id')->orderBy('suppliers.name', $order);
-    }
-
-    /**
-     * Query builder scope to sort by the calculated `% remaining` column.
-     *
-     * Mirrors Accessory::percentRemaining(): (qty - checkouts_count) / qty * 100.
-     * checkouts_count is added by withCount() in the API index() before
-     * this scope runs. Guards against division by zero for accessories
-     * with qty of 0.
-     *
-     * PostgreSQL note: references a SELECT-list alias inside a compound
-     * ORDER BY expression, which PostgreSQL rejects per SQL standard.
-     * Snipe-IT officially supports MySQL/MariaDB and tests on SQLite
-     * (both allow this); moving to PostgreSQL would require inlining
-     * the subquery or wrapping the query in an outer SELECT.
-     */
-    public function scopeOrderPercentRemaining($query, $order)
-    {
-        $order = strtolower($order) === 'asc' ? 'asc' : 'desc';
-
-        return $query->orderByRaw('CASE WHEN accessories.qty = 0 THEN 0 ELSE ((accessories.qty - checkouts_count) * 100.0 / accessories.qty) END '.$order);
-    }
-
-    /**
-     * Query builder scope to sort by the raw `remaining` column
-     * (qty minus current checkouts). Same withCount-added alias as
-     * scopeOrderPercentRemaining above; the difference is that this
-     * one sorts by absolute count rather than percentage, so items
-     * with the same absolute stock left group together regardless
-     * of their total qty.
-     */
-    public function scopeOrderRemaining($query, $order)
-    {
-        $order = strtolower($order) === 'asc' ? 'asc' : 'desc';
-
-        return $query->orderByRaw('(accessories.qty - checkouts_count) '.$order);
+        return new AccessoryQueryBuilder($query);
     }
 }

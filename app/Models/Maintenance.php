@@ -31,6 +31,8 @@ use Watson\Validating\ValidatingTrait;
  * @property-read \App\Models\User|null $responsibleParty
  * @property-read \App\Models\User|null $completedByUser
  * @property-read \Illuminate\Database\Eloquent\Model|null $item Polymorphic parent (usually Asset). See item() below.
+ *
+ * @mixin IdeHelperMaintenance
  */
 class Maintenance extends SnipeModel implements ICompanyableChild
 {
@@ -77,7 +79,7 @@ class Maintenance extends SnipeModel implements ICompanyableChild
     /**
      * The attributes that are mass assignable.
      *
-     * @var array
+     * @var list<string>
      */
     protected $fillable = [
         'name',
@@ -335,6 +337,15 @@ class Maintenance extends SnipeModel implements ICompanyableChild
     public function checkedOutTo()
     {
         return $this->morphTo('checked_out_to');
+    }
+
+    public function calendarEventCompanyId(): ?int
+    {
+        // loadMissing covers the observer path where the created hook
+        // fires before the $with eager-load has run. Without it the
+        // observer writes company_id=null and the FMCS scope filter
+        // on the read path hides the row from legitimate viewers.
+        return $this->loadMissing('asset')->asset?->company_id;
     }
 
     /**

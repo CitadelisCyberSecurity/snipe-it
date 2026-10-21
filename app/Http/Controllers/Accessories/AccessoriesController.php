@@ -49,7 +49,8 @@ class AccessoriesController extends Controller
         $category_type = 'accessory';
 
         return view('accessories/edit')->with('category_type', $category_type)
-            ->with('item', new Accessory);
+            ->with('item', new Accessory)
+            ->with('pendingRequestCount', 0);
     }
 
     /**
@@ -80,6 +81,7 @@ class AccessoriesController extends Controller
         $accessory->created_by = auth()->id();
         $accessory->notes = request('notes');
         $accessory->requestable = request('requestable', 0);
+        $accessory->archived = request('archived', 0);
         // Seed the template supplier from the initial-acquisition
         // supplier on the create form so newly-created items already
         // have a "typical" supplier pre-populated. Editable afterwards.
@@ -120,8 +122,6 @@ class AccessoriesController extends Controller
      * Return view for the Accessory update form, prepopulated with existing data
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
-     *
-     * @param  int  $accessoryId
      */
     public function edit(Accessory $accessory): View|RedirectResponse
     {
@@ -130,15 +130,16 @@ class AccessoriesController extends Controller
             session()->put('url.intended', $safeReferer);
         }
 
-        return view('accessories.edit')->with('item', $accessory)->with('category_type', 'accessory');
+        return view('accessories.edit')
+            ->with('item', $accessory)
+            ->with('category_type', 'accessory')
+            ->with('pendingRequestCount', $accessory->openRequests()->count());
     }
 
     /**
      * Returns a view that presents a form to clone an accessory.
      *
      * @author [J. Vinsmoke]
-     *
-     * @param  int  $accessoryId
      *
      * @since [v6.0]
      */
@@ -171,7 +172,8 @@ class AccessoriesController extends Controller
 
         return view('accessories/edit')
             ->with('cloned_model', $accessory_to_clone)
-            ->with('item', $cloned);
+            ->with('item', $cloned)
+            ->with('pendingRequestCount', 0);
 
     }
 
@@ -179,8 +181,6 @@ class AccessoriesController extends Controller
      * Save edited Accessory from form post
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
-     *
-     * @param  int  $accessoryId
      */
     public function update(ImageUploadRequest $request, Accessory $accessory): RedirectResponse
     {
@@ -214,6 +214,7 @@ class AccessoriesController extends Controller
             $accessory->default_supplier_id = request('default_supplier_id');
             $accessory->notes = request('notes');
             $accessory->requestable = request('requestable', 0);
+            $accessory->archived = request('archived', 0);
 
             $accessory = $request->handleImages($accessory);
 
@@ -238,8 +239,6 @@ class AccessoriesController extends Controller
      * Delete the given accessory.
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
-     *
-     * @param  int  $accessoryId
      */
     public function destroy(Accessory $accessory): RedirectResponse
     {
@@ -261,12 +260,59 @@ class AccessoriesController extends Controller
     }
 
     /**
+     * Restore a soft-deleted accessory. Mirrors ComponentsController::postRestore
+     * (restoring is a delete-tier action across the project).
+     */
+    public function postRestore($id): RedirectResponse
+    {
+        if ($accessory = Accessory::withTrashed()->find($id)) {
+            // Per-instance authorize so the policy's before() hook runs
+            // its FMCS isCurrentUserHasAccess check against the actual
+            // row, not just the class.
+            $this->authorize('delete', $accessory);
+
+            if ($accessory->deleted_at == '') {
+                return redirect()->back()->with('error', trans('general.not_deleted', ['item_type' => trans('general.accessory')]));
+            }
+
+            if ($accessory->restore()) {
+                return redirect()->route('accessories.show', $accessory)
+                    ->with('success', trans('admin/accessories/message.restore.success'));
+            }
+
+            return redirect()->back()->with('error', trans('general.could_not_restore', ['item_type' => trans('general.accessory'), 'error' => $accessory->getErrors()->first()]));
+        }
+
+        return redirect()->route('accessories.index')->with('error', trans('admin/accessories/message.does_not_exist'));
+    }
+
+    /**
+     * Flip an accessory back to live inventory. Mirrors postRestore's
+     * auth shape so unarchiving goes through the same per-instance
+     * authorize path as restore from soft-delete.
+     */
+    public function postUnarchive(Accessory $accessory): RedirectResponse
+    {
+        $this->authorize('update', $accessory);
+
+        if (! $accessory->archived) {
+            return redirect()->back()->with('error', trans('admin/accessories/message.does_not_exist'));
+        }
+
+        $accessory->archived = false;
+
+        if ($accessory->save()) {
+            return redirect()->back()->with('success', trans('general.unarchive_success', ['item_type' => trans('general.accessory')]));
+        }
+
+        return redirect()->back()->withErrors($accessory->getErrors());
+    }
+
+    /**
      * Returns a view that invokes the ajax table which  contains
      * the content for the accessory detail view, which is generated in getDataView.
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
-     *
-     * @param  int  $accessoryID
      *
      * @see AccessoriesController::getDataView() method that generates the JSON response
      * @since [v1.0]

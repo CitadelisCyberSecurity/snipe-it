@@ -39,6 +39,7 @@ return new class extends Migration
 
             $table->dateTime('start');
             $table->dateTime('end')->nullable();
+            $table->unsignedBigInteger('company_id')->nullable();
 
             $table->timestamps();
             $table->softDeletes();
@@ -55,6 +56,11 @@ return new class extends Migration
             // BETWEEN ? AND ?. Composite lets the planner satisfy both
             // predicates from the index.
             $table->index(['event_type', 'start'], 'calendar_events_type_start_index');
+
+            // Read path FMCS filter: WHERE company_id IN (...) OR
+            // company_id IS NULL (floater). Standalone index because
+            // the composite above is ordered for the type+range query.
+            $table->index('company_id', 'calendar_events_company_id_index');
         });
     }
 

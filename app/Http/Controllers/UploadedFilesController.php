@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\FileStorage;
 use App\Helpers\StorageHelper;
 use App\Http\Requests\UploadFileRequest;
 use App\Models\Actionlog;
@@ -46,11 +47,6 @@ class UploadedFilesController extends Controller
             return redirect()->back()->withFragment('files')->with('error', trans('general.file_upload_status.invalid_object'));
         }
 
-        // If the file storage directory doesn't exist, create it
-        if (! Storage::exists(parent::getMapStoragePath()[$object_type])) {
-            Storage::makeDirectory(parent::getMapStoragePath()[$object_type], 775);
-        }
-
         if ($request->hasFile('file')) {
             // Loop over the attached files and add them to the object
             foreach ($request->file('file') as $file) {
@@ -75,7 +71,6 @@ class UploadedFilesController extends Controller
      * Check for permissions and display the file.
      * This isn't currently used, but is here for future use.
      *
-     * @param  UploadFileRequest  $request
      * @param  string  $object_type  the type of object to upload the file to
      * @param  int  $id  the ID of the object to delete from so we can check permisisons
      * @param  $file_id  the ID of the file to show from the action_logs table
@@ -120,7 +115,6 @@ class UploadedFilesController extends Controller
     /**
      * Delete the associated file
      *
-     * @param  UploadFileRequest  $request
      * @param  string  $object_type  the type of object to upload the file to
      * @param  int  $id  the ID of the object to delete from so we can check permisisons
      * @param  $file_id  the ID of the file to delete from the action_logs table
@@ -188,7 +182,7 @@ class UploadedFilesController extends Controller
                 return redirect()->back()->with('error', trans('general.file_upload_status.file_not_found'));
             }
 
-            $storedPath = 'private_uploads/imports/'.$import->file_path;
+            $storedPath = FileStorage::Imports->privateStorageKey().$import->file_path;
             if (! Storage::exists($storedPath)) {
                 return redirect()->back()->with('error', trans('general.file_upload_status.file_not_found'));
             }

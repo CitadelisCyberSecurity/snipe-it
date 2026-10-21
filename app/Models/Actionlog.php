@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\ActionType;
+use App\Enums\FileStorage;
+use App\Models\Builders\ActionlogQueryBuilder;
 use App\Models\Traits\CompanyableTrait;
 use App\Models\Traits\Searchable;
 use App\Presenters\ActionlogPresenter;
@@ -11,7 +13,6 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Schema;
@@ -22,6 +23,7 @@ use Illuminate\Support\Str;
  * checkouts, checkins, and updates).
  *
  * @version v1.0
+ * @mixin IdeHelperActionlog
  */
 class Actionlog extends SnipeModel
 {
@@ -30,6 +32,19 @@ class Actionlog extends SnipeModel
 
     // This is to manually set the source (via setActionSource()) for determineActionSource()
     protected ?string $source = null;
+
+    /**
+     * Ambient action-source for every action_log written inside a
+     * long-running operation (LDAP sync, sync-adapter pulls) that has
+     * no HTTP context to infer `gui` / `api` from and that spawns many
+     * observer-driven writes we can't reach into individually.
+     *
+     * Set + restored around a callback via withActionSource(). The
+     * priority order in determineActionSource() is: explicit per-log
+     * $this->source first, ambient second, then the request-shape
+     * fallbacks.
+     */
+    protected static ?string $ambientSource = null;
 
     protected $with = ['adminuser'];
 
@@ -487,27 +502,6 @@ class Actionlog extends SnipeModel
     }
 
     /**
-     * Eager load history relations used by the API transformer to avoid N+1 queries.
-     */
-    public function scopeForApiHistory($query)
-    {
-        return $query->with([
-            'adminuser',
-            'location',
-            'item' => function (MorphTo $morphTo) {
-                $morphTo->morphWith([
-                    Asset::class => ['model'],
-                ]);
-            },
-            'target' => function (MorphTo $morphTo) {
-                $morphTo->morphWith([
-                    Asset::class => ['model'],
-                ]);
-            },
-        ]);
-    }
-
-    /**
      * Establishes the actionlog -> location relationship
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
@@ -625,11 +619,37 @@ class Actionlog extends SnipeModel
      *
      * @since  v6.3.0
      */
+    /**
+     * Run $callback with every action_log it writes stamped as $source.
+     * Previous ambient value is restored on exit (including on
+     * exception) so nested wraps don't leak out of their scope. Used by
+     * LdapSync + the sync-adapter pull entry points to attribute
+     * observer-driven writes to the owning operation.
+     */
+    public static function withActionSource(string $source, callable $callback): mixed
+    {
+        $previous = self::$ambientSource;
+        self::$ambientSource = $source;
+        try {
+            return $callback();
+        } finally {
+            self::$ambientSource = $previous;
+        }
+    }
+
     public function determineActionSource(): string
     {
-        // This is a manually set source
+        // Explicit per-log override, set via setActionSource() on the
+        // Actionlog instance before save.
         if ($this->source) {
             return $this->source;
+        }
+
+        // Ambient source set by a surrounding withActionSource() wrap.
+        // Catches observer-driven writes from LDAP sync and sync-adapter
+        // pulls that we can't reach to tag individually.
+        if (self::$ambientSource !== null) {
+            return self::$ambientSource;
         }
 
         // This is an API call
@@ -699,41 +719,30 @@ class Actionlog extends SnipeModel
     {
 
         if (($this->action_type == 'accepted') || ($this->action_type == 'declined')) {
-            return 'private_uploads/eula-pdfs/'.$this->filename;
+            return FileStorage::EulaPdfs->privateStorageKey().$this->filename;
         }
 
         if ($this->action_type == 'audit') {
-            return 'private_uploads/audits/'.$this->filename;
+            return FileStorage::Audits->privateStorageKey().$this->filename;
         }
 
-        switch ($this->item_type) {
-            case Accessory::class:
-                return 'private_uploads/accessories/'.$this->filename;
-            case Asset::class:
-                return 'private_uploads/assets/'.$this->filename;
-            case AssetModel::class:
-                return 'private_uploads/models/'.$this->filename;
-            case Company::class:
-                return 'private_uploads/companies/'.$this->filename;
-            case Consumable::class:
-                return 'private_uploads/consumables/'.$this->filename;
-            case Department::class:
-                return 'private_uploads/departments/'.$this->filename;
-            case Component::class:
-                return 'private_uploads/components/'.$this->filename;
-            case License::class:
-                return 'private_uploads/licenses/'.$this->filename;
-            case Location::class:
-                return 'private_uploads/locations/'.$this->filename;
-            case Maintenance::class:
-                return 'private_uploads/maintenances/'.$this->filename;
-            case Supplier::class:
-                return 'private_uploads/suppliers/'.$this->filename;
-            case User::class:
-                return 'private_uploads/users/'.$this->filename;
-            default:
-                return null;
-        }
+        $case = match ($this->item_type) {
+            Accessory::class => FileStorage::Accessories,
+            Asset::class => FileStorage::Assets,
+            AssetModel::class => FileStorage::Models,
+            Company::class => FileStorage::Companies,
+            Consumable::class => FileStorage::Consumables,
+            Department::class => FileStorage::Departments,
+            Component::class => FileStorage::Components,
+            License::class => FileStorage::Licenses,
+            Location::class => FileStorage::Locations,
+            Maintenance::class => FileStorage::Maintenances,
+            Supplier::class => FileStorage::Suppliers,
+            User::class => FileStorage::Users,
+            default => null,
+        };
+
+        return $case ? $case->privateStorageKey().$this->filename : null;
     }
 
     // Manually sets $this->source for determineActionSource()
@@ -742,52 +751,8 @@ class Actionlog extends SnipeModel
         $this->source = $source;
     }
 
-    public function scopeOrderByCreatedBy($query, $order)
+    public function newEloquentBuilder($query): ActionlogQueryBuilder
     {
-        return $query->leftJoin('users as admin_sort', 'action_logs.created_by', '=', 'admin_sort.id')->select('action_logs.*')->orderBy('admin_sort.first_name', $order)->orderBy('admin_sort.last_name', $order);
-    }
-
-    // Audit report (issue #9430): the frontend has advertised location
-    // as sortable for a while but the API whitelist didn't include it,
-    // so clicks silently fell back to created_at. action_logs stores
-    // its own location_id snapshot (see the belongsTo above) so this
-    // is a plain leftJoin on locations, no polymorphic asset walk.
-    public function scopeOrderByLocation($query, $order)
-    {
-        return $query->leftJoin('locations as location_sort', 'action_logs.location_id', '=', 'location_sort.id')
-            ->select('action_logs.*')
-            ->orderBy('location_sort.name', $order);
-    }
-
-    // Also for the audit report: next_audit_date lives on the asset
-    // (the log doesn't snapshot it), so we join to assets on the
-    // polymorphic item_id + item_type pair. Non-Asset item_types get
-    // NULL from the leftJoin and sort naturally at the end.
-    public function scopeOrderByAssetNextAuditDate($query, $order)
-    {
-        return $query->leftJoin('assets as asset_sort', function ($join) {
-            $join->on('action_logs.item_id', '=', 'asset_sort.id')
-                ->where('action_logs.item_type', '=', Asset::class);
-        })
-            ->select('action_logs.*')
-            ->orderBy('asset_sort.next_audit_date', $order);
-    }
-
-    // Item name sort for the audit report (#9430). Only Assets get
-    // audited, so the action_type=audit filter upstream guarantees
-    // item_type=Asset here and a straight Asset join is correct.
-    // Sibling activity reports that sort by item on other action_types
-    // (checkout/checkin/etc.) will get NULL names for non-Asset rows
-    // and sort them at the ends; that matches the pre-refactor state
-    // where item sort silently fell back to created_at, and fixing
-    // truly-polymorphic item sort is a bigger separate change.
-    public function scopeOrderByItemName($query, $order)
-    {
-        return $query->leftJoin('assets as asset_item_sort', function ($join) {
-            $join->on('action_logs.item_id', '=', 'asset_item_sort.id')
-                ->where('action_logs.item_type', '=', Asset::class);
-        })
-            ->select('action_logs.*')
-            ->orderBy('asset_item_sort.name', $order);
+        return new ActionlogQueryBuilder($query);
     }
 }

@@ -34,6 +34,46 @@ class AssetsForAssetModelTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_models_view_without_assets_view_cannot_read_the_assets_for_a_model()
+    {
+        // Regression test: pre-fix, the endpoint only authorized
+        // view on AssetModel. A role holding models.view but not
+        // assets.view therefore read full asset rows (serials, notes,
+        // assignment, purchase, audit) through AssetsTransformer. The
+        // canonical GET /api/v1/hardware correctly 403s the same role.
+        $model = AssetModel::factory()->create();
+        Asset::factory()->create([
+            'model_id' => $model->id,
+            'serial' => 'LEAK-SERIAL-ABC123',
+            'notes' => 'LEAK-NOTES-sensitive',
+        ]);
+
+        $modelsViewer = User::factory()->viewAssetModels()->create();
+
+        $this->actingAsForApi($modelsViewer)
+            ->getJson(route('api.models.assets', ['id' => $model->id]))
+            ->assertForbidden();
+    }
+
+    public function test_models_view_combined_with_assets_view_still_reaches_the_endpoint()
+    {
+        // Happy-path companion: fixing the authorization gap must not
+        // over-restrict the roles that legitimately combine both
+        // permissions.
+        $model = AssetModel::factory()->create();
+        Asset::factory()->count(2)->create(['model_id' => $model->id]);
+
+        $viewer = User::factory()->viewAssetModels()->viewAssets()->create();
+
+        $this->actingAsForApi($viewer)
+            ->getJson(route('api.models.assets', ['id' => $model->id]))
+            ->assertOk()
+            ->assertJson(fn (AssertableJson $json) => $json
+                ->where('total', 2)
+                ->has('rows', 2)
+                ->etc());
+    }
+
     public function test_error_returned_if_asset_model_does_not_exist()
     {
         // Snipe-IT's exception handler returns 200 + status "error" for

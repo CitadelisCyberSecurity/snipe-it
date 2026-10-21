@@ -13,11 +13,12 @@ return [
     'no_default_eula' => 'Aucune licence d\'utilisation par défaut trouvée. Ajoutez-en une dans la section "Réglages".',
     'total' => 'Total',
     'remaining' => 'Dispo',
-    'requestable' => 'Users may request this accessory',
+    'requestable' => 'Les utilisateurs·trices peuvent demander cet actif',
     'update' => 'Mise à jour d\'accessoires',
     'use_default_eula' => 'Utiliser la <a href="#" data-toggle="modal" data-target="#eulaModal">license primaire par défaut </a> à la place.',
     'use_default_eula_disabled' => '<del>Utilisez la license par défaut à la place.</del> Aucune licence d\'utilisation par défaut trouvée. Ajoutez-en une dans la section "Préférences".',
     'clone' => 'Dupliquer l\'accessoire',
     'delete_disabled' => 'Cet accessoire ne peut pas encore être supprimé car certaines pièces sont encore attribuées.',
+    'accessory_deleted_warning' => 'This accessory has been deleted. You must restore it before you can assign it.',
 
 ];

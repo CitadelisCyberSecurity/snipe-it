@@ -20,8 +20,8 @@ return [
         'confirm' => 'Ви впевнені, що хочете видалити цей аксесуар?',
         'error' => 'Виникла проблема при видаленні аксесуару. Будь ласка, спробуйте ще раз.',
         'success' => 'Аксесуар успішно видалено.',
-        'bulk_success' => 'Accessory deleted successfully.|:count accessories were deleted successfully.',
-        'partial_success' => ':count accessory was deleted successfully, but others could not be deleted. See below for details.|:count accessories were deleted successfully, but others could not be deleted. See below for details.',
+        'bulk_success' => 'Аксесуар успішно видалено.|:count аксесуарів успішно видалено.',
+        'partial_success' => ':count аксесуар успішно видалено, але інші не вдалося видалити. Детальніше див. нижче.|:count аксесуари успішно видалено, але інші не вдалося видалити. Детальніше див. нижче.',
     ],
 
     'checkout' => [
@@ -41,4 +41,29 @@ return [
         'user_does_not_exist' => 'Вказаного користувача не існує. Спробуйте ще раз.',
     ],
 
+    'restore' => [
+        'error' => 'Аксесуар не було відновлено. Спробуйте ще раз',
+        'success' => 'Аксесуар успішно відновлено.',
+    ],
+
+    'bulk' => [
+        'no_accessories_selected' => 'Не вибрано жодного аксесуара.',
+        'no_action_selected' => 'Будь ласка, виберіть дію зі списку.',
+        'no_fields_updated' => 'Немає змінених полів, тому нічого не було оновлено.',
+        'skipped_unauthorized' => ':count аксесуар(ів) пропущено, оскільки у вас немає прав на їх зміну.',
+
+        'update' => [
+            'success' => ':count аксесуар оновлено.|:count аксесуари оновлено.|:count аксесуарів оновлено.',
+            'none_updated' => 'Не вдалося оновити вибраний аксесуар. Деталі наведено нижче.|Не вдалося оновити жоден із вибраних аксесуарів. Деталі наведено нижче.',
+        ],
+
+        'restore' => [
+            'success' => ':count аксесуар було відновлено.|:count аксесуарів було відновлено.',
+        ],
+
+        'checkin_selected' => [
+            'no_rows_selected' => 'Не вибрано жодного аксесуара, який перебуває у видачі.',
+            'success' => ':count видачу аксесуара повернено.|:count видачі аксесуарів повернено.|:count видач аксесуарів повернено.',
+        ],
+    ],
 ];

@@ -69,6 +69,84 @@ class IntuneAdapter extends SyncAdapter implements PushableAdapter
                 'secret' => true,
                 'help' => trans('admin/settings/sync_adapters.intune_client_secret_help'),
             ],
+            [
+                'key' => 'scope_tag_filter',
+                'label' => trans('admin/settings/sync_adapters.intune_scope_tag_filter_label'),
+                'required' => false,
+                'help' => trans('admin/settings/sync_adapters.intune_scope_tag_filter_help'),
+            ],
+        ];
+    }
+
+    /**
+     * Preset extras this adapter extracts from well-known Graph
+     * managedDevice fields. Each key maps to an entry built in
+     * normalize() from the corresponding Graph attribute. Admin-
+     * defined extras (via the Custom Extras widget) merge on top via
+     * the base class.
+     *
+     * Only fields that Graph's v1.0 LIST endpoint actually populates
+     * are included here. Properties like `ethernetMacAddress`,
+     * `physicalMemoryInBytes`, and the `hardwareInformation` TPM
+     * fields return null on LIST (Microsoft requires per-device
+     * $select to get real values) - the opt-in per-device
+     * enrichment setting below fetches those separately.
+     */
+    public function presetExtraFields(): array
+    {
+        return [
+            'intune_compliance_state' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_compliance_state'],
+            'intune_enrolled_at' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_enrolled_at'],
+            'intune_management_agent' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_management_agent'],
+            'intune_ownership' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_ownership'],
+            'intune_wifi_mac' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_wifi_mac'],
+            'intune_total_storage_bytes' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_total_storage_bytes'],
+            'intune_free_storage_bytes' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_free_storage_bytes'],
+            'intune_is_encrypted' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_is_encrypted', 'type' => 'boolean'],
+            'intune_jail_broken' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_jail_broken'],
+            'intune_is_supervised' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_is_supervised', 'type' => 'boolean'],
+            'intune_azure_ad_device_id' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_azure_ad_device_id'],
+            'intune_azure_ad_registered' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_azure_ad_registered', 'type' => 'boolean'],
+            'intune_imei' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_imei'],
+            'intune_meid' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_meid'],
+            'intune_exchange_access_state' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_exchange_access_state'],
+            // Additional v1.0 LIST-populated fields.
+            'intune_user_display_name' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_user_display_name'],
+            'intune_managed_device_name' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_managed_device_name'],
+            'intune_partner_reported_threat_state' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_partner_reported_threat_state'],
+            'intune_exchange_access_state_reason' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_exchange_access_state_reason'],
+            'intune_device_category' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_device_category'],
+            'intune_phone_number' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_phone_number'],
+            'intune_subscriber_carrier' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_subscriber_carrier'],
+            'intune_android_security_patch_level' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_android_security_patch_level'],
+            'intune_enrollment_profile_name' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_enrollment_profile_name'],
+            'intune_device_enrollment_type' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_device_enrollment_type'],
+            'intune_management_certificate_expiration' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_management_certificate_expiration'],
+            'intune_compliance_grace_period_expiration' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_compliance_grace_period_expiration'],
+            'intune_device_registration_state' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_device_registration_state'],
+            // Comma-joined roleScopeTagIds the device belongs to in
+            // Intune. Admins who use scope tags for RBAC separation
+            // can route this to a custom field to see which slice of
+            // IT owns each asset.
+            'intune_role_scope_tag_ids' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_role_scope_tag_ids'],
+            // Per-device enrichment fields. Populated only when the
+            // "Fetch per-device details" opt-in is on - Graph's LIST
+            // endpoint returns null for these regardless of $select.
+            'intune_ethernet_mac' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_ethernet_mac'],
+            'intune_physical_memory_bytes' => ['label_key' => 'admin/settings/sync_adapters.intune_extra_physical_memory_bytes'],
+        ];
+    }
+
+    public function supportsAdminDefinedExtras(): bool
+    {
+        return true;
+    }
+
+    public function perDeviceDetailsToggle(): ?array
+    {
+        return [
+            'label' => trans('admin/settings/sync_adapters.intune_fetch_per_device_details_label'),
+            'help' => trans('admin/settings/sync_adapters.intune_fetch_per_device_details_help'),
         ];
     }
 
@@ -84,9 +162,112 @@ class IntuneAdapter extends SyncAdapter implements PushableAdapter
             clientSecret: $this->credential('client_secret'),
         );
 
-        foreach ($client->managedDevices() as $device) {
+        $fetchPerDeviceDetails = $this->fetchesPerDeviceDetails();
+        $scopeTagIds = $this->resolveScopeTagFilter($client);
+
+        foreach ($client->managedDevices($scopeTagIds) as $device) {
+            if ($fetchPerDeviceDetails) {
+                $this->fillPerDeviceEnrichment($client, $device);
+            }
             yield $this->normalize($device);
         }
+    }
+
+    /**
+     * Resolve the admin-entered scope_tag_filter into the Graph tag ID
+     * list the managedDevices filter wants. Entries can be either tag
+     * displayNames (friendly) or raw IDs (short-circuit). We hit
+     * roleScopeTags() once per sync, build a name -> id map, resolve
+     * names, and pass through anything that looks like an id already.
+     * Unresolvable names are logged and skipped so one bad entry does
+     * not kill the whole pull.
+     *
+     * Returns null when no filter is configured so the client can skip
+     * the $filter query param entirely.
+     *
+     * @return array<int, string>|null
+     */
+    private function resolveScopeTagFilter(IntuneClient $client): ?array
+    {
+        $raw = '';
+        try {
+            $raw = (string) $this->credential('scope_tag_filter');
+        } catch (\Throwable) {
+            // Credential not set yet. Treat as unconfigured.
+        }
+
+        $entries = array_values(array_filter(array_map('trim', explode(',', $raw))));
+        if ($entries === []) {
+            return null;
+        }
+
+        $tags = $client->roleScopeTags();
+        $nameToId = [];
+        $idSet = [];
+        foreach ($tags as $tag) {
+            $nameToId[strtolower($tag['displayName'])] = $tag['id'];
+            $idSet[$tag['id']] = true;
+        }
+
+        $resolved = [];
+        foreach ($entries as $entry) {
+            $lower = strtolower($entry);
+            if (isset($nameToId[$lower])) {
+                $resolved[] = $nameToId[$lower];
+
+                continue;
+            }
+            if (isset($idSet[$entry])) {
+                $resolved[] = $entry;
+
+                continue;
+            }
+            Log::channel('sync-adapters')->warning(sprintf(
+                '%s: scope_tag_filter entry "%s" did not match any Intune role scope tag name or id. Skipping.',
+                $this->name(),
+                $entry,
+            ));
+        }
+
+        return $resolved === [] ? null : array_values(array_unique($resolved));
+    }
+
+    /**
+     * Per-device enrichment pass for fields Graph's LIST endpoint
+     * returns null for. Mutates $device in-place with the fetched
+     * ethernetMacAddress + physicalMemoryInBytes so normalize()
+     * picks them up through the usual Arr::get path. One extra
+     * Graph call per device - costly on large fleets, which is why
+     * it's opt-in.
+     *
+     * @param  array<string, mixed>  &$device
+     */
+    private function fillPerDeviceEnrichment(IntuneClient $client, array &$device): void
+    {
+        $id = Arr::get($device, 'id');
+        if (! is_string($id) || $id === '') {
+            return;
+        }
+
+        $detail = $client->managedDeviceDetail($id, ['ethernetMacAddress', 'physicalMemoryInBytes']);
+        if ($detail === null) {
+            return;
+        }
+
+        $device['ethernetMacAddress'] = Arr::get($detail, 'ethernetMacAddress');
+        $device['physicalMemoryInBytes'] = Arr::get($detail, 'physicalMemoryInBytes');
+    }
+
+    /**
+     * Opt-in: fire a per-device Graph GET for each pulled device to
+     * backfill ethernet MAC + physical memory. Microsoft's LIST
+     * endpoint returns null for these, so admins who need them
+     * accept the per-device cost. Default off - cheap pull wins
+     * for large fleets by default.
+     */
+    public function fetchesPerDeviceDetails(): bool
+    {
+        return \App\Models\SyncAdapterConfig::get($this->instance->id, 'fetch_per_device_details') === '1';
     }
 
     /**
@@ -116,12 +297,67 @@ class IntuneAdapter extends SyncAdapter implements PushableAdapter
      * shape. Graph's stable id is `id` (a GUID), and we key
      * asset_external_sources on it. Ethernet MAC is preferred over
      * WiFi because it's more likely to be a hardware-inventory MAC
-     * that survives OS reinstall.
+     * that survives OS reinstall. Empty-string MAC fields fall through
+     * - Graph often returns "" rather than omitting the key for
+     * devices without that interface (e.g. laptops without built-in
+     * Ethernet), so a plain `??` would mistake empty for present.
      *
      * @param  array<string, mixed>  $device
      */
     private function normalize(array $device): HostInventoryRecord
     {
+        $extra = [
+            'intune_compliance_state' => Arr::get($device, 'complianceState'),
+            'intune_enrolled_at' => Arr::get($device, 'enrolledDateTime'),
+            'intune_management_agent' => Arr::get($device, 'managementAgent'),
+            'intune_ownership' => Arr::get($device, 'managedDeviceOwnerType'),
+            // Wi-Fi MAC lands here. Ethernet MAC + physical memory
+            // return null on LIST per Microsoft's docs - populated
+            // by the per-device enrichment pass instead if the admin
+            // opted in. See fillPerDeviceEnrichment().
+            'intune_wifi_mac' => self::blankToNull(Arr::get($device, 'wiFiMacAddress')),
+            // Backfilled by fillPerDeviceEnrichment() when the opt-in
+            // setting is on. Null otherwise - Graph's LIST never
+            // populates these fields.
+            'intune_ethernet_mac' => self::blankToNull(Arr::get($device, 'ethernetMacAddress')),
+            'intune_physical_memory_bytes' => Arr::get($device, 'physicalMemoryInBytes'),
+            // Hardware inventory. Graph reports storage in bytes -
+            // admins who want GB can run a custom-field formula.
+            'intune_total_storage_bytes' => Arr::get($device, 'totalStorageSpaceInBytes'),
+            'intune_free_storage_bytes' => Arr::get($device, 'freeStorageSpaceInBytes'),
+            'intune_is_encrypted' => Arr::get($device, 'isEncrypted'),
+            'intune_jail_broken' => Arr::get($device, 'jailBroken'),
+            'intune_is_supervised' => Arr::get($device, 'isSupervised'),
+            // Azure AD identity. Useful for admins who cross-reference
+            // Snipe-IT assets with Entra ID devices or conditional
+            // access policies.
+            'intune_azure_ad_device_id' => Arr::get($device, 'azureADDeviceId'),
+            'intune_azure_ad_registered' => Arr::get($device, 'azureADRegistered'),
+            // Cellular identifiers for iOS / Android devices.
+            'intune_imei' => Arr::get($device, 'imei'),
+            'intune_meid' => Arr::get($device, 'meid'),
+            'intune_exchange_access_state' => Arr::get($device, 'exchangeAccessState'),
+            // Additional v1.0 LIST-populated fields.
+            'intune_user_display_name' => Arr::get($device, 'userDisplayName'),
+            'intune_managed_device_name' => Arr::get($device, 'managedDeviceName'),
+            'intune_partner_reported_threat_state' => Arr::get($device, 'partnerReportedThreatState'),
+            'intune_exchange_access_state_reason' => Arr::get($device, 'exchangeAccessStateReason'),
+            'intune_device_category' => Arr::get($device, 'deviceCategoryDisplayName'),
+            'intune_phone_number' => Arr::get($device, 'phoneNumber'),
+            'intune_subscriber_carrier' => Arr::get($device, 'subscriberCarrier'),
+            'intune_android_security_patch_level' => Arr::get($device, 'androidSecurityPatchLevel'),
+            'intune_enrollment_profile_name' => Arr::get($device, 'enrollmentProfileName'),
+            'intune_device_enrollment_type' => Arr::get($device, 'deviceEnrollmentType'),
+            'intune_management_certificate_expiration' => Arr::get($device, 'managementCertificateExpirationDate'),
+            'intune_compliance_grace_period_expiration' => Arr::get($device, 'complianceGracePeriodExpirationDateTime'),
+            'intune_device_registration_state' => Arr::get($device, 'deviceRegistrationState'),
+            // Scope tags live on the device as an array of ID strings.
+            // Comma-join for custom-field display convenience. See
+            // scope_tag_filter in settingsSchema() for the usage hook.
+            'intune_role_scope_tag_ids' => self::joinScopeTagIds(Arr::get($device, 'roleScopeTagIds')),
+        ];
+        $extra = $this->applyAdminExtras($extra, $device);
+
         return new HostInventoryRecord(
             sourceKey: $this->name(),
             sourceId: (string) Arr::get($device, 'id'),
@@ -129,21 +365,51 @@ class IntuneAdapter extends SyncAdapter implements PushableAdapter
             hardwareSerial: Arr::get($device, 'serialNumber'),
             hardwareModel: Arr::get($device, 'model'),
             manufacturer: Arr::get($device, 'manufacturer'),
-            primaryMac: Arr::get($device, 'ethernetMacAddress')
-                ?? Arr::get($device, 'wiFiMacAddress'),
+            primaryMac: self::blankToNull(Arr::get($device, 'ethernetMacAddress'))
+                ?? self::blankToNull(Arr::get($device, 'wiFiMacAddress')),
             primaryIp: null,
             os: Arr::get($device, 'operatingSystem'),
             osVersion: Arr::get($device, 'osVersion'),
             lastSeen: $this->parseTimestamp(Arr::get($device, 'lastSyncDateTime')),
             assignedUserEmail: Arr::get($device, 'userPrincipalName')
                 ?? Arr::get($device, 'emailAddress'),
-            extra: [
-                'intune_compliance_state' => Arr::get($device, 'complianceState'),
-                'intune_enrolled_at' => Arr::get($device, 'enrolledDateTime'),
-                'intune_management_agent' => Arr::get($device, 'managementAgent'),
-                'intune_ownership' => Arr::get($device, 'managedDeviceOwnerType'),
-            ],
+            extra: $extra,
         );
+    }
+
+    /**
+     * Graph often returns "" rather than null for interface MACs when
+     * the device doesn't have that interface. Fold both shapes to
+     * null so downstream null-guards (and the primaryMac Ethernet-
+     * then-WiFi fallback) work uniformly.
+     */
+    private static function blankToNull(mixed $value): ?string
+    {
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        return $value;
+    }
+
+    /**
+     * Flatten Graph's roleScopeTagIds array into a comma-joined string
+     * for the extras bag so admins can route it to a text custom field
+     * without juggling array types. Returns null when the device has
+     * no scope tags.
+     */
+    private static function joinScopeTagIds(mixed $value): ?string
+    {
+        if (! is_array($value) || $value === []) {
+            return null;
+        }
+
+        $parts = array_values(array_filter(array_map(
+            fn ($v) => is_scalar($v) ? (string) $v : null,
+            $value,
+        )));
+
+        return $parts === [] ? null : implode(',', $parts);
     }
 
     private function parseTimestamp(mixed $value): ?Carbon

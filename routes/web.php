@@ -37,10 +37,11 @@ use App\Http\Controllers\SetupController;
 use App\Http\Controllers\StatuslabelsController;
 use App\Http\Controllers\StorageProxyController;
 use App\Http\Controllers\SuppliersController;
+use App\Http\Controllers\SyncAdapterController;
+use App\Http\Controllers\UnacceptedAcceptancesController;
 use App\Http\Controllers\UploadedFilesController;
 use App\Http\Controllers\ViewAssetsController;
 use App\Livewire\Importer;
-use App\Mail\CheckoutComponentMail;
 use App\Models\AccessReviewCampaign;
 use App\Models\MaintenanceType;
 use App\Models\ReportTemplate;
@@ -146,11 +147,6 @@ Route::group(['middleware' => 'auth'], function () {
         [LabelsController::class, 'show']
     )->where('labelName', '.*')->name('labels.show');
 
-    Route::get('/test-email', function () {
-        $mailable = new CheckoutComponentMail;
-
-        return $mailable->render(); // dumps HTML
-    });
     /*
     * Manufacturers
     */
@@ -402,48 +398,72 @@ Route::group(['prefix' => 'admin', 'middleware' => ['auth', 'authorize:superuser
     Route::post('notifications', [SettingsController::class, 'postAlerts'])
         ->name('settings.alerts.save');
 
-    Route::get('slack', [SettingsController::class, 'getSlack'])
-        ->name('settings.slack.index')
+    Route::get('integrations', [SettingsController::class, 'getIntegrations'])
+        ->name('settings.integrations.index')
         ->breadcrumbs(fn (Trail $trail) => $trail->parent('settings.index')
-            ->push(trans('admin/settings/general.webhook_title'), route('settings.slack.index')));
+            ->push(trans('admin/settings/general.webhook_title'), route('settings.integrations.index')));
 
-    Route::post('slack', [SettingsController::class, 'postSlack'])
-        ->name('settings.slack.save');
-
-    Route::get('adapters', [SettingsController::class, 'getAdapters'])
+    Route::get('adapters', [SyncAdapterController::class, 'getAdapters'])
         ->name('settings.adapters.index')
         ->breadcrumbs(fn (Trail $trail) => $trail->parent('settings.index')
             ->push(trans('admin/settings/sync_adapters.title'), route('settings.adapters.index')));
 
-    Route::post('adapters', [SettingsController::class, 'postCreateAdapterInstance'])
+    Route::post('adapters', [SyncAdapterController::class, 'postCreateAdapterInstance'])
         ->name('settings.adapters.create');
 
-    Route::post('adapters/{instance}', [SettingsController::class, 'postAdapterConfig'])
+    Route::post('adapters/{instance}', [SyncAdapterController::class, 'postAdapterConfig'])
         ->name('settings.adapters.save')
         ->missing(fn () => abort(404));
 
-    Route::post('adapters/{instance}/sync', [SettingsController::class, 'postAdapterSync'])
+    Route::post('adapters/{instance}/sync', [SyncAdapterController::class, 'postAdapterSync'])
         ->name('settings.adapters.sync')
         ->missing(fn () => abort(404));
 
-    Route::post('adapters/{instance}/push', [SettingsController::class, 'postAdapterPush'])
+    Route::post('adapters/{instance}/push', [SyncAdapterController::class, 'postAdapterPush'])
         ->name('settings.adapters.push')
         ->missing(fn () => abort(404));
 
-    Route::post('adapters/{instance}/refresh-groups', [SettingsController::class, 'postAdapterRefreshGroups'])
+    Route::post('adapters/{instance}/refresh-groups', [SyncAdapterController::class, 'postAdapterRefreshGroups'])
         ->name('settings.adapters.refresh_groups')
         ->missing(fn () => abort(404));
 
-    Route::post('adapters/{instance}/refresh-custom-fields', [SettingsController::class, 'postAdapterRefreshCustomFields'])
+    Route::post('adapters/{instance}/refresh-sites', [SyncAdapterController::class, 'postAdapterRefreshSites'])
+        ->name('settings.adapters.refresh_sites')
+        ->missing(fn () => abort(404));
+
+    Route::post('adapters/{instance}/refresh-custom-fields', [SyncAdapterController::class, 'postAdapterRefreshCustomFields'])
         ->name('settings.adapters.refresh_custom_fields')
         ->missing(fn () => abort(404));
 
-    Route::post('adapters/{instance}/clone', [SettingsController::class, 'postCloneAdapterInstance'])
+    Route::post('adapters/{instance}/clone', [SyncAdapterController::class, 'postCloneAdapterInstance'])
         ->name('settings.adapters.clone')
         ->missing(fn () => abort(404));
 
-    Route::delete('adapters/{instance}', [SettingsController::class, 'deleteAdapterInstance'])
+    Route::delete('adapters/{instance}', [SyncAdapterController::class, 'deleteAdapterInstance'])
         ->name('settings.adapters.destroy')
+        ->missing(fn () => abort(404));
+
+    // One-time download of the per-run log flashed from Sync Now /
+    // Push Now. Token comes from session('sync_run_log_token') and
+    // the cache entry is deleted after a successful download.
+    Route::get('adapters/sync-log/{token}', [SyncAdapterController::class, 'downloadSyncRunLog'])
+        ->name('settings.adapters.sync_log.download')
+        ->where('token', '[A-Za-z0-9]+');
+
+    // AJAX diagnostic endpoints under the composed-notes section of
+    // each adapter's config form. All three return JSON with an
+    // 'output' field containing the captured sync-adapters log text,
+    // plus per-endpoint payload specifics.
+    Route::post('adapters/{instance}/preview-push-payload', [SyncAdapterController::class, 'postPreviewPushPayload'])
+        ->name('settings.adapters.preview_push_payload')
+        ->missing(fn () => abort(404));
+
+    Route::post('adapters/{instance}/test-1-push', [SyncAdapterController::class, 'postTest1Push'])
+        ->name('settings.adapters.test_1_push')
+        ->missing(fn () => abort(404));
+
+    Route::post('adapters/{instance}/test-1-pull', [SyncAdapterController::class, 'postTest1Pull'])
+        ->name('settings.adapters.test_1_pull')
         ->missing(fn () => abort(404));
 
     Route::get('asset_tags', [SettingsController::class, 'getAssetTags'])
@@ -458,9 +478,22 @@ Route::group(['prefix' => 'admin', 'middleware' => ['auth', 'authorize:superuser
         ->name('settings.labels.index')
         ->breadcrumbs(fn (Trail $trail) => $trail->parent('settings.index')
             ->push(trans('admin/settings/general.labels_title'), route('settings.labels.index')));
+    Route::get('labels/customizer-preview/{labelName}', [LabelsController::class, 'customLabelPreview']
+    )->where('labelName', '.*')->name('labels.customizer-preview');
 
     Route::post('labels', [SettingsController::class, 'postLabels'])
         ->name('settings.labels.save');
+
+    Route::get('/settings/labels/create', [LabelsController::class, 'create'])
+        ->name('settings.labels.create');
+    Route::get('/settings/labels/{label}/edit', [LabelsController::class, 'edit'])
+        ->name('settings.labels.edit');
+    Route::post('/settings/labels', [LabelsController::class, 'store'])
+        ->name('settings.labels.store');
+    Route::put('/settings/labels/{label}', [LabelsController::class, 'update'])
+        ->name('settings.labels.update');
+    Route::delete('settings/labels/{label}', [LabelsController::class, 'destroy'])
+        ->name('settings.labels.destroy');
 
     Route::get('ldap', [SettingsController::class, 'getLdapSettings'])
         ->name('settings.ldap.index')
@@ -916,32 +949,32 @@ Route::group(['prefix' => 'reports', 'middleware' => ['auth']], function () {
     Route::post('activity', [ReportsController::class, 'postActivityReport'])
         ->name('reports.activity.post');
 
-    Route::get('unaccepted_assets/{deleted?}', [ReportsController::class, 'getAssetAcceptanceReport'])
-        ->name('reports/unaccepted_assets')
-        // Same reasoning as reports.activity above: scoped viewers
-        // arrive via the Needs Attention widget's link and would 403
-        // if we exposed a "Reports" middle crumb linking to
-        // reports.index.
-        ->breadcrumbs(function (Trail $trail) {
-            $trail->parent('home');
-            if (Gate::allows('reports.view')) {
-                $trail->push(trans('general.reports'), route('reports.index'));
-            }
-            $trail->push(trans('general.unaccepted_asset_report'), route('reports/unaccepted_assets'));
+    // Old /reports/unaccepted_assets* URLs. The surface moved out of
+    // reports in v8.9 because the actions (reminder sends, deletes)
+    // belong behind a checkout-shaped grant, not reports.view. Keep
+    // 301s on the old URLs so external bookmarks and the console
+    // command docs don't break.
+    Route::redirect('unaccepted_assets', '/unaccepted-acceptances', 301);
+    Route::redirect('unaccepted_assets/deleted', '/unaccepted-acceptances?deleted=deleted', 301);
 
-            return $trail;
-        });
+});
 
-    Route::post('unaccepted_assets/sent_reminder', [ReportsController::class, 'sentAssetAcceptanceReminder'])
-        ->name('reports/unaccepted_assets_sent_reminder');
+Route::middleware(['auth'])->group(function () {
+    Route::get('unaccepted-acceptances', [UnacceptedAcceptancesController::class, 'index'])
+        ->name('unaccepted-acceptances.index')
+        ->breadcrumbs(fn (Trail $trail) => $trail->parent('home', route('home'))
+            ->push(trans('general.unaccepted_asset_report'), route('unaccepted-acceptances.index'))
+        );
 
-    Route::delete('unaccepted_assets/{acceptanceId}/delete', [ReportsController::class, 'deleteAssetAcceptance'])
-        ->name('reports/unaccepted_assets_delete');
+    Route::post('unaccepted-acceptances/send-reminder', [UnacceptedAcceptancesController::class, 'sendReminder'])
+        ->name('unaccepted-acceptances.send-reminder');
 
-    Route::post(
-        'unaccepted_assets/{deleted?}', [ReportsController::class, 'postAssetAcceptanceReport'])
-        ->name('reports/export/unaccepted_assets');
+    Route::post('unaccepted-acceptances/bulk-send-reminders', [UnacceptedAcceptancesController::class, 'bulkSendReminders'])
+        ->name('unaccepted-acceptances.bulk-send-reminders');
 
+    Route::delete('unaccepted-acceptances/{acceptanceId}', [UnacceptedAcceptancesController::class, 'destroy'])
+        ->whereNumber('acceptanceId')
+        ->name('unaccepted-acceptances.destroy');
 });
 
 Route::get(

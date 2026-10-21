@@ -6,8 +6,10 @@ use App\Helpers\Helper;
 use App\Http\Traits\ConvertsBase64ToFiles;
 use App\Rules\AllowedUploadExtension;
 use enshrined\svgSanitize\Sanitizer;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 
 class UploadFileRequest extends Request
 {
@@ -49,20 +51,33 @@ class UploadFileRequest extends Request
     }
 
     /**
+     * Alias the legacy `image` audit field to `file[0]` so the single
+     * `file.*` rule validates it. Works because prepareForValidation
+     * runs before Laravel's first allFiles() call, so the FileBag
+     * mutation lands in convertedFiles on first access.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->files->has('image') && ! $this->files->has('file')) {
+            $this->files->set('file', [$this->files->get('image')]);
+            $this->files->remove('image');
+        }
+    }
+
+    /**
      * Sanitizes (if needed) and Saves a file to the appropriate location
-     * Returns the 'short' (storage-relative) filename
+     * Returns the 'short' (storage-relative) filename.
      */
     public function handleFile(string $dirname, string $name_prefix, $file): string
     {
+        if (! $file instanceof UploadedFile || ! $file->isValid()) {
+            throw new RuntimeException('invalid upload');
+        }
 
-        $extension = $file->getClientOriginalExtension();
-        // Prefer the content-sniffed extension for the stored name so a
-        // rename can't hide the real content type from the filesystem.
-        // Fall back to the client extension when finfo returns nothing,
-        // otherwise the stored filename ends in a bare "." and the
-        // eventual download has no extension.
-        $stored_extension = $file->guessExtension() ?: strtolower($extension);
-        $file_name = $name_prefix.'-'.str_random(8).'-'.str_slug(basename($file->getClientOriginalName(), '.'.$extension)).'.'.$stored_extension;
+        $this->ensureExtensionAllowed($file);
+
+        $extension = strtolower((string) $file->getClientOriginalExtension());
+        $file_name = $name_prefix.'-'.str_random(8).'-'.str_slug(basename($file->getClientOriginalName(), '.'.$extension)).'.'.$extension;
 
         // Check for SVG and sanitize it
         if ($file->getMimeType() === 'image/svg+xml') {
@@ -78,6 +93,22 @@ class UploadFileRequest extends Request
         }
 
         return $file_name;
+    }
+
+    /**
+     * Run the AllowedUploadExtension rule against the file.
+     */
+    private function ensureExtensionAllowed(UploadedFile $file): void
+    {
+        $rule = new AllowedUploadExtension(config('filesystems.allowed_upload_extensions_array'));
+        $failed = null;
+        $rule->validate('file', $file, function ($message) use (&$failed) {
+            $failed = $message;
+        });
+
+        if ($failed !== null) {
+            throw new RuntimeException('rejected upload: '.$failed);
+        }
     }
 
     public function handleSVG($file)

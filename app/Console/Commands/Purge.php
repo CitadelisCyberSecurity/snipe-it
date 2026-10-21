@@ -3,20 +3,19 @@
 namespace App\Console\Commands;
 
 use App\Enums\ActionType;
-use App\Models\AccessReviewCampaign;
+use App\Enums\FileStorage;
 use App\Models\Accessory;
+use App\Models\AccessReviewCampaign;
 use App\Models\Asset;
 use App\Models\AssetModel;
 use App\Models\Category;
 use App\Models\CheckoutAcceptance;
-use App\Models\CheckoutRequest;
 use App\Models\Company;
 use App\Models\Component;
 use App\Models\Consumable;
 use App\Models\Department;
 use App\Models\License;
 use App\Models\Location;
-use App\Models\Maintenance;
 use App\Models\Manufacturer;
 use App\Models\Supplier;
 use App\Models\User;
@@ -254,7 +253,16 @@ class Purge extends Command
             // forceDeleted hook covers the direct forceDelete() path
             // that bypasses this command.
             Accessory::class => ['checkout_requests' => ['requestable_id', 'requestable_type', Accessory::class]],
-            Consumable::class => ['checkout_requests' => ['requestable_id', 'requestable_type', Consumable::class]],
+            // consumables_users is the pivot the Consumable observer
+            // no longer detaches on soft-delete (so restores preserve
+            // the mark-consumed lifecycle). On purge we need to clean
+            // it ourselves since this path bypasses the forceDeleted
+            // Eloquent hook that handles pivot detach for in-app
+            // force-delete.
+            Consumable::class => [
+                'consumables_users' => 'consumable_id',
+                'checkout_requests' => ['requestable_id', 'requestable_type', Consumable::class],
+            ],
             Component::class => ['checkout_requests' => ['requestable_id', 'requestable_type', Component::class]],
             AssetModel::class => ['checkout_requests' => ['requestable_id', 'requestable_type', AssetModel::class]],
         ];
@@ -309,38 +317,40 @@ class Purge extends Command
     private function deleteImageFiles(string $modelClass, string $table, Collection $ids): void
     {
         // Image/avatar files stored on the public disk, keyed by parent
-        // model. Value is `column_name => public-disk subpath`. Purge
+        // model. Value is `column_name => FileStorage case`. Purge
         // reads the filename off each trashed parent row and unlinks
-        // `{subpath}/{column_value}` from the public disk.
+        // `{case->publicPath()}{column_value}` from the public disk.
         $imageFiles = [
-            User::class => ['avatar' => 'avatars'],
-            Asset::class => ['image' => 'assets'],
-            AssetModel::class => ['image' => 'models'],
-            Accessory::class => ['image' => 'accessories'],
-            Category::class => ['image' => 'categories'],
-            Company::class => ['image' => 'companies'],
-            Component::class => ['image' => 'components'],
-            Consumable::class => ['image' => 'consumables'],
-            Department::class => ['image' => 'departments'],
-            Location::class => ['image' => 'locations'],
-            Manufacturer::class => ['image' => 'manufacturers'],
-            Supplier::class => ['image' => 'suppliers'],
+            User::class => ['avatar' => FileStorage::Avatars],
+            Asset::class => ['image' => FileStorage::Assets],
+            AssetModel::class => ['image' => FileStorage::Models],
+            Accessory::class => ['image' => FileStorage::Accessories],
+            Category::class => ['image' => FileStorage::Categories],
+            Company::class => ['image' => FileStorage::Companies],
+            Component::class => ['image' => FileStorage::Components],
+            Consumable::class => ['image' => FileStorage::Consumables],
+            Department::class => ['image' => FileStorage::Departments],
+            Location::class => ['image' => FileStorage::Locations],
+            Manufacturer::class => ['image' => FileStorage::Manufacturers],
+            Supplier::class => ['image' => FileStorage::Suppliers],
         ];
 
         if (! array_key_exists($modelClass, $imageFiles)) {
             return;
         }
 
-        foreach ($imageFiles[$modelClass] as $column => $subpath) {
-            $filenames = DB::table($table)
-                ->whereIn('id', $ids)
+        foreach ($imageFiles[$modelClass] as $column => $case) {
+            // Chunk the IN list so a user with tens of thousands of
+            // trashed rows doesn't blow MySQL's placeholder ceiling
+            // on a single prepared statement.
+            $filenames = $ids->chunk(1000)->flatMap(fn ($chunk) => DB::table($table)
+                ->whereIn('id', $chunk)
                 ->pluck($column)
-                ->filter()
-                ->unique();
+            )->filter()->unique();
 
             foreach ($filenames as $filename) {
                 try {
-                    $key = trim($subpath, '/').'/'.basename($filename);
+                    $key = $case->publicPath().basename($filename);
                     if (Storage::disk('public')->exists($key)) {
                         Storage::disk('public')->delete($key);
                     }
@@ -380,32 +390,32 @@ class Purge extends Command
         // the parent model of the file. These are the contracts, receipts,
         // photos, etc. tracked in action_logs with action_type = 'uploaded'.
         // Not done at soft-delete time so restoring a soft-deleted row
-        // brings the files back with it.
-        $uploadRoots = [
-            Accessory::class => 'private_uploads/accessories',
-            Asset::class => 'private_uploads/assets',
-            AssetModel::class => 'private_uploads/models',
-            Company::class => 'private_uploads/companies',
-            Component::class => 'private_uploads/components',
-            Consumable::class => 'private_uploads/consumables',
-            Department::class => 'private_uploads/departments',
-            License::class => 'private_uploads/licenses',
-            Location::class => 'private_uploads/locations',
-            Maintenance::class => 'private_uploads/maintenances',
-            Supplier::class => 'private_uploads/suppliers',
-            User::class => 'private_uploads/users',
-        ];
+        // brings the files back with it. Built by iterating FileStorage
+        // so adding a new case there wires it up here automatically.
+        // Only private-scope cases that resolve to a single Eloquent
+        // model show up (Audits / Signatures / EulaPdfs / Imports /
+        // Backups return null from modelClass() and are skipped).
+        $uploadRoots = [];
+        foreach (FileStorage::cases() as $case) {
+            if ($case->hasPrivateScope() && ($model = $case->modelClass()) !== null) {
+                $uploadRoots[$model] = $case->privateStorageKey();
+            }
+        }
 
-        $logs = DB::table('action_logs')
+        // Chunk the IN list so a user with tens of thousands of
+        // trashed rows doesn't blow MySQL's placeholder ceiling
+        // on a single prepared statement. Collected into one $logs
+        // collection so the dedupe + unlink step below stays reasonable.
+        $logs = $ids->chunk(1000)->flatMap(fn ($chunk) => DB::table('action_logs')
             ->select('action_type', 'item_type', 'filename', 'accept_signature')
-            ->where(function ($outer) use ($modelClass, $ids) {
-                $outer->where(function ($s) use ($modelClass, $ids) {
-                    $s->where('item_type', $modelClass)->whereIn('item_id', $ids);
-                })->orWhere(function ($s) use ($modelClass, $ids) {
-                    $s->where('target_type', $modelClass)->whereIn('target_id', $ids);
+            ->where(function ($outer) use ($modelClass, $chunk) {
+                $outer->where(function ($s) use ($modelClass, $chunk) {
+                    $s->where('item_type', $modelClass)->whereIn('item_id', $chunk);
+                })->orWhere(function ($s) use ($modelClass, $chunk) {
+                    $s->where('target_type', $modelClass)->whereIn('target_id', $chunk);
                 });
             })
-            ->get();
+            ->get());
 
         $paths = [];
         foreach ($logs as $log) {
@@ -415,15 +425,15 @@ class Purge extends Command
             // query-builder rows (no Eloquent).
             if (! empty($log->filename)) {
                 if ($log->action_type === ActionType::Accepted->value || $log->action_type === ActionType::Declined->value) {
-                    $paths[] = 'private_uploads/eula-pdfs/'.$log->filename;
+                    $paths[] = FileStorage::EulaPdfs->privateStorageKey().$log->filename;
                 } elseif ($log->action_type === ActionType::Audit->value) {
-                    $paths[] = 'private_uploads/audits/'.$log->filename;
+                    $paths[] = FileStorage::Audits->privateStorageKey().$log->filename;
                 } elseif ($log->item_type && isset($uploadRoots[$log->item_type])) {
-                    $paths[] = rtrim($uploadRoots[$log->item_type], '/').'/'.$log->filename;
+                    $paths[] = $uploadRoots[$log->item_type].$log->filename;
                 }
             }
             if (! empty($log->accept_signature)) {
-                $paths[] = 'private_uploads/signatures/'.$log->accept_signature;
+                $paths[] = FileStorage::Signatures->privateStorageKey().$log->accept_signature;
             }
         }
 
@@ -442,8 +452,8 @@ class Purge extends Command
     {
         $privateFileColumns = [
             CheckoutAcceptance::class => [
-                'signature_filename' => 'private_uploads/signatures',
-                'stored_eula_file' => 'private_uploads/eula-pdfs',
+                'signature_filename' => FileStorage::Signatures->privateStorageKey(),
+                'stored_eula_file' => FileStorage::EulaPdfs->privateStorageKey(),
             ],
         ];
 
@@ -452,11 +462,11 @@ class Purge extends Command
         }
 
         foreach ($privateFileColumns[$modelClass] as $column => $subpath) {
-            $filenames = DB::table($table)
-                ->whereIn('id', $ids)
+            // Chunk the IN list
+            $filenames = $ids->chunk(1000)->flatMap(fn ($chunk) => DB::table($table)
+                ->whereIn('id', $chunk)
                 ->pluck($column)
-                ->filter()
-                ->unique();
+            )->filter()->unique();
 
             foreach ($filenames as $filename) {
                 $this->tryUnlink(rtrim($subpath, '/').'/'.basename($filename));

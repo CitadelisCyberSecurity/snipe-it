@@ -5,12 +5,23 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * PHPStan reads _ide_helper_models.php, where IdeHelperSnipeModel declares
+ * `manager_id` as @property-write (SnipeModel::setManagerIdAttribute is a
+ * mutator with no accessor). This model isn't in that generated stub, so it
+ * inherits the write-only view and every `$item->manager_id` read is flagged.
+ * The column is a real, readable integer; declare it here.
+ *
+ * @property int $manager_id
+ */
 class AccessReviewItem extends SnipeModel
 {
     use HasFactory;
 
     public const STATUS_KEEP = 'keep';
+
     public const STATUS_MODIFY = 'modify';
+
     public const STATUS_DELETE = 'delete';
 
     public const VALID_STATUSES = [

@@ -4,6 +4,7 @@ namespace Tests\Feature\Importing\Api;
 
 use App\Models\Actionlog as ActionLog;
 use App\Models\Asset;
+use App\Models\AssetModel;
 use App\Models\Company;
 use App\Models\CustomField;
 use App\Models\Import;
@@ -45,7 +46,7 @@ class ImportAssetsTest extends ImportDataTestCase implements TestsPermissionsReq
     {
         $this->actingAsForApi(User::factory()->canImport()->create());
 
-        $import = Import::factory()->asset()->create();
+        $import = Import::factory()->asset()->withStubFile()->create();
 
         $this->importFileResponse(['import' => $import->id])->assertOk();
     }
@@ -137,6 +138,72 @@ class ImportAssetsTest extends ImportDataTestCase implements TestsPermissionsReq
         // Notes is never read.
         // $this->assertEquals($row['notes'], $newAsset->notes);
 
+    }
+
+    #[Test]
+    public function csv_import_rejects_asset_row_without_serial_when_model_requires_serial(): void
+    {
+        $modelName = 'RequireSerialModel-'.Str::random(6);
+        $modelNumber = 'MN-'.Str::random(6);
+        AssetModel::factory()->create([
+            'name' => $modelName,
+            'model_number' => $modelNumber,
+            'require_serial' => 1,
+        ]);
+
+        $importFileBuilder = ImportFileBuilder::new([
+            'model' => $modelName,
+            'modelNumber' => $modelNumber,
+            'serialNumber' => '',
+        ]);
+        $import = Import::factory()->asset()->create([
+            'file_path' => $importFileBuilder->saveToImportsDirectory(),
+        ]);
+
+        $this->actingAsForApi(User::factory()->superuser()->create());
+
+        // The importer returns a 500 when every row errored (status
+        // import-errors), with the tally still on the payload.
+        $this->importFileResponse(['import' => $import->id])
+            ->assertStatus(500)
+            ->assertJsonPath('payload.tally.created', 0)
+            ->assertJsonPath('payload.tally.errored', 1);
+
+        $this->assertDatabaseMissing('assets', [
+            'asset_tag' => $importFileBuilder->firstRow()['tag'],
+        ]);
+    }
+
+    #[Test]
+    public function csv_import_accepts_asset_row_without_serial_when_model_does_not_require_serial(): void
+    {
+        $modelName = 'OptionalSerialModel-'.Str::random(6);
+        $modelNumber = 'MN-'.Str::random(6);
+        AssetModel::factory()->create([
+            'name' => $modelName,
+            'model_number' => $modelNumber,
+            'require_serial' => 0,
+        ]);
+
+        $importFileBuilder = ImportFileBuilder::new([
+            'model' => $modelName,
+            'modelNumber' => $modelNumber,
+            'serialNumber' => '',
+        ]);
+        $import = Import::factory()->asset()->create([
+            'file_path' => $importFileBuilder->saveToImportsDirectory(),
+        ]);
+
+        $this->actingAsForApi(User::factory()->superuser()->create());
+
+        $this->importFileResponse(['import' => $import->id])
+            ->assertOk()
+            ->assertJsonPath('payload.tally.created', 1)
+            ->assertJsonPath('payload.tally.errored', 0);
+
+        $this->assertDatabaseHas('assets', [
+            'asset_tag' => $importFileBuilder->firstRow()['tag'],
+        ]);
     }
 
     #[Test]

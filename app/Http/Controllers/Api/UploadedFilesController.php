@@ -107,11 +107,6 @@ class UploadedFilesController extends Controller
             return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.file_upload_status.invalid_object')));
         }
 
-        // If the file storage directory doesn't exist, create it
-        if (! Storage::exists(parent::getMapStoragePath()[$object_type])) {
-            Storage::makeDirectory(parent::getMapStoragePath()[$object_type], 775);
-        }
-
         if ($request->hasFile('file')) {
             // Loop over the attached files and add them to the object
             foreach ($request->file('file') as $file) {
@@ -138,7 +133,6 @@ class UploadedFilesController extends Controller
     /**
      * Check for permissions and display the file.
      *
-     * @param  UploadFileRequest  $request
      * @param  string  $object_type  the type of object to upload the file to
      * @param  int  $id  the ID of the object to delete from so we can check permisisons
      * @param  $file_id  the ID of the file to delete from the action_logs table
@@ -190,7 +184,6 @@ class UploadedFilesController extends Controller
     /**
      * Delete the associated file
      *
-     * @param  UploadFileRequest  $request
      * @param  string  $object_type  the type of object to upload the file to
      * @param  int  $id  the ID of the object to delete from so we can check permisisons
      * @param  $file_id  the ID of the file to delete from the action_logs table
