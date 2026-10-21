@@ -2,7 +2,11 @@
 
 namespace App\Livewire;
 
+use App\Models\Accessory;
 use App\Models\Asset;
+use App\Models\Component as SnipeComponent;
+use App\Models\Consumable;
+use App\Models\License;
 use App\Models\Location;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
@@ -96,6 +100,22 @@ class CheckoutTargetPanel extends Component
     private function items(): Collection
     {
         if ($this->targetType === null || $this->targetId === null) {
+            return collect();
+        }
+
+        // The target-instance Gate below handles tenant and FMCS scoping, but
+        // it does not say anything about whether this caller may view the
+        // module whose items we're about to list. A caller with users.view
+        // who hits the licenses variant of this panel must still hold
+        // licenses.view before the relation query runs.
+        $itemClasses = [
+            'assets' => Asset::class,
+            'licenses' => License::class,
+            'accessories' => Accessory::class,
+            'consumables' => Consumable::class,
+            'components' => SnipeComponent::class,
+        ];
+        if (! array_key_exists($this->type, $itemClasses) || ! Gate::allows('view', $itemClasses[$this->type])) {
             return collect();
         }
 

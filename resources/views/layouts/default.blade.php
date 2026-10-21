@@ -308,7 +308,7 @@
                                         <li {!! (request()->is('account/accept') ? ' class="active" aria-current="page"' : '') !!}>
                                             <a href="{{ route('account.accept') }}">
                                                 <x-icon type="signature" class="fa-fw"/>
-                                                {{ trans('general.accept_assets_menu') }}
+                                                {{ trans('general.accept_items') }}
                                             </a>
                                         </li>
 
@@ -497,6 +497,13 @@
                                     </li>
                                     @endcan
 
+                                    <li id="past-eol-sidenav-option"{!! (request()->is('hardware') && request()->boolean('past_eol') ? ' class="active" aria-current="page"' : '') !!}>
+                                        <a href="{{ route('hardware.index', ['past_eol' => 1]) }}">
+                                            <x-icon type="due" class="text-orange fa-fw"/>
+                                            {{ trans('general.past_eol') }}
+                                        </a>
+                                    </li>
+
                                     <li class="divider">&nbsp;</li>
                                     @can('checkin', \App\Models\Asset::class)
                                         <li{!! (request()->is('hardware/quickscancheckin') ? ' class="active" aria-current="page"' : '') !!}>
@@ -650,6 +657,12 @@
                                             <a href="{{ route('users.index', ['activated' => false]) }}">
                                                 <i class="fa-solid fa-person-circle-xmark text-danger fa-fw"></i>
                                                 {{ trans('general.login_disabled') }}
+                                            </a>
+                                        </li>
+                                        <li class="{{ (request()->is('users') && request()->filled('end_date_within')) ? 'active' : '' }}" id="users-sidenav-offboarding">
+                                            <a href="{{ route('users.index', ['end_date_within' => \App\Livewire\NeedsAttention::OFFBOARDING_DAYS, 'with_assignments' => 1]) }}">
+                                                <x-icon type="offboarding" class="text-warning fa-fw"/>
+                                                {{ trans('general.offboarding_soon') }}
                                             </a>
                                         </li>
                                     </ul>
@@ -818,11 +831,6 @@
                                             {{ trans('general.asset_maintenance_report') }}
                                         </a>
                                     </li>
-                                    <li {!! (request()->is('reports/unaccepted_assets') ? ' class="active" aria-current="page"' : '') !!}>
-                                        <a href="{{ url('reports/unaccepted_assets') }}">
-                                            {{ trans('general.unaccepted_asset_report') }}
-                                        </a>
-                                    </li>
                                     <li  {!! (request()->is('reports/accessories') ? ' class="active" aria-current="page"' : '') !!}>
                                         <a href="{{ url('reports/accessories') }}">
                                             {{ trans('general.accessory_report') }}
@@ -834,8 +842,14 @@
                             @can('canCheckoutAtLeastOneItemType')
                                 <li{!! (request()->is('requests.index') ? ' class="active" aria-current="page"' : '') !!}>
                                     <a href="{{ route('requests.index') }}">
-                                        <i class="fa-solid fa-boxes-packing"></i>
+                                        <x-icon type="pending-requests" class="fa-fw"/>
                                         <span>{{ trans('general.pending_requests') }}</span>
+                                    </a>
+                                </li>
+                                <li{!! (request()->is('unaccepted-acceptances') ? ' class="active" aria-current="page"' : '') !!}>
+                                    <a href="{{ route('unaccepted-acceptances.index') }}">
+                                        <x-icon type="signature" class="fa-fw"/>
+                                        <span>{{ trans('general.unaccepted_asset_report') }}</span>
                                     </a>
                                 </li>
                             @endcan
@@ -1161,8 +1175,17 @@
                     error.attr('aria-live', 'assertive');
 
                     if ($(element).hasClass('select2') || $(element).hasClass('js-data-ajax')) {
-                        // If the element is a select2 then append the error to the parent div
-                        element.parent('div').append(error);
+                        // If the element is a select2 then append the error to the parent div,
+                        // unless that parent is an input-group (select2 paired with a sibling
+                        // action button, like the sync-adapter refresh widget). Appending into
+                        // an input-group makes the error a display:table-cell sibling that
+                        // steals width from the select2. Insert after the group instead.
+                        var $parent = element.parent('div');
+                        if ($parent.hasClass('input-group')) {
+                            error.insertAfter($parent);
+                        } else {
+                            $parent.append(error);
+                        }
 
                      } else if ($(element).parent().hasClass('input-group')) {
                         var end_input_group = $(element).next('.input-group-addon').parent();

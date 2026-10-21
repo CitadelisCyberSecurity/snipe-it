@@ -2,9 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\FileStorage;
 use App\Http\Traits\UniqueUndeletedTrait;
+use App\Models\Builders\UserQueryBuilder;
 use App\Models\Traits\CompanyableTrait;
 use App\Models\Traits\HasCalendarEvents;
+use App\Models\Traits\HasImageUpload;
 use App\Models\Traits\HasUploads;
 use App\Models\Traits\Loggable;
 use App\Models\Traits\Searchable;
@@ -45,13 +48,21 @@ use Watson\Validating\ValidatingTrait;
  * whose guard exists to keep re-runs idempotent for upgraders.
  *
  * @property string|null $display_name
+ *
+ * @mixin IdeHelperUser
  */
 class User extends SnipeModel implements AuthenticatableContract, AuthorizableContract, CanResetPasswordContract, HasLocalePreference
 {
     use CompanyableTrait;
     use HasCalendarEvents;
     use HasFactory;
+    use HasImageUpload;
     use HasUploads;
+
+    public static function fileStorage(): FileStorage
+    {
+        return FileStorage::Avatars;
+    }
 
     protected $presenter = UserPresenter::class;
 
@@ -76,6 +87,7 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
         'email',
         'activated',
         'permissions',
+        'two_factor_optin',
     ];
 
     protected $hidden = [
@@ -687,6 +699,11 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
     {
         return [
             [
+                'field' => 'start_date',
+                'event_type' => 'user.start_date',
+                'all_day' => true,
+            ],
+            [
                 'field' => 'end_date',
                 'event_type' => 'user.end_date',
                 'all_day' => true,
@@ -1043,11 +1060,27 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
         // companies from the Companies side of the join, which turns
         // the whereNotIn below into an empty result and drops every
         // preserved company. See GH #19569.
-        $editorVisible = DB::table('company_user')
+        $editorDirect = DB::table('company_user')
             ->where('user_id', $editor->id)
             ->pluck('company_id')
             ->map(fn ($id) => (int) $id)
             ->all();
+
+        // The editor's reach must match what every gate upstream of this
+        // helper enforces (Company::getIdsForCurrentUser(), the
+        // SaveUserRequest floater gate, parent_within_scope): direct
+        // memberships PLUS their child companies. Using only the direct
+        // rows silently drops a permitted child-company submission after
+        // the gates have accepted it. Under null_company_is_floater that
+        // left the target with no company at all, promoting them to a
+        // system-wide floater and escaping tenant isolation. See
+        // GHSA-35hv-26vj-9445.
+        $editorChildren = empty($editorDirect) ? [] : DB::table('companies')
+            ->whereIn('parent_id', $editorDirect)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $editorVisible = array_values(array_unique(array_merge($editorDirect, $editorChildren)));
 
         $submittedVisible = array_values(array_intersect($submitted, $editorVisible));
 
@@ -1266,10 +1299,8 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
      * @author A. Gianotto <snipe@snipe.net>
      *
      * @since  [v2.0]
-     *
-     * @return Relation
      */
-    public function accessories()
+    public function accessories(): BelongsToMany
     {
         return $this->belongsToMany(Accessory::class, 'accessories_checkout', 'assigned_to', 'accessory_id')
             ->where('assigned_type', '=', 'App\Models\User')
@@ -1282,10 +1313,8 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
      * @author A. Gianotto <snipe@snipe.net>
      *
      * @since  [v3.0]
-     *
-     * @return Relation
      */
-    public function consumables()
+    public function consumables(): BelongsToMany
     {
         return $this->belongsToMany(Consumable::class, 'consumables_users', 'assigned_to', 'consumable_id')->withPivot('id', 'created_at', 'note')->withTrashed();
     }
@@ -1296,10 +1325,8 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
      * @author A. Gianotto <snipe@snipe.net>
      *
      * @since  [v1.0]
-     *
-     * @return Relation
      */
-    public function licenses()
+    public function licenses(): BelongsToMany
     {
         return $this->belongsToMany(License::class, 'license_seats', 'assigned_to', 'license_id')->withPivot('id', 'created_at', 'updated_at');
     }
@@ -1554,40 +1581,6 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
     }
 
     /**
-     * Query builder scope to return NOT-deleted users
-     *
-     * @author A. Gianotto <snipe@snipe.net>
-     *
-     * @since  [v2.0]
-     *
-     * @param  string  $query
-     * @return \Illuminate\Database\Query\Builder
-     */
-    public function scopeGetNotDeleted($query)
-    {
-        return $query->whereNull('deleted_at');
-    }
-
-    /**
-     * Query builder scope to return users by email or username
-     *
-     * @author A. Gianotto <snipe@snipe.net>
-     *
-     * @since  [v2.0]
-     *
-     * @param  string  $query
-     * @param  string  $user_username
-     * @param  string  $user_email
-     * @return \Illuminate\Database\Query\Builder
-     */
-    public function scopeMatchEmailOrUsername($query, $user_username, $user_email)
-    {
-        return $query->where('email', '=', $user_email)
-            ->orWhere('username', '=', $user_username)
-            ->orWhere('username', '=', $user_email);
-    }
-
-    /**
      * Generate email from full name
      *
      * @author A. Gianotto <snipe@snipe.net>
@@ -1637,7 +1630,13 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
             $username = $users_name;
         } else {
 
-            [$first_name, $last_name] = explode(' ', $users_name, 2);
+            // Respect name_display_format when splitting a joined full
+            // name into first and last.
+            if (Setting::getSettings()?->name_display_format === 'last_first') {
+                [$last_name, $first_name] = explode(' ', $users_name, 2);
+            } else {
+                [$first_name, $last_name] = explode(' ', $users_name, 2);
+            }
 
             // Assume filastname by default
             $username = str_slug(substr($first_name, 0, 1).$last_name);
@@ -1786,33 +1785,15 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
     }
 
     /**
-     * Query builder scope to search user by name with spaces in it.
-     * We don't use the advancedTextSearch() scope because that searches
-     * all of the relations as well, which is more than what we need.
+     * Run additional, advanced searches. Overrides advancedTextSearch
+     * on the Searchable trait to also search user name with spaces in
+     * it via orWhereMultipleColumns.
      *
-     * @param  \Illuminate\Database\Query\Builder  $query  Query builder instance
-     * @param  array  $terms  The search terms
-     * @return \Illuminate\Database\Query\Builder
-     */
-    public function scopeSimpleNameSearch($query, $search)
-    {
-        return $query->where('first_name', 'LIKE', '%'.$search.'%')
-            ->orWhere('last_name', 'LIKE', '%'.$search.'%')
-            ->orWhere('display_name', 'LIKE', '%'.$search.'%')
-            ->orWhereMultipleColumns(
-                [
-                    'users.first_name',
-                    'users.last_name',
-                ], $search
-            );
-    }
-
-    /**
-     * Run additional, advanced searches.
+     * Both column orders are tried so a user named "John Doe" matches
+     * both "John Doe" and "Doe John" regardless of the install's
+     * name_display_format. Issue #19626.
      *
-     * @param  \Illuminate\Database\Query\Builder  $query  Query builder instance
-     * @param  array  $terms  The search terms
-     * @return Builder
+     * @param  array<int, string>  $terms  The search terms
      */
     public function advancedTextSearch(Builder $query, array $terms)
     {
@@ -1822,144 +1803,15 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
                     'users.first_name',
                     'users.last_name',
                 ], $term
+            )->orWhereMultipleColumns(
+                [
+                    'users.last_name',
+                    'users.first_name',
+                ], $term
             );
         }
 
         return $query;
-    }
-
-    /**
-     * Query builder scope to return users by group
-     *
-     * @param  \Illuminate\Database\Query\Builder  $query  Query builder instance
-     * @param  int  $id
-     * @return \Illuminate\Database\Query\Builder
-     */
-    public function scopeByGroup($query, $id)
-    {
-        return $query->whereHas(
-            'groups', function ($query) use ($id) {
-                $query->where('permission_groups.id', '=', $id);
-            }
-        );
-    }
-
-    /**
-     * Return only admins and superusers
-     *
-     * @param  \Illuminate\Database\Query\Builder  $query  Query builder instance
-     */
-    public function scopeOnlySuperAdmins($query)
-    {
-
-        return $query->where('users.permissions', 'LIKE', '%"superuser":"1"%')
-            ->orWhere('users.permissions', 'LIKE', '%"superuser":1%')
-            ->orWhereHas(
-                'groups', function ($query) {
-                    $query->where('permission_groups.permissions', 'LIKE', '%"superuser":"1"%')
-                        ->orWhere('permission_groups.permissions', 'LIKE', '%"superuser":1%');
-                }
-            );
-
-    }
-
-    /**
-     * Return only admins and superusers
-     *
-     * @param  \Illuminate\Database\Query\Builder  $query  Query builder instance
-     */
-    public function scopeOnlyAdminsAndSuperAdmins($query)
-    {
-
-        return $query->where('users.permissions', 'LIKE', '%"superuser":"1"%')
-            ->orWhere('users.permissions', 'LIKE', '%"superuser":1%')
-            ->orWhere('users.permissions', 'LIKE', '%"admin":1%')
-            ->orWhere('users.permissions', 'LIKE', '%"admin":"1"%')
-            ->orWhereHas(
-                'groups', function ($query) {
-                    $query->where('permission_groups.permissions', 'LIKE', '%"superuser":"1"%')
-                        ->orWhere('permission_groups.permissions', 'LIKE', '%"superuser":1%')
-                        ->orWhere('permission_groups.permissions', 'LIKE', '%"admin":1%')
-                        ->orWhere('permission_groups.permissions', 'LIKE', '%"admin":"1"%');
-                }
-            );
-
-    }
-
-    /**
-     * Query builder scope to order on manager
-     *
-     * @param  \Illuminate\Database\Query\Builder  $query  Query builder instance
-     * @param  string  $order  Order
-     * @return \Illuminate\Database\Query\Builder Modified query builder
-     */
-    public function scopeOrderManager($query, $order)
-    {
-        // Left join here, or it will only return results with parents
-        return $query->leftJoin('users as users_manager', 'users.manager_id', '=', 'users_manager.id')->orderBy('users_manager.first_name', $order)->orderBy('users_manager.last_name', $order);
-    }
-
-    /**
-     * Query builder scope to order on company
-     *
-     * @param  \Illuminate\Database\Query\Builder  $query  Query builder instance
-     * @param  string  $order  Order
-     * @return \Illuminate\Database\Query\Builder Modified query builder
-     */
-    public function scopeOrderLocation($query, $order)
-    {
-        return $query->leftJoin('locations as locations_users', 'users.location_id', '=', 'locations_users.id')->orderBy('locations_users.name', $order);
-    }
-
-    /**
-     * Query builder scope to order on department
-     *
-     * @param  \Illuminate\Database\Query\Builder  $query  Query builder instance
-     * @param  string  $order  Order
-     * @return \Illuminate\Database\Query\Builder Modified query builder
-     */
-    public function scopeOrderDepartment($query, $order)
-    {
-        return $query->leftJoin('departments as departments_users', 'users.department_id', '=', 'departments_users.id')->orderBy('departments_users.name', $order);
-    }
-
-    /**
-     * Query builder scope to order on admin user
-     *
-     * @param  \Illuminate\Database\Query\Builder  $query  Query builder instance
-     * @param  string  $order  Order
-     * @return \Illuminate\Database\Query\Builder Modified query builder
-     */
-    public function scopeOrderByCreatedBy($query, $order)
-    {
-        // Left join here, or it will only return results with parents
-        return $query->leftJoin('users as admin_user', 'users.created_by', '=', 'admin_user.id')
-            ->orderBy('admin_user.first_name', $order)
-            ->orderBy('admin_user.last_name', $order);
-    }
-
-    /**
-     * Query builder scope to order on company
-     *
-     * @param  Illuminate\Database\Query\Builder  $query  Query builder instance
-     * @param  text  $order  Order
-     * @return Illuminate\Database\Query\Builder Modified query builder
-     */
-    public function scopeOrderCompany($query, $order)
-    {
-        // The MIN(...) aggregate has to go through DB::raw, which bypasses
-        // Laravel's grammar — so the `companies` table reference inside the
-        // raw string won't get DB_PREFIX applied automatically. Same pattern
-        // as Api\AssetsController::index's natural-sort branch.
-        $prefix = DB::getTablePrefix();
-        $sub = DB::table('company_user')
-            ->join('companies', 'companies.id', '=', 'company_user.company_id')
-            ->select('company_user.user_id', DB::raw('MIN('.$prefix.'companies.name) as min_company_name'))
-            ->groupBy('company_user.user_id');
-
-        return $query
-            ->leftJoinSub($sub, 'companies_sort', 'companies_sort.user_id', '=', 'users.id')
-            ->orderBy('companies_sort.min_company_name', $order);
     }
 
     /**
@@ -2049,103 +1901,9 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
         return $total;
     }
 
-    public function scopeUserLocation($query, $location, $search)
+    public function newEloquentBuilder($query): UserQueryBuilder
     {
-
-        return $query->where('location_id', '=', $location)
-            ->where('users.first_name', 'LIKE', '%'.$search.'%')
-            ->orWhere('users.email', 'LIKE', '%'.$search.'%')
-            ->orWhere('users.last_name', 'LIKE', '%'.$search.'%')
-            ->orWhere('users.permissions', 'LIKE', '%'.$search.'%')
-            ->orWhere('users.country', 'LIKE', '%'.$search.'%')
-            ->orWhere('users.phone', 'LIKE', '%'.$search.'%')
-            ->orWhere('users.jobtitle', 'LIKE', '%'.$search.'%')
-            ->orWhere('users.employee_num', 'LIKE', '%'.$search.'%')
-            ->orWhere('users.username', 'LIKE', '%'.$search.'%')
-            ->orWhere('users.display_name', 'LIKE', '%'.$search.'%')
-            ->orWhereRaw('CONCAT(users.first_name," ",users.last_name) LIKE ?', [$search.'%']);
-
-    }
-
-    public function scopeWithInventoryRelations(
-        $query,
-        int $id,
-        bool $withAssets = true,
-        bool $withLicenses = true,
-        bool $withAccessories = true,
-        bool $withConsumables = true,
-        bool $withComponents = true,
-    ) {
-        $with = [];
-
-        if ($withAssets) {
-            $with = array_merge($with, [
-                'assets.log' => fn ($query) => $query->withTrashed()
-                    ->where('target_type', User::class)
-                    ->where('target_id', $id)
-                    ->where('action_type', 'accepted'),
-                'assets.defaultLoc',
-                'assets.location',
-                'assets.model.category',
-                'assets.assignedAssets.log' => fn ($query) => $query->withTrashed()
-                    ->where('target_type', User::class)
-                    ->where('target_id', $id)
-                    ->where('action_type', 'accepted'),
-                'assets.assignedAssets.assignedTo',
-                'assets.assignedAssets.defaultLoc',
-                'assets.assignedAssets.location',
-                'assets.assignedAssets.model.category',
-            ]);
-
-            if ($withComponents) {
-                $with[] = 'assets.components.category';
-            }
-
-            if ($withLicenses) {
-                $with = array_merge($with, [
-                    'assets.licenses',
-                    'assets.licenses.category',
-                ]);
-            }
-
-            if ($withAccessories) {
-                $with = array_merge($with, [
-                    'assets.assignedAccessories',
-                    'assets.assignedAccessories.accessory.category',
-                ]);
-            }
-        }
-
-        if ($withLicenses) {
-            $with = array_merge($with, [
-                'directLicenses.category',
-                'licenses.category',
-            ]);
-        }
-
-        if ($withAccessories) {
-            $with = array_merge($with, [
-                'accessories.log' => fn ($query) => $query->withTrashed()
-                    ->where('target_type', User::class)
-                    ->where('target_id', $id)
-                    ->where('action_type', 'accepted'),
-                'accessories.category',
-                'accessories.manufacturer',
-            ]);
-        }
-
-        if ($withConsumables) {
-            $with = array_merge($with, [
-                'consumables.log' => fn ($query) => $query->withTrashed()
-                    ->where('target_type', User::class)
-                    ->where('target_id', $id)
-                    ->where('action_type', 'accepted'),
-                'consumables.category',
-                'consumables.manufacturer',
-            ]);
-        }
-
-        return $query->where('id', $id)->with($with)->withTrashed();
+        return new UserQueryBuilder($query);
     }
 
     /**

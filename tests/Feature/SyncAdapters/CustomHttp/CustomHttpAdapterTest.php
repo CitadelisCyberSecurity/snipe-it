@@ -211,11 +211,11 @@ class CustomHttpAdapterTest extends TestCase
         $instance = SyncAdapterInstance::where('slug', $slug)->firstOrFail();
 
         $adapter->saveConfig(\Illuminate\Http\Request::create('/', 'POST', [
-            $slug . '_url' => 'https://vendor.example/api',
-            $slug . '_source_id_path' => 'id',
-            $slug . '_field_paths' => [],
-            $slug . '_field_paths_pending' => ['key' => 'hostname', 'value' => 'device.name'],
-            $slug . '_direction_pending' => ['value' => 'push'],
+            $slug.'_url' => 'https://vendor.example/api',
+            $slug.'_source_id_path' => 'id',
+            $slug.'_field_paths' => [],
+            $slug.'_field_paths_pending' => ['key' => 'hostname', 'value' => 'device.name'],
+            $slug.'_direction_pending' => ['value' => 'push'],
         ]));
 
         $stored = json_decode(SyncAdapterConfig::get($instance->id, 'field_paths'), true);
@@ -235,11 +235,11 @@ class CustomHttpAdapterTest extends TestCase
         $instance = SyncAdapterInstance::where('slug', $slug)->firstOrFail();
 
         $adapter->saveConfig(\Illuminate\Http\Request::create('/', 'POST', [
-            $slug . '_url' => 'https://vendor.example/api',
-            $slug . '_source_id_path' => 'id',
-            $slug . '_field_paths' => [],
-            $slug . '_field_paths_pending' => ['key' => 'custom:9', 'value' => 'location.room'],
-            $slug . '_direction_pending' => ['value' => 'pull'],
+            $slug.'_url' => 'https://vendor.example/api',
+            $slug.'_source_id_path' => 'id',
+            $slug.'_field_paths' => [],
+            $slug.'_field_paths_pending' => ['key' => 'custom:9', 'value' => 'location.room'],
+            $slug.'_direction_pending' => ['value' => 'pull'],
         ]));
 
         $stored = json_decode(SyncAdapterConfig::get($instance->id, 'field_paths'), true);
@@ -259,11 +259,11 @@ class CustomHttpAdapterTest extends TestCase
         $instance = SyncAdapterInstance::where('slug', $slug)->firstOrFail();
 
         $adapter->saveConfig(\Illuminate\Http\Request::create('/', 'POST', [
-            $slug . '_url' => 'https://vendor.example/api',
-            $slug . '_source_id_path' => 'id',
-            $slug . '_field_paths' => [],
-            $slug . '_field_paths_pending' => ['key' => 'hostname', 'value' => ''],
-            $slug . '_direction_pending' => ['value' => 'push'],
+            $slug.'_url' => 'https://vendor.example/api',
+            $slug.'_source_id_path' => 'id',
+            $slug.'_field_paths' => [],
+            $slug.'_field_paths_pending' => ['key' => 'hostname', 'value' => ''],
+            $slug.'_direction_pending' => ['value' => 'push'],
         ]));
 
         $stored = json_decode(SyncAdapterConfig::get($instance->id, 'field_paths'), true);
@@ -299,8 +299,8 @@ class CustomHttpAdapterTest extends TestCase
 
         iterator_to_array($adapter->pull());
 
-        $matches = array_filter($captured, fn($m) => str_contains($m, 'blargh.not_a_real_field') && str_contains($m, 'serial'));
-        $this->assertNotEmpty($matches, 'Expected an always-null summary warning naming the offending path. Captured: ' . json_encode($captured));
+        $matches = array_filter($captured, fn ($m) => str_contains($m, 'blargh.not_a_real_field') && str_contains($m, 'serial'));
+        $this->assertNotEmpty($matches, 'Expected an always-null summary warning naming the offending path. Captured: '.json_encode($captured));
     }
 
     public function test_pull_does_not_warn_when_path_resolves_on_at_least_one_record()
@@ -330,7 +330,7 @@ class CustomHttpAdapterTest extends TestCase
 
         iterator_to_array($adapter->pull());
 
-        $this->assertEmpty($captured, 'No warning expected when the path resolves on at least one record. Captured: ' . json_encode($captured));
+        $this->assertEmpty($captured, 'No warning expected when the path resolves on at least one record. Captured: '.json_encode($captured));
     }
 
     public function test_pull_does_not_warn_on_empty_vendor_response()
@@ -541,6 +541,146 @@ class CustomHttpAdapterTest extends TestCase
         $records = iterator_to_array($adapter->pull());
 
         $this->assertSame(['a', 'b', 'c'], array_map(fn ($r) => $r->sourceId, $records));
+    }
+
+    public function test_next_url_pagination_rejects_cross_host_cursor()
+    {
+        // A hostile upstream can emit any absolute URL in the next-URL
+        // field. The adapter must keep the second-hop request on the
+        // configured host so the auth header can't be leaked to an
+        // attacker-chosen target.
+        $adapter = $this->configuredAdapter([
+            'records_path' => 'rows',
+            'field_source_id' => 'id',
+            'pagination_style' => 'next_url',
+            'pagination_next_path' => 'links.next',
+            'auth_method' => 'bearer',
+            'bearer_token' => 'leak-canary',
+        ]);
+
+        Http::fake([
+            'vendor.example/api' => Http::response([
+                'rows' => [['id' => 'first']],
+                'links' => ['next' => 'https://attacker.example/exfil?token=steal'],
+            ]),
+            'vendor.example/exfil*' => Http::response([
+                'rows' => [['id' => 'second']],
+                'links' => ['next' => null],
+            ]),
+            'attacker.example/*' => Http::response(['rows' => [], 'links' => ['next' => null]]),
+        ]);
+
+        iterator_to_array($adapter->pull());
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'attacker.example'));
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'vendor.example/exfil')
+            && str_contains($request->url(), 'token=steal')
+            && $request->hasHeader('Authorization', 'Bearer leak-canary'));
+    }
+
+    /**
+     * Reporter-identified robustness note (Zer0Gate post-fix for
+     * GHSA-cf4m-f928-928g): if upstream emits a path-relative cursor
+     * with no leading slash (e.g. `"next": "page2"`), parse_url returns
+     * `path => "page2"` and the earlier concatenation produced
+     * `https://hostpage2` which was unparseable. Pagination aborted on
+     * the next iteration (fail-safe) but we'd rather be explicit. The
+     * adapter now rejects the cursor and logs the abort when the path
+     * lacks a leading slash.
+     */
+    public function test_next_url_pagination_rejects_relative_cursor_without_leading_slash()
+    {
+        $adapter = $this->configuredAdapter([
+            'records_path' => 'rows',
+            'field_source_id' => 'id',
+            'pagination_style' => 'next_url',
+            'pagination_next_path' => 'links.next',
+        ]);
+
+        Http::fake([
+            'vendor.example/api' => Http::response([
+                'rows' => [['id' => 'first']],
+                'links' => ['next' => 'page2'],
+            ]),
+        ]);
+
+        $records = iterator_to_array($adapter->pull());
+
+        $this->assertCount(1, $records, 'First page processes, pagination stops at malformed cursor.');
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'vendor.examplepage2')
+            || str_contains($request->url(), 'vendor.example/page2'));
+    }
+
+    public function test_pull_path_query_string_survives_pagination_style_none()
+    {
+        // Regression test for #19755. The admin configures a filtered
+        // pull_path (ancestor_group_id=...) and expects every pull to
+        // honor it. With pagination_style=none the adapter passed an
+        // empty $queryParams to ->get(), which Laravel/Guzzle turned
+        // into a `query` option that overwrote the URL's existing
+        // query, silently dropping the filter.
+        $adapter = $this->configuredAdapter([
+            'records_path' => 'data',
+            'field_source_id' => 'id',
+            'pagination_style' => 'none',
+            'pull_path' => '/v2/devices?ancestor_group_id=42&limit=100',
+        ]);
+
+        Http::fake(['vendor.example/*' => Http::response(['data' => [['id' => 'x']]])]);
+
+        iterator_to_array($adapter->pull());
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'ancestor_group_id=42')
+            && str_contains($request->url(), 'limit=100'));
+    }
+
+    public function test_pull_path_query_string_survives_offset_limit_pagination()
+    {
+        // Same bug class as the None case but with pagination params
+        // present. The admin's query + the adapter's offset/limit must
+        // coexist on the outgoing URL.
+        $adapter = $this->configuredAdapter([
+            'records_path' => 'data',
+            'field_source_id' => 'id',
+            'pagination_style' => 'offset_limit',
+            'pagination_page_size' => '50',
+            'pull_path' => '/v2/devices?ancestor_group_id=42',
+        ]);
+
+        Http::fake(['vendor.example/*' => Http::response(['data' => [['id' => 'only']]])]);
+
+        iterator_to_array($adapter->pull());
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'ancestor_group_id=42')
+            && str_contains($request->url(), 'limit=50')
+            && str_contains($request->url(), 'offset=0'));
+    }
+
+    public function test_next_url_cursor_query_string_survives_second_hop()
+    {
+        // Graph-style cursors carry their pagination state in query
+        // (`$skiptoken=XYZ`). The second-hop request must preserve
+        // that query or pagination terminates on page one with partial
+        // results. Companion to the host-pinning check above.
+        $adapter = $this->configuredAdapter([
+            'records_path' => 'rows',
+            'field_source_id' => 'id',
+            'pagination_style' => 'next_url',
+            'pagination_next_path' => 'links.next',
+        ]);
+
+        Http::fake([
+            'vendor.example/exfil*' => Http::response(['rows' => [['id' => 'b']], 'links' => ['next' => null]]),
+            'vendor.example/api' => Http::response([
+                'rows' => [['id' => 'a']],
+                'links' => ['next' => 'https://vendor.example/exfil?skiptoken=next-page-cursor'],
+            ]),
+        ]);
+
+        $records = iterator_to_array($adapter->pull());
+
+        $this->assertSame(['a', 'b'], array_map(fn ($r) => $r->sourceId, $records));
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'skiptoken=next-page-cursor'));
     }
 
     public function test_pagination_style_none_yields_one_page_and_stops()
@@ -864,7 +1004,6 @@ class CustomHttpAdapterTest extends TestCase
         // must round-trip through Crypt so credential() can read them.
         // Anything not in this set is stored plaintext.
         $secretKeys = ['bearer_token', 'basic_password', 'api_key_value'];
-
 
         if (array_key_exists('field_source_id', $config)) {
             SyncAdapterConfig::put($instance->id, 'source_id_path', (string) $config['field_source_id']);

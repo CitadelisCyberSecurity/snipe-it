@@ -109,6 +109,95 @@ class KandjiAdapterTest extends TestCase
         iterator_to_array($adapter->pull());
     }
 
+    public function test_purchase_date_from_vendor_datetime_rotates_to_app_timezone_before_truncation(): void
+    {
+        // Companion to the last_seen fix: vendor-supplied datetimes mapped
+        // to the native `purchase_date` column (a Y-m-d field) also need
+        // to rotate to app.timezone before the date part is extracted. A
+        // vendor datetime at the UTC day boundary would otherwise record
+        // the UTC-wall-clock date, which differs from the user's expected
+        // local date by one calendar day.
+        config(['app.timezone' => 'America/Los_Angeles']);
+
+        // Reuse the Kandji adapter's extraFields plumbing to put a
+        // purchase_date value through the mapped-extra path. Direct the
+        // model's `purchased_at` extra at native:purchase_date so the
+        // SyncsHostFromRecord case-branch for 'purchase_date' fires.
+        $instance = SyncAdapterInstance::where('slug', 'kandji')->firstOrFail();
+        SyncAdapterConfig::put($instance->id, 'url', 'https://example.api.kandji.io');
+        SyncAdapterConfig::put($instance->id, 'token', Crypt::encrypt('fake-kandji-token'));
+
+        // Vendor sends 03:00:00 UTC on 2026-07-23. That is 20:00:00 Pacific
+        // on 2026-07-22. Pre-fix, Carbon::parse keeps UTC, and format('Y-m-d')
+        // emits "2026-07-23". Post-fix, the rotate-then-format produces
+        // "2026-07-22" (Pacific calendar date), matching user expectation.
+        $record = new \App\SyncAdapters\HostInventoryRecord(
+            sourceKey: 'kandji',
+            sourceId: 'tz-pd-1',
+            hostname: 'pacific-pd',
+            hardwareSerial: 'TZ-PD-1',
+        );
+
+        $asset = new \App\Models\Asset;
+        // Invoke the case 'purchase_date' handler directly via the public
+        // facade: writeExtraValueToTarget routes through writeNative,
+        // which hits the case statement. Simplest driver is to call the
+        // native-field writer with a datetime payload.
+        $reflection = new \ReflectionClass(\App\SyncAdapters\SyncsHostFromRecord::class);
+        $writeNative = $reflection->getMethod('writeNative');
+        $writeNative->setAccessible(true);
+        $writeNative->invoke(null, $asset, 'purchase_date', '2026-07-23T03:00:00Z', $instance, $record);
+
+        // Asset casts purchase_date, so read the raw stored attribute to
+        // see the string the sync pipeline actually wrote.
+        $this->assertSame(
+            '2026-07-22',
+            $asset->getAttributes()['purchase_date'] ?? null,
+            'purchase_date must store the user\'s local calendar date for a UTC datetime at the day boundary.',
+        );
+    }
+
+    public function test_last_seen_is_stored_in_app_timezone_not_vendor_utc(): void
+    {
+        // Issue #19765: Kandji returns `last_check_in` as ISO-8601 UTC with a
+        // Z suffix. Pre-fix, Carbon::parse honored the Z and the shared
+        // writer called ->toDateTimeString() on the UTC Carbon, so the UTC
+        // wall clock went into asset_external_sources.last_seen. On an
+        // instance with APP_TIMEZONE set to a non-UTC value, the view then
+        // interpreted that stored string as app-timezone wall clock,
+        // which read 7 hours in the future on PDT.
+        config(['app.timezone' => 'America/Los_Angeles']);
+
+        $adapter = $this->configuredKandjiAdapter();
+
+        Http::fake([
+            '*/api/v1/devices*' => Http::sequence()
+                ->push([
+                    $this->kandjiDevice(
+                        id: 'tz-1',
+                        device_name: 'pacific-mbp',
+                        serial_number: 'TZ-SN-1',
+                        last_check_in: '2026-01-15T22:11:37.000Z',
+                    ),
+                ])
+                ->push([]),
+        ]);
+
+        foreach ($adapter->pull() as $record) {
+            SyncAdapter::syncFromRecord($record);
+        }
+
+        // 22:11:37 UTC on 2026-01-15 is 14:11:37 the same day in Pacific
+        // standard time. The stored naive string must match the Pacific
+        // wall clock, same as every other naive datetime Snipe-IT writes
+        // under the same config.
+        $this->assertDatabaseHas('asset_external_sources', [
+            'source' => 'kandji',
+            'external_id' => 'tz-1',
+            'last_seen' => '2026-01-15 14:11:37',
+        ]);
+    }
+
     private function configuredKandjiAdapter(): KandjiAdapter
     {
         $instance = SyncAdapterInstance::where('slug', 'kandji')->firstOrFail();

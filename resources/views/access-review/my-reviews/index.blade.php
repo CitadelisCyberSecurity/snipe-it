@@ -49,7 +49,7 @@
                                              style="width:{{ $pct }}%"></div>
                                     </div>
                                     <small>
-                                        {{ trans('admin/access-review/general.progress', [
+                                        {{ trans('admin/access-review/general.progress_count', [
                                             'reviewed' => $campaign->my_reviewed_count,
                                             'total'    => $campaign->my_items_count,
                                         ]) }}

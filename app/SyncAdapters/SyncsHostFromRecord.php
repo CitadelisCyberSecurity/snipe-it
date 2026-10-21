@@ -33,19 +33,23 @@ use RuntimeException;
  */
 trait SyncsHostFromRecord
 {
-    public static function syncFromRecord(HostInventoryRecord $record): Asset
+    public static function syncFromRecord(HostInventoryRecord $record): ?Asset
     {
         return DB::transaction(function () use ($record) {
             $instance = SyncAdapterInstance::query()->where('slug', $record->sourceKey)->first();
             $mapping = self::loadMapping($instance);
 
-            [$asset, $isNew] = self::provisionAsset($record, $instance, $mapping);
+            $provisioned = self::provisionAsset($record, $instance, $mapping);
+            if ($provisioned === null) {
+                return null;
+            }
+            [$asset, $isNew] = $provisioned;
 
             $externalUpdates = [];
             self::applyStandardFieldMappings($asset, $externalUpdates, $record, $instance, $mapping);
             self::applyExtraFieldMappings($asset, $record, $instance, $mapping);
 
-            $previousExternal = $isNew ? [] : self::loadExternalSourceInventory($asset->id);
+            $previousExternal = $isNew ? [] : self::loadExternalSourceInventory($asset->id, $record->sourceKey);
             $wasDirty = $asset->isDirty();
 
             // Heartbeat-only asset-side write: Skip logging when heartbeat-logging is turned off,
@@ -79,7 +83,7 @@ trait SyncsHostFromRecord
             // loop and go out together so we make one row-write per
             // sync instead of N updates.
             if ($externalUpdates !== []) {
-                self::upsertExternalSource($asset, $externalUpdates);
+                self::upsertExternalSource($asset, $record->sourceKey, $externalUpdates);
             }
 
             // Sync-driven user assignment. Runs after saveOrFail so
@@ -103,14 +107,13 @@ trait SyncsHostFromRecord
      * or creates a fresh shell asset + identity row for first-sync
      * cases. Also handles the update-sync group-reassignment case
      * where a device moved to a different vendor group that maps to
-     * a different Snipe-IT company.
+     * a different Snipe-IT company. Returns null when the record was
+     * intentionally skipped (no match + create-on-pull disabled).
      *
-     * @return array{0: Asset, 1: bool} Tuple of the resolved asset and an "isNew" flag.
-     */
-    /**
      * @param  array<string, string>  $mapping
+     * @return array{0: Asset, 1: bool}|null
      */
-    private static function provisionAsset(HostInventoryRecord $record, ?SyncAdapterInstance $instance, array $mapping = []): array
+    private static function provisionAsset(HostInventoryRecord $record, ?SyncAdapterInstance $instance, array $mapping = []): ?array
     {
         $existingSource = DB::table('asset_external_sources')
             ->where('source', $record->sourceKey)
@@ -145,6 +148,42 @@ trait SyncsHostFromRecord
         $adopted = self::adoptExistingAssetBySerial($record, $instance);
         if ($adopted !== null) {
             return [$adopted, false];
+        }
+
+        // Opt-out: when the admin has turned "Create new Snipe-IT
+        // assets on sync" off, skip unmatched vendor records entirely
+        // instead of creating a shell. Log at warning so admins can
+        // spot drift between vendor + Snipe-IT inventories.
+        $adapter = $instance?->adapter();
+        if ($adapter instanceof SyncAdapter && ! $adapter->createsSnipeitAssetsOnPull()) {
+            Log::channel('sync-adapters')->warning(sprintf(
+                '%s sync: skipped %s record %s (no existing Snipe-IT match and asset creation on pull is off)',
+                $adapter->name(),
+                $record->sourceKey,
+                $record->sourceId,
+            ));
+
+            return null;
+        }
+
+        // UX layer on top of the authoritative require_serial check
+        // in Asset::save().
+        if ($record->hardwareSerial === null || $record->hardwareSerial === '') {
+            $modelName = self::resolveModelSourceValue($record, $mapping);
+            if ($modelName !== null && $modelName !== '') {
+                $existingModel = AssetModel::where('name', $modelName)->first();
+                if ($existingModel !== null && (string) $existingModel->require_serial === '1') {
+                    Log::channel('sync-adapters')->warning(sprintf(
+                        '%s sync: skipped %s record %s (no serial, and asset model "%s" requires one)',
+                        $adapter?->name() ?? $record->sourceKey,
+                        $record->sourceKey,
+                        $record->sourceId,
+                        $existingModel->name,
+                    ));
+
+                    return null;
+                }
+            }
         }
 
         $asset = self::createShellAsset($record, $instance, $mapping);
@@ -388,9 +427,16 @@ trait SyncsHostFromRecord
      *
      * @return array<string, mixed>
      */
-    private static function loadExternalSourceInventory(int $assetId): array
+    private static function loadExternalSourceInventory(int $assetId, string $source): array
     {
-        $row = DB::table('asset_external_sources')->where('asset_id', $assetId)->first();
+        // Filter by (asset_id, source), not asset_id alone. Multi-
+        // adapter assets have one row per source and the pre-sync
+        // snapshot must come from THIS adapter's row for the diff
+        // to be meaningful. See issue #19880.
+        $row = DB::table('asset_external_sources')
+            ->where('asset_id', $assetId)
+            ->where('source', $source)
+            ->first();
         if ($row === null) {
             return [];
         }
@@ -716,6 +762,27 @@ trait SyncsHostFromRecord
 
     /**
      * Extract the normalized value for a given field from the record.
+     *
+     * `last_seen` passes through a timezone rotation to app.timezone before
+     * the naive string is produced. Vendor adapters typically parse their
+     * API response with `Carbon::parse` on an ISO-8601 string carrying a
+     * `Z` suffix, which yields a Carbon in UTC. `toDateTimeString()` on
+     * that instance would write UTC wall clock into a column every other
+     * Snipe-IT write populates with app-timezone wall clock, and the view
+     * layer would then interpret that UTC wall clock as if it were in
+     * app.timezone (future-dated on anything west of UTC, past-dated on
+     * anything east).
+     *
+     * This is part of a much bigger yuck that we'll eventually have to solve
+     * with a fugly migration and then putting everything into UTC properly.
+     * For now, this is a stopgap to keep the sync from writing
+     * future-dated last_seen values, so while it's still "wrong", it's at
+     * least "wrong in the same way as everything else" and doesn't
+     * break the view layer.
+     *
+     * Laravel pulled APP_TIMEZONE out of the config in 10.x but still
+     * honors it in 11.x, so this is a workaround until we can get a proper
+     * fix in place. See #19765.
      */
     private static function recordValueFor(HostInventoryRecord $record, string $field): mixed
     {
@@ -728,7 +795,7 @@ trait SyncsHostFromRecord
             'ip' => $record->primaryIp,
             'os' => $record->os,
             'os_version' => $record->osVersion,
-            'last_seen' => $record->lastSeen?->toDateTimeString(),
+            'last_seen' => $record->lastSeen?->copy()->timezone(config('app.timezone'))->toDateTimeString(),
             default => null,
         };
     }
@@ -790,16 +857,17 @@ trait SyncsHostFromRecord
                 // Only overwrite when the vendor sent a non-empty tag,
                 // so a sync run that happens to omit the tag doesn't
                 // blank whatever the admin already curated.
-                if ($value !== null && $value !== '') {
-                    $asset->asset_tag = $value;
+                $tag = is_string($value) ? trim($value) : $value;
+                if ($tag !== null && $tag !== '') {
+                    $asset->asset_tag = $tag;
                 }
                 break;
             case 'notes':
-                // Same non-empty guard as asset_tag. Reachable when
-                // an admin routes a text-like extra (fleet_labels,
-                // kandji_blueprint_id, etc.) to native:notes.
-                if ($value !== null && $value !== '') {
-                    $asset->notes = $value;
+                // Same non-empty guard as asset_tag, with the same
+                // whitespace-only coercion.
+                $notes = is_string($value) ? trim($value) : $value;
+                if ($notes !== null && $notes !== '') {
+                    $asset->notes = $notes;
                 }
                 break;
             case 'model':
@@ -825,9 +893,16 @@ trait SyncsHostFromRecord
                 // Watson validating rule wants date_format:Y-m-d.
                 // Log + skip if the string isn't parseable so a bad record
                 // doesn't donk the sync run.
+                //
+                // Rotate to app.timezone before extracting the date part so
+                // a vendor datetime at the UTC day boundary (e.g.
+                // "2024-07-23T03:00:00Z" which is 2024-07-22 20:00 Pacific)
+                // records the date the user would recognize. Same reason
+                // the last_seen path converts to app timezone before
+                // producing its naive string. #19765.
                 if ($value !== null && $value !== '') {
                     try {
-                        $asset->purchase_date = \Carbon\Carbon::parse((string) $value)->format('Y-m-d');
+                        $asset->purchase_date = \Carbon\Carbon::parse((string) $value)->timezone(config('app.timezone'))->format('Y-m-d');
                     } catch (\Exception $e) {
                         Log::channel('sync-adapters')->warning("Skipping unparseable purchase_date \"{$value}\" for asset {$asset->id}: ".$e->getMessage());
                     }
@@ -903,15 +978,21 @@ trait SyncsHostFromRecord
 
     /**
      * Write the inventory columns onto the asset's external-source
-     * row. The identity columns (source, external_id, company_id)
-     * are already written at create time and never change here.
-     * updateOrInsert covers the edge case where the identity row was
-     * somehow deleted between the create step and this write.
+     * row for this specific adapter. The identity columns (source,
+     * external_id, company_id) are already written at create time and
+     * never change here. updateOrInsert covers the edge case where the
+     * identity row was somehow deleted between the create step and
+     * this write.
+     *
+     * Match key is (asset_id, source) because an asset synced by two
+     * adapters has two rows in asset_external_sources, one per source.
+     * Keying on asset_id alone would overwrite whichever row MySQL
+     * returned first regardless of adapter. See issue #19880.
      */
-    private static function upsertExternalSource(Asset $asset, array $updates): void
+    private static function upsertExternalSource(Asset $asset, string $source, array $updates): void
     {
         DB::table('asset_external_sources')->updateOrInsert(
-            ['asset_id' => $asset->id],
+            ['asset_id' => $asset->id, 'source' => $source],
             $updates + ['updated_at' => now()],
         );
     }
@@ -1023,6 +1104,10 @@ trait SyncsHostFromRecord
         $model->name = $modelName;
         $model->category_id = self::categoryIdFor($instance, $record);
         $model->manufacturer_id = self::manufacturerIdFor($record);
+        $adapter = $instance?->adapter();
+        if ($adapter instanceof SyncAdapter) {
+            $model->fieldset_id = $adapter->defaultFieldsetId();
+        }
         $model->save();
 
         return $model->id;

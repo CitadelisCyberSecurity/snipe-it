@@ -10,11 +10,13 @@ use App\Models\Accessory;
 use App\Models\AccessoryCheckout;
 use App\Models\Asset;
 use App\Models\CheckoutAcceptance;
+use App\Models\License;
 use App\Models\LicenseSeat;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class UserItemTransferController extends Controller
 {
@@ -29,15 +31,23 @@ class UserItemTransferController extends Controller
             ->whereNull('deleted_at')
             ->get();
 
-        $accessoryCheckouts = AccessoryCheckout::with(['accessory.category', 'accessory.company'])
-            ->where('assigned_to', $user->id)
-            ->where('assigned_type', User::class)
-            ->get();
+        // Gate each section independently. An asset-focused operator without
+        // accessories.view or licenses.view can still legitimately use the
+        // page to transfer hardware, but should not see accessory or license
+        // metadata belonging to the source user.
+        $accessoryCheckouts = Gate::allows('view', Accessory::class)
+            ? AccessoryCheckout::with(['accessory.category', 'accessory.company'])
+                ->where('assigned_to', $user->id)
+                ->where('assigned_type', User::class)
+                ->get()
+            : collect();
 
-        $licenseSeats = LicenseSeat::with(['license.category', 'license.company'])
-            ->where('assigned_to', $user->id)
-            ->whereNull('asset_id')
-            ->get();
+        $licenseSeats = Gate::allows('view', License::class)
+            ? LicenseSeat::with(['license.category', 'license.company'])
+                ->where('assigned_to', $user->id)
+                ->whereNull('asset_id')
+                ->get()
+            : collect();
 
         if ($assets->isEmpty() && $accessoryCheckouts->isEmpty() && $licenseSeats->isEmpty()) {
             return redirect()->route('users.show', $user)

@@ -37,14 +37,18 @@ class AcceptanceStorageFailureTest extends TestCase
 
     private function acceptPayloadWithSignature(): array
     {
-        // Minimal valid signature payload: a data URI containing base64-encoded
-        // bytes. flattenSignatureBackgroundToWhite is tolerant of arbitrary
-        // input because it treats non-decodable data as opaque bytes.
-        $body = base64_encode('signature-bytes');
+        // AcceptanceController rejects signature_output whose decoded
+        // bytes are not a real image, so this test needs a legitimate tiny
+        // PNG to exercise the failure path. The actual image content is irrelevant to the test.
+        $canvas = imagecreatetruecolor(2, 2);
+        ob_start();
+        imagepng($canvas);
+        $signaturePng = (string) ob_get_clean();
+        imagedestroy($canvas);
 
         return [
             'asset_acceptance' => 'accepted',
-            'signature_output' => 'data:image/png;base64,'.$body,
+            'signature_output' => 'data:image/png;base64,' . base64_encode($signaturePng),
         ];
     }
 

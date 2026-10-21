@@ -35,8 +35,6 @@ class CustomFieldsetsController extends Controller
      *
      * @author [Brady Wetherington] [<uberbrady@gmail.com>]
      *
-     * @param  int  $id
-     *
      * @since [v1.8]
      */
     public function show(CustomFieldset $fieldset): View|RedirectResponse
@@ -127,8 +125,6 @@ class CustomFieldsetsController extends Controller
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
      *
-     * @param  int  $id
-     *
      * @since [v6.0.14]
      */
     public function edit(CustomFieldset $fieldset): View|RedirectResponse
@@ -142,8 +138,6 @@ class CustomFieldsetsController extends Controller
      * Saves updated fieldset data
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
-     *
-     * @param  int  $id
      *
      * @since [v6.0.14]
      */
@@ -210,7 +204,7 @@ class CustomFieldsetsController extends Controller
                 }
             }
 
-            $results = $set->fields()->attach($request->input('field_id'), ['required' => ($request->input('required') == 'on'), 'order' => (int) $request->input('order', 1)]);
+            $set->fields()->attach($request->input('field_id'), ['required' => ($request->input('required') == 'on'), 'order' => (int) $request->input('order', 1)]);
 
             return redirect()->route('fieldsets.show', [$id])->with('success', trans('admin/custom_fields/message.field.create.assoc_success'));
         }

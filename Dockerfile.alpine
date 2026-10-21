@@ -1,4 +1,4 @@
-FROM alpine:3.23
+FROM alpine:3.24
 # Apache + PHP
 RUN  apk add --no-cache \
         apache2 \
@@ -35,8 +35,9 @@ RUN  apk add --no-cache \
         wget \
         vim \
         git \
-        mysql-client \
-        tini
+        mariadb-client \
+        tini \
+    && ln -sf /usr/bin/php84 /usr/bin/php
 
 COPY docker/column-statistics.cnf /etc/mysql/conf.d/column-statistics.cnf
 

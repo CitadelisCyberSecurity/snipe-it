@@ -25,8 +25,8 @@
                 <x-callout type="warning" icon="warning" live="assertive">
                     {{ trans_choice('admin/hardware/form.bulk_update_warn', count($assets), ['asset_count' => count($assets)]) }}
 
-                    @if (count($models) > 0)
-                        {{ trans_choice('admin/hardware/form.bulk_update_with_custom_field', count($models), ['asset_model_count' => count($models)]) }}
+                    @if (count($models) > 1)
+                        {{ trans('admin/hardware/form.bulk_update_with_custom_field', ['asset_model_count' => count($models)]) }}
                     @endif
                 </x-callout>
 

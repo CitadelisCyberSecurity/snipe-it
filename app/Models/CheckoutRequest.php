@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\CheckoutRequestState;
 use App\Exceptions\InvalidCheckoutRequestTransition;
+use App\Models\Builders\CheckoutRequestQueryBuilder;
 use App\Models\Traits\HasCalendarEvents;
 use App\Models\Traits\Searchable;
 use Illuminate\Database\Eloquent\Builder;
@@ -14,7 +15,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
 
 /**
- * @property CheckoutRequestState $state
+ * @property \App\Enums\CheckoutRequestState $state
+ *
+ * @mixin IdeHelperCheckoutRequest
  */
 class CheckoutRequest extends Model
 {
@@ -270,11 +273,13 @@ class CheckoutRequest extends Model
 
     public function name()
     {
-        if ($this->itemType() == 'asset') {
-            return $this->itemRequested()->display_name;
+        $item = $this->itemRequested();
+
+        if (! $item) {
+            return '';
         }
 
-        return $this->itemRequested()->name;
+        return $item->display_name;
     }
 
     /**
@@ -312,24 +317,9 @@ class CheckoutRequest extends Model
      * Requestable::isRequestedBy() gate. Terminal-state rows (
      * fulfilled, canceled) are excluded.
      */
-    public function scopeOpen(Builder $query): Builder
+    public function newEloquentBuilder($query): CheckoutRequestQueryBuilder
     {
-        return $query->where('state', CheckoutRequestState::Pending->value);
-    }
-
-    public function scopePending(Builder $query): Builder
-    {
-        return $query->where('state', CheckoutRequestState::Pending->value);
-    }
-
-    public function scopeFulfilled(Builder $query): Builder
-    {
-        return $query->where('state', CheckoutRequestState::Fulfilled->value);
-    }
-
-    public function scopeCanceled(Builder $query): Builder
-    {
-        return $query->where('state', CheckoutRequestState::Canceled->value);
+        return new CheckoutRequestQueryBuilder($query);
     }
 
     public function isReservation(): bool

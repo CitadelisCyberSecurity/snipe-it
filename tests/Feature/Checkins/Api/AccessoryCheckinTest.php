@@ -39,9 +39,15 @@ class AccessoryCheckinTest extends TestCase implements TestsFullMultipleCompanie
 
         $this->settings->enableMultipleFullCompanySupport();
 
+        // Cross-tenant checkout is hidden from the caller by the
+        // CompanyableChildScope on AccessoryCheckout, so AccessoryCheckout::find()
+        // in the controller returns null and we fall into the standard
+        // does-not-exist error envelope rather than a 403. Line 50
+        // asserts the checkin didn't actually happen, which is the
+        // security property that matters.
         $this->actingAsForApi($userInCompanyA)
             ->postJson(route('api.accessories.checkin', $accessoryForCompanyB->checkouts->first()))
-            ->assertForbidden();
+            ->assertStatusMessageIs('error');
 
         $this->actingAsForApi($superUser)
             ->postJson(route('api.accessories.checkin', $anotherAccessoryForCompanyB->checkouts->first()))

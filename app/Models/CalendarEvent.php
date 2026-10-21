@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Traits\CompanyableTrait;
 use App\Models\Traits\HasCalendarEvents;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -17,9 +18,12 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * path and for the read-path range/type filter query; consumers that
  * want to render events read the source model live via ->source
  * rather than pulling values off this row.
+ *
+ * @mixin IdeHelperCalendarEvent
  */
 class CalendarEvent extends Model
 {
+    use CompanyableTrait;
     use SoftDeletes;
 
     protected $fillable = [
@@ -29,6 +33,7 @@ class CalendarEvent extends Model
         'event_type',
         'start',
         'end',
+        'company_id',
     ];
 
     protected $casts = [

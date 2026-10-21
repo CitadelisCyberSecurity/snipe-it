@@ -148,7 +148,7 @@ class BulkAuditSelectedAssetsSubmissionTest extends TestCase
         $this->actingAs(User::factory()->auditAssets()->create())
             ->post(route('hardware.bulk-audit.store'), [
                 'selected_assets' => $assets->pluck('id')->toArray(),
-                'image' => UploadedFile::fake()->image('audit.png'),
+                'file' => [UploadedFile::fake()->image('audit.png')],
             ])
             ->assertRedirect(route('hardware.index'))
             ->assertSessionHas('success');

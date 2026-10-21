@@ -16,8 +16,8 @@ return [
     'create' => [
         'error' => 'Asset wurde nicht erstellt. Bitte versuche es erneut. :(',
         'success' => 'Asset wurde erfolgreich erstellt. :)',
-        'success_no_checkout' => 'Asset created successfully, but was not checked out because you do not have permission to check assets out.',
-        'checkout_skipped_no_permission' => 'The asset was created, but was not checked out to the requested target because you do not have permission to check assets out.',
+        'success_no_checkout' => 'Asset wurde erfolgreich angelegt, wurde aber nicht ausgecheckt, da Sie keine Berechtigung zum Auschecken von Assets haben.',
+        'checkout_skipped_no_permission' => 'Das Asset wurde angelegt, aber nicht an das angeforderte Ziel ausgecheckt, da Sie nicht die Berechtigung haben, Assets auszuchecken.',
         'success_linked' => 'Asset mit Tag :tag wurde erfolgreich erstellt. <strong><a href=":link" style="color: white;">Klicke hier, um</a></strong> anzuzeigen.',
         'multi_success_linked' => 'Asset mit Tag :links wurde erfolgreich erstellt.|:count Assets wurden erfolgreich erstellt. :links.',
         'partial_failure' => 'Ein Asset konnte nicht erstellt werden. Grund: :failures|:count Assets konnten nicht erstellt werden. Gründe: :failures',

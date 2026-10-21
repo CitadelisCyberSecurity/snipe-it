@@ -20,8 +20,8 @@ return [
         'confirm' => 'Etes-vous sûr de vouloir supprimer cet accessoire ?',
         'error' => 'Un problème est survenu durant la suppression de l\'accessoire. Merci d\'essayer à nouveau.',
         'success' => 'L\'accessoire a bien été supprimé.',
-        'bulk_success' => 'Accessory deleted successfully.|:count accessories were deleted successfully.',
-        'partial_success' => ':count accessory was deleted successfully, but others could not be deleted. See below for details.|:count accessories were deleted successfully, but others could not be deleted. See below for details.',
+        'bulk_success' => 'Accessoire supprimée avec succès.|Les accessoires :count ont été supprimées avec succès.',
+        'partial_success' => 'L\'accessoire :count a été supprimé avec succès, mais d\'autres n\'ont pas pu être supprimés. Voir ci-dessous pour plus de détails. :count accessoires ont été supprimés avec succès, mais d\'autres n\'ont pas pu être supprimés. Voir ci-dessous pour plus de détails.',
     ],
 
     'checkout' => [
@@ -41,4 +41,29 @@ return [
         'user_does_not_exist' => 'Cet utilisateur est inexistant. Veuillez réessayer.',
     ],
 
+    'restore' => [
+        'error' => 'Accessory was not restored, please try again',
+        'success' => 'Accessory restored successfully.',
+    ],
+
+    'bulk' => [
+        'no_accessories_selected' => 'No accessories were selected.',
+        'no_action_selected' => 'Please pick an action from the dropdown.',
+        'no_fields_updated' => 'Aucun champ n\'a été changé, donc rien n\'a été mis à jour.',
+        'skipped_unauthorized' => ':count accessory(s) were skipped because you do not have permission to update them.',
+
+        'update' => [
+            'success' => ':count accessory was updated.|:count accessories were updated.',
+            'none_updated' => 'The selected accessory could not be updated. See errors below for details.|None of the selected accessories could be updated. See errors below for details.',
+        ],
+
+        'restore' => [
+            'success' => ':count accessory was restored.|:count accessories were restored.',
+        ],
+
+        'checkin_selected' => [
+            'no_rows_selected' => 'No checked-out accessories were selected.',
+            'success' => ':count accessory checkout was returned.|:count accessory checkouts were returned.',
+        ],
+    ],
 ];

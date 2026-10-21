@@ -247,7 +247,11 @@ class AppleBusinessManagerAdapter extends SyncAdapter
             'abm_wifi_mac' => ['label_key' => 'admin/settings/sync_adapters.abm_extra_wifi_mac'],
             'abm_bluetooth_mac' => ['label_key' => 'admin/settings/sync_adapters.abm_extra_bluetooth_mac'],
             'abm_ethernet_mac' => ['label_key' => 'admin/settings/sync_adapters.abm_extra_ethernet_mac'],
-            'abm_imei' => ['label_key' => 'admin/settings/sync_adapters.abm_extra_imei'],
+            // Apple returns IMEIs as an array (dual-SIM iPhones carry
+            // two, older devices one). Positional split so admins can
+            // map each to its own custom field. #19754.
+            'abm_imei_1' => ['label_key' => 'admin/settings/sync_adapters.abm_extra_imei_1'],
+            'abm_imei_2' => ['label_key' => 'admin/settings/sync_adapters.abm_extra_imei_2'],
             'abm_meid' => ['label_key' => 'admin/settings/sync_adapters.abm_extra_meid'],
             'abm_eid' => ['label_key' => 'admin/settings/sync_adapters.abm_extra_eid'],
             'abm_added_to_org' => ['label_key' => 'admin/settings/sync_adapters.abm_extra_added_to_org'],
@@ -869,13 +873,13 @@ class AppleBusinessManagerAdapter extends SyncAdapter
      */
     private static function pickMdmPrimaryMac(array $attrs, ?string $fallback): ?string
     {
-        $wifi = Arr::get($attrs, 'wifiMacAddress');
-        if (is_string($wifi) && $wifi !== '') {
+        $wifi = self::normalizeMacAddress(Arr::get($attrs, 'wifiMacAddress'));
+        if ($wifi !== null) {
             return $wifi;
         }
 
-        $ethernet = Arr::get($attrs, 'ethernetMacAddress');
-        if (is_string($ethernet) && $ethernet !== '') {
+        $ethernet = self::normalizeMacAddress(Arr::get($attrs, 'ethernetMacAddress'));
+        if ($ethernet !== null) {
             return $ethernet;
         }
 
@@ -921,21 +925,86 @@ class AppleBusinessManagerAdapter extends SyncAdapter
         $extra['abm_mdm_storage_total'] = Arr::get($attrs, 'storageTotalCapacity');
         $extra['abm_mdm_storage_free'] = Arr::get($attrs, 'storageFreeCapacity');
 
-        $sharedMap = [
+        $macMap = [
             'wifiMacAddress' => 'abm_wifi_mac',
             'bluetoothMacAddress' => 'abm_bluetooth_mac',
             'ethernetMacAddress' => 'abm_ethernet_mac',
-            'imei' => 'abm_imei',
-            'meid' => 'abm_meid',
         ];
-        foreach ($sharedMap as $mdmKey => $extraKey) {
-            $val = Arr::get($attrs, $mdmKey);
-            if ($val !== null && $val !== '') {
+        foreach ($macMap as $mdmKey => $extraKey) {
+            $val = self::normalizeMacAddress(Arr::get($attrs, $mdmKey));
+            if ($val !== null) {
                 $extra[$extraKey] = $val;
             }
         }
 
+        // IMEI is an array in both orgDevices and MDM-detail shapes.
+        // Overwrite each positional slot only when MDM has a value so
+        // the orgDevices value stays as the fallback.
+        $mdmImei = Arr::get($attrs, 'imei');
+        $first = self::extractImeiAtIndex($mdmImei, 0);
+        if ($first !== null) {
+            $extra['abm_imei_1'] = $first;
+        }
+        $second = self::extractImeiAtIndex($mdmImei, 1);
+        if ($second !== null) {
+            $extra['abm_imei_2'] = $second;
+        }
+
+        $meid = Arr::get($attrs, 'meid');
+        if ($meid !== null && $meid !== '') {
+            $extra['abm_meid'] = $meid;
+        }
+
         return $extra;
+    }
+
+    /**
+     * Insert the colons Snipe-IT's MAC custom-field validator
+     * requires. Apple's APIs return bare 12-hex-char strings
+     * (`0123456789AB`) and occasionally the 16-char EUI-64 shape for
+     * Bluetooth. Both get normalized to colon-separated uppercase
+     * pairs. Non-hex characters are stripped so an already-formatted
+     * value round-trips cleanly. Returns null for null, empty, or
+     * non-string input, or when the stripped hex isn't a valid length.
+     */
+    private static function normalizeMacAddress(mixed $raw): ?string
+    {
+        if (! is_string($raw) || $raw === '') {
+            return null;
+        }
+
+        $hex = strtoupper((string) preg_replace('/[^0-9A-Fa-f]/', '', $raw));
+        $length = strlen($hex);
+        if ($length !== 12 && $length !== 16) {
+            return null;
+        }
+
+        return rtrim(chunk_split($hex, 2, ':'), ':');
+    }
+
+    /**
+     * Pick a single IMEI out of Apple's `imei` field, which is
+     * typically an array (dual-SIM carries two, single-SIM carries a
+     * one-element array). A bare-scalar shape is tolerated as a
+     * fallback so vendor-side drift doesn't drop a valid IMEI into
+     * nothing - a scalar fills slot 0 and leaves slot 1 null.
+     * Returns null when the slot is absent, when the value isn't a
+     * non-empty string, or when a scalar is requested for slot 1.
+     */
+    private static function extractImeiAtIndex(mixed $value, int $index): ?string
+    {
+        if (is_string($value)) {
+            return $index === 0 && $value !== '' ? $value : null;
+        }
+        if (! is_array($value)) {
+            return null;
+        }
+        $imei = $value[$index] ?? null;
+        if (! is_string($imei) || $imei === '') {
+            return null;
+        }
+
+        return $imei;
     }
 
     /**
@@ -1067,8 +1136,9 @@ class AppleBusinessManagerAdapter extends SyncAdapter
             // is the one every enrolled device has, so it fills the
             // normalized primaryMac field. Ethernet and Bluetooth
             // stay in extras for admins who want to route them to
-            // custom fields.
-            primaryMac: Arr::get($attrs, 'wifiMacAddress'),
+            // custom fields. normalizeMacAddress() inserts the colons
+            // Snipe-IT's MAC custom-field validator requires.
+            primaryMac: self::normalizeMacAddress(Arr::get($attrs, 'wifiMacAddress')),
             primaryIp: null,
             os: null,
             osVersion: null,
@@ -1088,12 +1158,15 @@ class AppleBusinessManagerAdapter extends SyncAdapter
                 'abm_purchase_source_id' => Arr::get($attrs, 'purchaseSourceId'),
                 'abm_mdm_server' => $deviceToServer[$id] ?? null,
                 'abm_device_capacity' => Arr::get($attrs, 'deviceCapacity'),
-                'abm_wifi_mac' => Arr::get($attrs, 'wifiMacAddress'),
-                'abm_bluetooth_mac' => Arr::get($attrs, 'bluetoothMacAddress'),
-                'abm_ethernet_mac' => Arr::get($attrs, 'ethernetMacAddress'),
+                'abm_wifi_mac' => self::normalizeMacAddress(Arr::get($attrs, 'wifiMacAddress')),
+                'abm_bluetooth_mac' => self::normalizeMacAddress(Arr::get($attrs, 'bluetoothMacAddress')),
+                'abm_ethernet_mac' => self::normalizeMacAddress(Arr::get($attrs, 'ethernetMacAddress')),
                 // Cellular-only identifiers. Populated for iPhones and
                 // cellular iPads, null on Macs / non-cellular devices.
-                'abm_imei' => Arr::get($attrs, 'imei'),
+                // IMEI is an array in Apple's shape; _1/_2 split by
+                // index so admins can map each to its own custom field.
+                'abm_imei_1' => self::extractImeiAtIndex(Arr::get($attrs, 'imei'), 0),
+                'abm_imei_2' => self::extractImeiAtIndex(Arr::get($attrs, 'imei'), 1),
                 'abm_meid' => Arr::get($attrs, 'meid'),
                 'abm_eid' => Arr::get($attrs, 'eid'),
                 'abm_added_to_org' => self::parseOrderDate(Arr::get($attrs, 'addedToOrgDateTime')),
@@ -1153,7 +1226,12 @@ class AppleBusinessManagerAdapter extends SyncAdapter
         }
 
         try {
-            return Carbon::parse($value)->toDateString();
+            // Rotate to app.timezone before extracting the date part so a
+            // vendor datetime at the UTC day boundary records the date
+            // the user would recognize. Same reason the last_seen path
+            // converts to app timezone before producing its naive string.
+            // #19765.
+            return Carbon::parse($value)->timezone(config('app.timezone'))->toDateString();
         } catch (\Throwable) {
             return null;
         }

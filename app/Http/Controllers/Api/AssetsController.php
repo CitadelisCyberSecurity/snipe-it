@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\FileStorage;
 use App\Events\CheckoutableCheckedIn;
 use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
@@ -58,8 +59,6 @@ class AssetsController extends Controller
      * Returns JSON listing of all assets
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
-     *
-     * @param  int  $assetId
      *
      * @since [v4.0]
      */
@@ -514,6 +513,7 @@ class AssetsController extends Controller
         } else {
             $order = array_flip($ids);
             $assets = Asset::query()
+                ->withTrashed()
                 ->whereIn('assets.id', $ids)
                 ->setEagerLoads($assets->getEagerLoads())
                 ->get()
@@ -620,8 +620,6 @@ class AssetsController extends Controller
      * Returns JSON with information about an asset for detail view.
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
-     *
-     * @param  int  $assetId
      *
      * @since [v4.0]
      *
@@ -1273,8 +1271,6 @@ class AssetsController extends Controller
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
      *
-     * @param  int  $assetId
-     *
      * @since [v4.0]
      */
     public function destroy($id): JsonResponse
@@ -1356,8 +1352,6 @@ class AssetsController extends Controller
      * Checkout an asset
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
-     *
-     * @param  int  $assetId
      *
      * @since [v4.0]
      */
@@ -1473,8 +1467,6 @@ class AssetsController extends Controller
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
      *
-     * @param  int  $assetId
-     *
      * @since [v4.0]
      */
     public function checkin(Request $request, $asset_id): JsonResponse
@@ -1482,8 +1474,92 @@ class AssetsController extends Controller
         $asset = Asset::with('model')->findOrFail($asset_id);
         $this->authorize('checkin', $asset);
 
-        $target = $asset->assignedTo;
-        if (is_null($target)) {
+        // Concurrency guard.
+        $outcome = DB::transaction(function () use ($asset, $request): array {
+            $locked = Asset::with(['model', 'licenseseats'])
+                ->whereKey($asset->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $locked) {
+                return ['status' => 'already_checked_in', 'asset' => $asset];
+            }
+
+            $target = $locked->assignedTo;
+            if (is_null($target)) {
+                return ['status' => 'already_checked_in', 'asset' => $locked];
+            }
+
+            $locked->expected_checkin = null;
+            // $locked->last_checkout = null;
+            $locked->last_checkin = now();
+            $locked->assignedTo()->disassociate($locked);
+            $locked->accepted = null;
+
+            if ($request->input('clear_name') == '1') {
+                $locked->name = null;
+            } elseif ($request->has('name')) {
+                $locked->name = $request->input('name');
+            }
+
+            $this->migrateLegacyLocations($locked);
+
+            $locked->location_id = $locked->rtd_location_id;
+
+            if ($request->filled('location_id')) {
+                $locked->location_id = $request->input('location_id');
+
+                if ($request->input('update_default_location')) {
+                    $locked->rtd_location_id = $request->input('location_id');
+                }
+            }
+
+            if ($request->filled('status_id')) {
+                $locked->status_id = $request->input('status_id');
+            }
+
+            $checkin_at = $request->filled('checkin_at') ? $request->input('checkin_at').' '.date('H:i:s') : date('Y-m-d H:i:s');
+            $originalValues = $locked->getRawOriginal();
+
+            if (($request->filled('checkin_at')) && ($request->input('checkin_at') != date('Y-m-d'))) {
+                $originalValues['action_date'] = $checkin_at;
+            }
+
+            $locked->licenseseats->each(function (LicenseSeat $seat) {
+                $seat->update(['assigned_to' => null]);
+            });
+
+            // Get all pending Acceptances for this asset and delete them
+            CheckoutAcceptance::pending()
+                ->whereHasMorph(
+                    'checkoutable',
+                    [Asset::class],
+                    function (Builder $query) use ($locked) {
+                        $query->where('id', $locked->id);
+                    }
+                )
+                ->get()
+                ->map(function ($acceptance) {
+                    $acceptance->delete();
+                });
+
+            if (! $locked->save()) {
+                return ['status' => 'save_failed', 'asset' => $locked];
+            }
+
+            // Update the location of any child assets
+            Asset::where('assigned_type', Asset::class)
+                ->where('assigned_to', $locked->id)
+                ->update(['location_id' => $locked->location_id]);
+
+            event(new CheckoutableCheckedIn($locked, $target, auth()->user(), $request->input('note'), $checkin_at, $originalValues));
+
+            return ['status' => 'success', 'asset' => $locked];
+        });
+
+        $asset = $outcome['asset'];
+
+        if ($outcome['status'] === 'already_checked_in') {
             return response()->json(Helper::formatStandardApiResponse('error', [
                 'asset_tag' => e($asset->asset_tag),
                 'model' => e($asset->model->name),
@@ -1491,68 +1567,7 @@ class AssetsController extends Controller
             ], trans('admin/hardware/message.checkin.already_checked_in')));
         }
 
-        $asset->expected_checkin = null;
-        // $asset->last_checkout = null;
-        $asset->last_checkin = now();
-        $asset->assignedTo()->disassociate($asset);
-        $asset->accepted = null;
-
-        if ($request->input('clear_name') == '1') {
-            $asset->name = null;
-        } elseif ($request->has('name')) {
-            $asset->name = $request->input('name');
-        }
-
-        $this->migrateLegacyLocations($asset);
-
-        $asset->location_id = $asset->rtd_location_id;
-
-        if ($request->filled('location_id')) {
-            $asset->location_id = $request->input('location_id');
-
-            if ($request->input('update_default_location')) {
-                $asset->rtd_location_id = $request->input('location_id');
-            }
-        }
-
-        if ($request->filled('status_id')) {
-            $asset->status_id = $request->input('status_id');
-        }
-
-        $checkin_at = $request->filled('checkin_at') ? $request->input('checkin_at').' '.date('H:i:s') : date('Y-m-d H:i:s');
-        $originalValues = $asset->getRawOriginal();
-
-        if (($request->filled('checkin_at')) && ($request->input('checkin_at') != date('Y-m-d'))) {
-            $originalValues['action_date'] = $checkin_at;
-        }
-
-        $asset->licenseseats->each(function (LicenseSeat $seat) {
-            $seat->update(['assigned_to' => null]);
-        });
-
-        // Get all pending Acceptances for this asset and delete them
-        CheckoutAcceptance::pending()
-            ->whereHasMorph(
-                'checkoutable',
-                [Asset::class],
-                function (Builder $query) use ($asset) {
-                    $query->where('id', $asset->id);
-                }
-            )
-            ->get()
-            ->map(function ($acceptance) {
-                $acceptance->delete();
-            });
-
-        if ($asset->save()) {
-
-            // Update the location of any child assets
-            Asset::where('assigned_type', Asset::class)
-                ->where('assigned_to', $asset->id)
-                ->update(['location_id' => $asset->location_id]);
-
-            event(new CheckoutableCheckedIn($asset, $target, auth()->user(), $request->input('note'), $checkin_at, $originalValues));
-
+        if ($outcome['status'] === 'success') {
             return response()->json(Helper::formatStandardApiResponse('success', [
                 'asset_tag' => e($asset->asset_tag),
                 'model' => e($asset->model->name),
@@ -1629,8 +1644,6 @@ class AssetsController extends Controller
      * Mark an asset as audited
      *
      * @author [A. Gianotto] [<snipe@snipe.net>]
-     *
-     * @param  int  $id
      *
      * @since [v4.0]
      */
@@ -1846,8 +1859,9 @@ class AssetsController extends Controller
             // the web audit form's behavior. Filename is stored on the
             // action log so it renders in the audit history.
             $file_name = null;
-            if ($request->hasFile('image')) {
-                $file_name = $request->handleFile('private_uploads/audits/', 'audit-'.$asset->id, $request->file('image'));
+            // Legacy `image` posts are aliased to `file[0]` in UploadFileRequest::prepareForValidation.
+            if ($request->hasFile('file.0')) {
+                $file_name = $request->handleFile(FileStorage::Audits->privateStorageKey(), 'audit-'.$asset->id, $request->file('file.0'));
                 $payload['image'] = $file_name;
             }
 
@@ -1891,11 +1905,47 @@ class AssetsController extends Controller
             return Asset::where('asset_tag', '=', trim($audit_key))->first();
         }
 
+        if ($audit_by_field === '2d_barcode' && $audit_key) {
+            return $this->resolveAssetFrom2dBarcode(trim($audit_key), $settings);
+        }
+
         if ($request->filled('asset_tag')) {
             return Asset::where('asset_tag', '=', $request->input('asset_tag'))->first();
         }
 
         return null;
+    }
+
+    /**
+     * Resolve the asset behind a scanned 2D barcode
+     *
+     * Non-unique targets (model/manufacturer/location name, etc.)
+     * aren't viable audit keys and fall through to null.
+     */
+    private function resolveAssetFrom2dBarcode(string $scanned, Setting $settings): ?Asset
+    {
+        // default 2D barcode format is /hardware/{id} (numeric primary key)
+        if (preg_match('~/hardware/(\d+)(?:[/?#]|$)~', $scanned, $m)) {
+            return Asset::find((int) $m[1]);
+        }
+
+        // legacy 2D barcode format is /ht/{asset_tag} (non-numeric, URL-encoded)
+        if (preg_match('~/ht/([^/?#]+)~', $scanned, $m)) {
+            return Asset::where('asset_tag', '=', urldecode($m[1]))->first();
+        }
+
+        // If the user has configured a custom 2D barcode prefix, strip it off
+        $prefix = (string) ($settings->label2_2d_prefix ?? '');
+        $value = ($prefix !== '' && str_starts_with($scanned, $prefix))
+            ? substr($scanned, strlen($prefix))
+            : $scanned;
+
+        return match ($settings->label2_2d_target) {
+            'plain_asset_id' => ctype_digit($value) ? Asset::find((int) $value) : null,
+            'plain_asset_tag' => Asset::where('asset_tag', '=', $value)->first(),
+            'plain_serial_number' => Asset::where('serial', '=', $value)->first(),
+            default => null,
+        };
     }
 
     /**

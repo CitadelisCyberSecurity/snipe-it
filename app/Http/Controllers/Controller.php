@@ -23,19 +23,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\FileStorage;
 use App\Models\Accessory;
 use App\Models\Asset;
 use App\Models\AssetModel;
-use App\Models\Category;
 use App\Models\Company;
 use App\Models\Component;
 use App\Models\Consumable;
 use App\Models\Department;
 use App\Models\License;
-use App\Models\LicenseSeat;
 use App\Models\Location;
 use App\Models\Maintenance;
-use App\Models\Manufacturer;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Traits\DisablesDebugbar;
@@ -64,23 +62,6 @@ abstract class Controller extends BaseController
         'models' => AssetModel::class,
         'suppliers' => Supplier::class,
         'users' => User::class,
-    ];
-
-    public static $map_storage_path = [
-        'accessories' => 'private_uploads/accessories/',
-        'maintenances' => 'private_uploads/maintenances/',
-        'assets' => 'private_uploads/assets/',
-        'audits' => 'private_uploads/audits/',
-        'departments' => 'private_uploads/departments/',
-        'companies' => 'private_uploads/companies/',
-        'components' => 'private_uploads/components/',
-        'consumables' => 'private_uploads/consumables/',
-        'hardware' => 'private_uploads/assets/',
-        'licenses' => 'private_uploads/licenses/',
-        'locations' => 'private_uploads/locations/',
-        'models' => 'private_uploads/models/',
-        'suppliers' => 'private_uploads/suppliers/',
-        'users' => 'private_uploads/users/',
     ];
 
     public static $map_file_prefix = [
@@ -118,37 +99,8 @@ abstract class Controller extends BaseController
         License::class => 'licenses',
     ];
 
-    /**
-     * Allowlist of fully-qualified model class strings the activity-report
-     * endpoint (Api\ReportsController::index) accepts as item_type /
-     * target_type. This is a security surface: input flows directly into
-     * a runtime class lookup + polymorphic where-clauses. Without a gate,
-     * a caller can probe arbitrary strings and either trigger a Fatal
-     * Error (Helper::normalizeFullModelName + ucwords mangles CamelCase
-     * so `licenseseat` yields `App\Models\Licenseseat`) or route the
-     * authorization check into an unintended class. Kept as a flat list
-     * rather than merged into $map_object_type because the polymorphic
-     * item_type / target_type columns cover more models than the URL
-     * routing map does (Category, LicenseSeat, Manufacturer aren't in
-     * $map_object_type but do appear in action_logs).
-     */
-    public static $activity_report_class_allowlist = [
-        Accessory::class,
-        Asset::class,
-        AssetModel::class,
-        Category::class,
-        Company::class,
-        Component::class,
-        Consumable::class,
-        Department::class,
-        License::class,
-        LicenseSeat::class,
-        Location::class,
-        Maintenance::class,
-        Manufacturer::class,
-        Supplier::class,
-        User::class,
-    ];
+    // Activity-report class allowlist lives on App\Enums\ActivityItemType.
+    // Access via getActivityReportClassAllowlist() below.
 
     public function __construct()
     {
@@ -173,7 +125,22 @@ abstract class Controller extends BaseController
      */
     public static function getMapStoragePath(): array
     {
-        return static::$map_storage_path;
+        return [
+            'accessories' => FileStorage::Accessories->privateStorageKey(),
+            'maintenances' => FileStorage::Maintenances->privateStorageKey(),
+            'assets' => FileStorage::Assets->privateStorageKey(),
+            'audits' => FileStorage::Audits->privateStorageKey(),
+            'departments' => FileStorage::Departments->privateStorageKey(),
+            'companies' => FileStorage::Companies->privateStorageKey(),
+            'components' => FileStorage::Components->privateStorageKey(),
+            'consumables' => FileStorage::Consumables->privateStorageKey(),
+            'hardware' => FileStorage::Assets->privateStorageKey(),
+            'licenses' => FileStorage::Licenses->privateStorageKey(),
+            'locations' => FileStorage::Locations->privateStorageKey(),
+            'models' => FileStorage::Models->privateStorageKey(),
+            'suppliers' => FileStorage::Suppliers->privateStorageKey(),
+            'users' => FileStorage::Users->privateStorageKey(),
+        ];
     }
 
     /**
@@ -194,11 +161,23 @@ abstract class Controller extends BaseController
     }
 
     /**
-     * Accessor for the activity-report allowlist. See getMapObjectType
-     * for rationale.
+     * Fully qualified model classes the activity-report endpoint
+     * (Api\ReportsController::index) accepts as item_type / target_type.
+     * Sourced from the ActivityItemType enum, which is the single source
+     * of truth for every surface that enumerates these types (controller
+     * allowlist, resolver, UI dropdowns).
+     *
+     * This is a security surface: input flows directly into a runtime
+     * class lookup and polymorphic where-clauses. Without a gate, a
+     * caller can probe arbitrary strings and either trigger a Fatal
+     * Error (Helper::normalizeFullModelName + ucwords mangles CamelCase
+     * so `licenseseat` yields `App\Models\Licenseseat`) or route the
+     * authorization check into an unintended class.
+     *
+     * @return list<class-string>
      */
     public static function getActivityReportClassAllowlist(): array
     {
-        return static::$activity_report_class_allowlist;
+        return \App\Enums\ActivityItemType::classes();
     }
 }

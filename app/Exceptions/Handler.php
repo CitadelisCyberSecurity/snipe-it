@@ -30,7 +30,7 @@ class Handler extends ExceptionHandler
     /**
      * A list of the exception types that are not reported.
      *
-     * @var array
+     * @var array<int, class-string<\Throwable>>
      */
     protected $dontReport = [
         AuthenticationException::class,
@@ -112,7 +112,13 @@ class Handler extends ExceptionHandler
 
         // CSRF token mismatch error
         if ($e instanceof TokenMismatchException) {
-            return redirect()->back()->with('error', trans('general.token_expired'));
+            // Any form POST can hit this branch, including pre-auth
+            // forms (login, password reset, setup wizard). Routing the
+            // fallback through sameOriginUrl prevents a crafted link
+            // that pairs an off-origin Referer with an expired token
+            // from steering the response Location off-site.
+            return redirect()->to(Helper::sameOriginUrl(url()->previous()) ?? route('home'))
+                ->with('error', trans('general.token_expired'));
         }
 
         // Invalid JSON exception
@@ -134,7 +140,9 @@ class Handler extends ExceptionHandler
 
         // Handle standard requests that fail because Carbon cannot parse the date on validation (when a submitted date value is definitely not a date)
         if ($e instanceof InvalidFormatException) {
-            return redirect()->back()->withInput()->with('error', trans('validation.date', ['attribute' => 'date']));
+            // Same open-redirect guard as the TokenMismatch branch above.
+            return redirect()->to(Helper::sameOriginUrl(url()->previous()) ?? route('home'))
+                ->withInput()->with('error', trans('validation.date', ['attribute' => 'date']));
         }
 
         // Handle API requests that fail
@@ -214,6 +222,8 @@ class Handler extends ExceptionHandler
                 $route = 'fields.index';
             } elseif ($route == 'actionlogs.index') {
                 $route = 'home';
+            } elseif ($route === 'customuserlabels.index') {
+                $route = 'settings.labels.index';
             }
 
             // Normalize the space-separated derived name to underscore
@@ -260,7 +270,7 @@ class Handler extends ExceptionHandler
     /**
      * A list of the inputs that are never flashed for validation exceptions.
      *
-     * @var array
+     * @var array<int, string>
      */
     protected $dontFlash = [
         'current_password',

@@ -9,7 +9,7 @@ return [
         'am-ET' => 'Amharic',
         'af-ZA' => 'afrykanerski',
         'ar-SA' => 'arabski',
-        'hy-AM' => 'Armenian',
+        'hy-AM' => 'Armeński',
         'bg-BG' => 'bułgarski',
         'zh-CN' => 'chiński uproszczony',
         'zh-TW' => 'chiński tradycyjny',
@@ -70,6 +70,7 @@ return [
     ],
 
     'select_country' => 'Wybierz kraj',
+    'select_currency' => 'Select a currency',
 
     'countries' => [
         'AC' => 'Wyspa Wniebowstąpienia',

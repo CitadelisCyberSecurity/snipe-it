@@ -30,11 +30,12 @@
                 <div class="col-md-6">
                     @php $pct = $items->count() > 0 ? round($reviewed / $items->count() * 100) : 0; @endphp
                     <div class="progress">
-                        <div class="progress-bar progress-bar-{{ $allReviewed ? 'success' : 'info' }}"
+                        <div id="review-progress-bar"
+                             class="progress-bar progress-bar-{{ $allReviewed ? 'success' : 'info' }}"
                              style="width:{{ $pct }}%"></div>
                     </div>
-                    <small>
-                        {{ trans('admin/access-review/general.progress', [
+                    <small id="review-progress-label">
+                        {{ trans('admin/access-review/general.progress_count', [
                             'reviewed' => $reviewed,
                             'total'    => $items->count(),
                         ]) }}
@@ -262,6 +263,25 @@ $(function () {
         }
         $('#mark-complete-btn').prop('disabled', !allDone);
         $('#mark-complete-btn').siblings('small').toggle(!allDone);
+        updateProgress();
+    }
+
+    // Keep the progress bar and "X of Y reviewed" label in step with decisions
+    // made on this page, rather than only reflecting the state at page load.
+    var progressTemplate = @json(trans('admin/access-review/general.progress_count', ['reviewed' => ':reviewed', 'total' => ':total']));
+
+    function updateProgress() {
+        var total    = Object.keys(states).length;
+        var reviewed = Object.keys(states).filter(function (k) { return states[k]; }).length;
+        var pct      = total > 0 ? Math.round(reviewed / total * 100) : 0;
+
+        $('#review-progress-bar')
+            .css('width', pct + '%')
+            .toggleClass('progress-bar-success', total > 0 && reviewed === total)
+            .toggleClass('progress-bar-info', reviewed !== total);
+        $('#review-progress-label').text(
+            progressTemplate.replace(':reviewed', reviewed).replace(':total', total)
+        );
     }
 });
 </script>

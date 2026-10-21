@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Watson\Validating\ValidatingTrait;
 
+/**
+ * @mixin IdeHelperCustomField
+ */
 class CustomField extends Model
 {
     use HasFactory;
@@ -90,7 +93,7 @@ class CustomField extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @var array
+     * @var list<string>
      */
     protected $fillable = [
         'name',
@@ -713,8 +716,6 @@ class CustomField extends Model
      * Get validation rules for custom fields to use with Validator
      *
      * @author [V. Cordes] [<volker@fdatek.de>]
-     *
-     * @param  int  $id
      *
      * @since  [v4.1.10]
      *

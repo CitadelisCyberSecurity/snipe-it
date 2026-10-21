@@ -14,7 +14,6 @@ use App\Models\MaintenanceType;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -32,6 +31,14 @@ class MaintenancesController extends Controller
     public function index(): View
     {
         $this->authorize('view', Asset::class);
+
+        // Normalize array-shaped query probes (?completed[$ptt]=true)
+        // on the request itself so every downstream read in the blade
+        // and included partials sees a string.
+        request()->merge([
+            'completed' => is_string(request()->input('completed')) ? request()->input('completed') : 'false',
+            'upcoming_status' => is_string(request()->input('upcoming_status')) ? request()->input('upcoming_status') : '',
+        ]);
 
         return view('maintenances.index');
     }
@@ -184,7 +191,6 @@ class MaintenancesController extends Controller
      * @author  Vincent Sposato <vincent.sposato@gmail.com>
      *
      * @param  Request  $request
-     * @param  int  $maintenanceId
      *
      * @version v1.0
      *
@@ -307,10 +313,6 @@ class MaintenancesController extends Controller
         $objectType = 'maintenances';
         $storagePath = parent::getMapStoragePath()[$objectType];
 
-        if (! Storage::exists($storagePath)) {
-            Storage::makeDirectory($storagePath, 775);
-        }
-
         $uploadFileRequest = app(UploadFileRequest::class);
 
         foreach ((array) $request->file('file') as $file) {
@@ -380,8 +382,6 @@ class MaintenancesController extends Controller
      *
      * @author  Vincent Sposato <vincent.sposato@gmail.com>
      *
-     * @param  int  $maintenanceId
-     *
      * @version v1.0
      *
      * @since [v1.8]
@@ -402,8 +402,6 @@ class MaintenancesController extends Controller
      *  View an asset maintenance
      *
      * @author  Vincent Sposato <vincent.sposato@gmail.com>
-     *
-     * @param  int  $maintenanceId
      *
      * @version v1.0
      *

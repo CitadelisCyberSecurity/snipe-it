@@ -9,7 +9,7 @@ return [
         'am-ET' => 'Amharic',
         'af-ZA' => 'Afrikaans',
         'ar-SA' => 'Arabic',
-        'hy-AM' => 'Armenian',
+        'hy-AM' => 'アルメニア語',
         'bg-BG' => 'Bulgarian',
         'zh-CN' => '中国語 (簡体字)',
         'zh-TW' => '中国語(繁体字)',
@@ -42,7 +42,7 @@ return [
         'mi-NZ' => 'Maori',
         'mn-MN' => 'Mongolian',
         'nb-NO' => 'ノルウェー語ブークモール',
-        'om-ET' => 'Oromo (Ethiopian)',
+        'om-ET' => 'オロモ語（エチオピア）',
         // 'nn-NO'=> 'Norwegian Nynorsk',
         'fa-IR' => 'Persian',
         'pl-PL' => 'Polish',
@@ -70,6 +70,7 @@ return [
     ],
 
     'select_country' => '国を選択',
+    'select_currency' => 'Select a currency',
 
     'countries' => [
         'AC' => 'Ascension Island',

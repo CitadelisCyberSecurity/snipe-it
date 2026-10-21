@@ -49,6 +49,19 @@ class ManagerReviewTest extends TestCase
         );
     }
 
+    public function test_index_progress_label_shows_reviewed_of_total(): void
+    {
+        $manager  = User::factory()->create();
+        $campaign = AccessReviewCampaign::factory()->active()->create();
+        AccessReviewItem::factory()->reviewedAs(AccessReviewItem::STATUS_KEEP)->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
+        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
+
+        $this->actingAs($manager)
+            ->get(route('access-review.my-reviews.index'))
+            ->assertOk()
+            ->assertSee('1 of 2 reviewed');
+    }
+
     // -----------------------------------------------------------------------
     // show
     // -----------------------------------------------------------------------
@@ -62,6 +75,19 @@ class ManagerReviewTest extends TestCase
         $this->actingAs($manager)
             ->get(route('access-review.my-reviews.show', $campaign))
             ->assertOk();
+    }
+
+    public function test_show_progress_label_shows_reviewed_of_total(): void
+    {
+        $manager  = User::factory()->create();
+        $campaign = AccessReviewCampaign::factory()->active()->create();
+        AccessReviewItem::factory()->reviewedAs(AccessReviewItem::STATUS_KEEP)->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
+        AccessReviewItem::factory()->create(['campaign_id' => $campaign->id, 'manager_id' => $manager->id]);
+
+        $this->actingAs($manager)
+            ->get(route('access-review.my-reviews.show', $campaign))
+            ->assertOk()
+            ->assertSee('1 of 2 reviewed');
     }
 
     public function test_manager_cannot_view_campaign_they_have_no_items_in(): void

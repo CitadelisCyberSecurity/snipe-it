@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Builders\LicenseSeatQueryBuilder;
 use App\Models\Traits\Acceptable;
 use App\Models\Traits\CompanyableChildTrait;
 use App\Models\Traits\Loggable;
@@ -12,9 +13,10 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Facades\DB;
 
+/**
+ * @mixin IdeHelperLicenseSeat
+ */
 class LicenseSeat extends SnipeModel implements ICompanyableChild
 {
     use Acceptable;
@@ -38,7 +40,7 @@ class LicenseSeat extends SnipeModel implements ICompanyableChild
     /**
      * The attributes that are mass assignable.
      *
-     * @var array
+     * @var list<string>
      */
     protected $fillable = [
         'assigned_to',
@@ -206,60 +208,8 @@ class LicenseSeat extends SnipeModel implements ICompanyableChild
         return $this->hasMany(Actionlog::class, 'item_id')->where('item_type', self::class)->orderBy('created_at', 'desc')->withTrashed();
     }
 
-    /**
-     * Query builder scope to order on department
-     *
-     * @param  Builder  $query  Query builder instance
-     * @param  text  $order  Order
-     * @return Builder Modified query builder
-     */
-    public function scopeOrderDepartments($query, $order)
+    public function newEloquentBuilder($query): LicenseSeatQueryBuilder
     {
-        return $query->leftJoin('users as license_seat_users', 'license_seats.assigned_to', '=', 'license_seat_users.id')
-            ->leftJoin('departments as license_user_dept', 'license_user_dept.id', '=', 'license_seat_users.department_id')
-            ->whereNotNull('license_seats.assigned_to')
-            ->orderBy('license_user_dept.name', $order);
-    }
-
-    /**
-     * Query builder scope to order on the assigned user's company.
-     *
-     * Company membership lives in the company_user pivot (users.company_id was
-     * renamed to legacy_company_id), and a user can belong to more than one
-     * company. Joining the pivot directly would emit one row per membership and
-     * inflate this paginated list, so each user collapses to a single sort key
-     * via MIN(name) -- the same approach as User::scopeOrderCompany.
-     *
-     * @param  Builder  $query  Query builder instance
-     * @param  string  $order  Order direction ('asc' or 'desc')
-     * @return Builder Modified query builder
-     */
-    public function scopeOrderCompany($query, $order)
-    {
-        // The MIN(...) aggregate has to go through DB::raw, which bypasses
-        // Laravel's grammar — so the `companies` table reference inside the
-        // raw string won't get DB_PREFIX applied automatically.
-        $prefix = DB::getTablePrefix();
-        $sub = DB::table('company_user')
-            ->join('companies', 'companies.id', '=', 'company_user.company_id')
-            ->select('company_user.user_id', DB::raw('MIN('.$prefix.'companies.name) as min_company_name'))
-            ->groupBy('company_user.user_id');
-
-        return $query
-            ->leftJoinSub($sub, 'companies_sort', 'companies_sort.user_id', '=', 'license_seats.assigned_to')
-            ->whereNotNull('license_seats.assigned_to')
-            ->orderBy('companies_sort.min_company_name', $order);
-    }
-
-    public function scopeByAssigned($query)
-    {
-
-        return $query->where(
-            function ($query) {
-                $query->whereNotNull('assigned_to')
-                    ->orWhereNotNull('asset_id');
-            }
-        );
-
+        return new LicenseSeatQueryBuilder($query);
     }
 }

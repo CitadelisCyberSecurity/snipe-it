@@ -59,6 +59,7 @@ class JamfSchoolAdapter extends SyncAdapter
             'jamf_school_model_identifier' => ['label_key' => 'admin/settings/sync_adapters.extra_model_identifier'],
             'jamf_school_supervised' => ['label_key' => 'admin/settings/sync_adapters.extra_supervised', 'type' => 'boolean'],
             'jamf_school_location_id' => ['label_key' => 'admin/settings/sync_adapters.extra_location_id'],
+            'jamf_school_device_type' => ['label_key' => 'admin/settings/sync_adapters.extra_device_type'],
         ];
     }
 
@@ -118,17 +119,30 @@ class JamfSchoolAdapter extends SyncAdapter
             hardwareSerial: Arr::get($device, 'serialNumber'),
             hardwareModel: Arr::get($device, 'model.name'),
             manufacturer: 'Apple',
-            primaryMac: Arr::get($device, 'wifiMacAddress'),
-            primaryIp: null,
-            os: Arr::get($device, 'os'),
-            osVersion: Arr::get($device, 'osVersion'),
+            // Jamf School nests network info under `networkInformation`
+            // on every device class (confirmed on iPhone, iPad, and
+            // Mac payloads via issue #19856). The top-level
+            // `wifiMacAddress` key the earlier version read is never
+            // present, so the field always landed null regardless of
+            // device class.
+            primaryMac: Arr::get($device, 'networkInformation.WiFiMAC'),
+            primaryIp: Arr::get($device, 'networkInformation.IPAddress'),
+            os: Arr::get($device, 'os.prefix'),
+            osVersion: Arr::get($device, 'os.version'),
             lastSeen: $this->parseTimestamp(Arr::get($device, 'lastCheckin')),
             assetTag: Arr::get($device, 'assetTag'),
+            // Jamf School nests the device's assigned user under
+            // `owner`. Pipeline user-lookup matches on either email or
+            // username per adapter config, so populate both when the
+            // vendor emits them.
+            assignedUserEmail: Arr::get($device, 'owner.email'),
+            assignedUserName: Arr::get($device, 'owner.username'),
             vendorGroupId: Arr::has($device, 'locationId') ? (string) Arr::get($device, 'locationId') : null,
             extra: [
                 'jamf_school_model_identifier' => Arr::get($device, 'model.identifier'),
                 'jamf_school_supervised' => Arr::get($device, 'isSupervised'),
                 'jamf_school_location_id' => Arr::get($device, 'locationId'),
+                'jamf_school_device_type' => Arr::get($device, 'deviceType'),
             ],
         );
     }

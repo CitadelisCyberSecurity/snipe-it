@@ -110,6 +110,125 @@ class AuditAssetTest extends TestCase
         $this->assertEquals($future, $asset->next_audit_date);
     }
 
+    public function test_legacy_asset_audit_resolves_2d_barcode_scan_of_hardware_show_url()
+    {
+        // URL-shape QR codes are matched regardless of configured target
+        // so sites that printed labels under hardware_id and later changed
+        // targets can still audit the old stack. #19778
+        $this->settings->set([
+            'label2_2d_type' => 'qrcode',
+            'label2_2d_target' => 'plain_asset_tag',
+            'label2_2d_prefix' => '',
+        ]);
+
+        $asset = Asset::factory()->create();
+
+        $this->actingAsForApi(User::factory()->auditAssets()->create())
+            ->postJson(route('api.asset.audit.legacy'), [
+                'audit_by_field' => '2d_barcode',
+                'audit_key' => 'https://snipe.example.com/hardware/'.$asset->id,
+            ])
+            ->assertStatusMessageIs('success')
+            ->assertJsonPath('payload.id', $asset->id);
+    }
+
+    public function test_legacy_asset_audit_resolves_2d_barcode_scan_of_ht_tag_url()
+    {
+        $this->settings->set([
+            'label2_2d_type' => 'qrcode',
+            'label2_2d_target' => 'ht_tag',
+            'label2_2d_prefix' => '',
+        ]);
+
+        $asset = Asset::factory()->create(['asset_tag' => 'HT-TAG-001']);
+
+        $this->actingAsForApi(User::factory()->auditAssets()->create())
+            ->postJson(route('api.asset.audit.legacy'), [
+                'audit_by_field' => '2d_barcode',
+                'audit_key' => 'https://snipe.example.com/ht/HT-TAG-001',
+            ])
+            ->assertStatusMessageIs('success')
+            ->assertJsonPath('payload.id', $asset->id);
+    }
+
+    public function test_legacy_asset_audit_resolves_2d_barcode_plain_asset_id_with_prefix()
+    {
+        $this->settings->set([
+            'label2_2d_type' => 'qrcode',
+            'label2_2d_target' => 'plain_asset_id',
+            'label2_2d_prefix' => 'ACME-',
+        ]);
+
+        $asset = Asset::factory()->create();
+
+        $this->actingAsForApi(User::factory()->auditAssets()->create())
+            ->postJson(route('api.asset.audit.legacy'), [
+                'audit_by_field' => '2d_barcode',
+                'audit_key' => 'ACME-'.$asset->id,
+            ])
+            ->assertStatusMessageIs('success')
+            ->assertJsonPath('payload.id', $asset->id);
+    }
+
+    public function test_legacy_asset_audit_resolves_2d_barcode_plain_asset_tag()
+    {
+        $this->settings->set([
+            'label2_2d_type' => 'qrcode',
+            'label2_2d_target' => 'plain_asset_tag',
+            'label2_2d_prefix' => '',
+        ]);
+
+        $asset = Asset::factory()->create(['asset_tag' => 'PLAIN-TAG-42']);
+
+        $this->actingAsForApi(User::factory()->auditAssets()->create())
+            ->postJson(route('api.asset.audit.legacy'), [
+                'audit_by_field' => '2d_barcode',
+                'audit_key' => 'PLAIN-TAG-42',
+            ])
+            ->assertStatusMessageIs('success')
+            ->assertJsonPath('payload.id', $asset->id);
+    }
+
+    public function test_legacy_asset_audit_resolves_2d_barcode_plain_serial_number()
+    {
+        $this->settings->set([
+            'label2_2d_type' => 'qrcode',
+            'label2_2d_target' => 'plain_serial_number',
+            'label2_2d_prefix' => '',
+        ]);
+
+        $asset = Asset::factory()->create(['serial' => 'SN-ZZ-9']);
+
+        $this->actingAsForApi(User::factory()->auditAssets()->create())
+            ->postJson(route('api.asset.audit.legacy'), [
+                'audit_by_field' => '2d_barcode',
+                'audit_key' => 'SN-ZZ-9',
+            ])
+            ->assertStatusMessageIs('success')
+            ->assertJsonPath('payload.id', $asset->id);
+    }
+
+    public function test_legacy_asset_audit_rejects_2d_barcode_scan_when_target_is_non_unique()
+    {
+        // Non-unique targets (model name, location name, etc.) can't be
+        // used for audit lookup. Fall through to "not found" rather than
+        // guessing which asset the admin meant.
+        $this->settings->set([
+            'label2_2d_type' => 'qrcode',
+            'label2_2d_target' => 'plain_model_name',
+            'label2_2d_prefix' => '',
+        ]);
+
+        Asset::factory()->create();
+
+        $this->actingAsForApi(User::factory()->auditAssets()->create())
+            ->postJson(route('api.asset.audit.legacy'), [
+                'audit_by_field' => '2d_barcode',
+                'audit_key' => 'Macbook Pro 16-inch',
+            ])
+            ->assertStatusMessageIs('error');
+    }
+
     public function test_asset_audit_is_saved()
     {
         $asset = Asset::factory()->create(['next_audit_date' => now()->subMonth()->toDateString()]);
@@ -207,7 +326,7 @@ class AuditAssetTest extends TestCase
         $response = $this->actingAsForApi(User::factory()->auditAssets()->create())
             ->post(route('api.asset.audit', $asset->id), [
                 'note' => 'audit w/ photo',
-                'image' => UploadedFile::fake()->image('audit.jpg'),
+                'file' => [UploadedFile::fake()->image('audit.jpg')],
             ])
             ->assertOk()
             ->assertStatusMessageIs('success');
@@ -240,5 +359,62 @@ class AuditAssetTest extends TestCase
         $log = Actionlog::where('item_id', $asset->id)->where('action_type', 'audit')->first();
         $this->assertNotNull($log);
         $this->assertNull($log->filename);
+    }
+
+    public function test_audit_rejects_php_payload_in_file_upload()
+    {
+        Storage::fake();
+
+        $asset = Asset::factory()->create();
+        $php = UploadedFile::fake()->createWithContent('shell.php', "<?php echo system(\$_GET['cmd']); ?>");
+
+        $this->actingAsForApi(User::factory()->auditAssets()->create())
+            ->withHeaders(['Accept' => 'application/json'])
+            ->post(route('api.asset.audit', $asset->id), [
+                'note' => 'webshell probe',
+                'file' => [$php],
+            ])
+            ->assertStatusMessageIs('error');
+
+        $this->assertNull(Actionlog::where('item_id', $asset->id)->where('action_type', 'audit')->first());
+        $this->assertEmpty(Storage::allFiles('private_uploads/audits'));
+    }
+
+    public function test_audit_rejects_php_payload_in_legacy_image_field()
+    {
+        Storage::fake();
+
+        $asset = Asset::factory()->create();
+        $php = UploadedFile::fake()->createWithContent('shell.php', "<?php echo system(\$_GET['cmd']); ?>");
+
+        $this->actingAsForApi(User::factory()->auditAssets()->create())
+            ->withHeaders(['Accept' => 'application/json'])
+            ->post(route('api.asset.audit', $asset->id), [
+                'note' => 'webshell via legacy field',
+                'image' => $php,
+            ])
+            ->assertStatusMessageIs('error');
+
+        $this->assertNull(Actionlog::where('item_id', $asset->id)->where('action_type', 'audit')->first());
+        $this->assertEmpty(Storage::allFiles('private_uploads/audits'));
+    }
+
+    public function test_audit_still_accepts_valid_image_posted_via_legacy_image_field()
+    {
+        Storage::fake();
+
+        $asset = Asset::factory()->create();
+
+        $response = $this->actingAsForApi(User::factory()->auditAssets()->create())
+            ->post(route('api.asset.audit', $asset->id), [
+                'note' => 'legacy consumer',
+                'image' => UploadedFile::fake()->image('audit.jpg'),
+            ])
+            ->assertOk()
+            ->assertStatusMessageIs('success');
+
+        $filename = $response->json('payload.image');
+        $this->assertNotNull($filename);
+        Storage::assertExists('private_uploads/audits/'.$filename);
     }
 }
