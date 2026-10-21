@@ -1630,7 +1630,13 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
             $username = $users_name;
         } else {
 
-            [$first_name, $last_name] = explode(' ', $users_name, 2);
+            // Respect name_display_format when splitting a joined full
+            // name into first and last.
+            if (Setting::getSettings()?->name_display_format === 'last_first') {
+                [$last_name, $first_name] = explode(' ', $users_name, 2);
+            } else {
+                [$first_name, $last_name] = explode(' ', $users_name, 2);
+            }
 
             // Assume filastname by default
             $username = str_slug(substr($first_name, 0, 1).$last_name);
@@ -1783,6 +1789,10 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
      * on the Searchable trait to also search user name with spaces in
      * it via orWhereMultipleColumns.
      *
+     * Both column orders are tried so a user named "John Doe" matches
+     * both "John Doe" and "Doe John" regardless of the install's
+     * name_display_format. Issue #19626.
+     *
      * @param  array<int, string>  $terms  The search terms
      */
     public function advancedTextSearch(Builder $query, array $terms)
@@ -1792,6 +1802,11 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
                 [
                     'users.first_name',
                     'users.last_name',
+                ], $term
+            )->orWhereMultipleColumns(
+                [
+                    'users.last_name',
+                    'users.first_name',
                 ], $term
             );
         }
