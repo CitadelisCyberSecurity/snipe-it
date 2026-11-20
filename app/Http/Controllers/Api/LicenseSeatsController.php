@@ -9,7 +9,6 @@ use App\Http\Transformers\LicenseSeatsTransformer;
 use App\Models\Asset;
 use App\Models\License;
 use App\Models\LicenseSeat;
-use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -89,6 +88,11 @@ class LicenseSeatsController extends Controller
     {
 
         $this->authorize('view', License::class);
+
+        // Load the owning License through CompanyableScope first
+        if (!License::find($licenseId)) {
+            return response()->json(Helper::formatStandardApiResponse('error', null, 'Seat ID or license not found or the seat does not belong to this license'));
+        }
 
         if ($licenseSeat = LicenseSeat::where('license_id', $licenseId)->find($seatId)) {
             return (new LicenseSeatsTransformer)->transformLicenseSeat($licenseSeat);
@@ -173,7 +177,7 @@ class LicenseSeatsController extends Controller
                         return;
                     }
 
-                    if ((Setting::getSettings()->full_multiple_companies_support == '1') && (! $targetUser->companies()->where('companies.id', $license->company_id)->exists())) {
+                    if (! $license->canCheckoutTo($targetUser)) {
                         $errorResponse = response()->json(Helper::formatStandardApiResponse('error', null, trans('general.error_user_company')));
 
                         return;
@@ -191,7 +195,7 @@ class LicenseSeatsController extends Controller
                         return;
                     }
 
-                    if ((Setting::getSettings()->full_multiple_companies_support == '1') && ($license->company_id !== $targetAsset->company_id)) {
+                    if (! $license->canCheckoutTo($targetAsset)) {
                         $errorResponse = response()->json(Helper::formatStandardApiResponse('error', null, trans('general.error_user_company')));
 
                         return;

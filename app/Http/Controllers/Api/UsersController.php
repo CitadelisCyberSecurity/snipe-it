@@ -161,21 +161,6 @@ class UsersController extends Controller
 
             ];
 
-        $filter = [];
-
-        if ($request->filled('filter')) {
-            $filter = json_decode($request->input('filter'), true);
-
-            if (is_null($filter)) {
-                $filter = [];
-            }
-
-            $filter = array_filter($filter, function ($key) use ($allowed_columns) {
-                return in_array($key, $allowed_columns);
-            }, ARRAY_FILTER_USE_KEY);
-
-        }
-
         // This invokes the Searchable model trait scopeTextSearch and will handle input by search or by advanced search filter
         if ($request->filled('filter') || $request->filled('search')) {
             $users->TextSearch($request->input('filter') ? $request->input('filter') : $request->input('search'));
@@ -1019,7 +1004,7 @@ class UsersController extends Controller
         if ($user = User::where('id', $id)->withTrashed()->first()) {
             $this->authorize('view', $user);
 
-            $query = $user->licenses();
+            $query = $user->licenses()->with('category');
 
             if ($search = $request->input('search')) {
                 $canViewKeys = Gate::allows('viewKeys', License::class);
@@ -1116,7 +1101,7 @@ class UsersController extends Controller
 
             if ($user->restore()) {
                 // The `restore` action_log entry is written by
-                // UserObserver::restoring, no manual write here.
+                // Loggable during restore, no manual write here.
                 return response()->json(Helper::formatStandardApiResponse('success', null, trans('admin/users/message.success.restored')), 200);
             }
 
