@@ -51,9 +51,9 @@ class Department extends SnipeModel
 
     protected $rules = [
         'name' => 'required|string|max:255|is_unique_across_company_and_location:departments,name',
-        'location_id' => 'numeric|nullable|exists:locations,id',
+        'location_id' => 'numeric|nullable|exists:locations,id|fmcs_location',
         'company_id' => 'numeric|nullable|exists:companies,id|fmcs_company',
-        'manager_id' => 'numeric|nullable|exists:users,id',
+        'manager_id' => 'numeric|nullable|exists:users,id|fmcs_manager',
         'phone' => 'string|max:255|nullable',
         'fax' => 'string|max:255|nullable',
         'notes' => 'string|max:255|nullable',
@@ -101,6 +101,55 @@ class Department extends SnipeModel
         'location' => ['name'],
         'manager' => ['first_name', 'last_name', 'display_name'],
     ];
+
+    /**
+     * Advanced-search filterable fields.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function filterableFields(): array
+    {
+        return [
+            [
+                'field' => 'company',
+                'type' => 'fk',
+                'column' => 'company_id',
+                'endpoint' => 'companies',
+                'label' => trans('general.company'),
+            ],
+            [
+                'field' => 'location',
+                'type' => 'fk',
+                'column' => 'location_id',
+                'endpoint' => 'locations',
+                'label' => trans('general.location'),
+            ],
+            [
+                'field' => 'manager',
+                'type' => 'fk',
+                'column' => 'manager_id',
+                'endpoint' => 'users',
+                'label' => trans('admin/departments/table.manager'),
+            ],
+            [
+                'field' => 'created_by',
+                'type' => 'fk',
+                'column' => 'created_by',
+                'endpoint' => 'users',
+                'label' => trans('general.created_by'),
+            ],
+            [
+                'field' => 'created_at',
+                'type' => 'date-range',
+                'label' => trans('general.created_at'),
+            ],
+            [
+                'field' => 'updated_at',
+                'type' => 'date-range',
+                'label' => trans('general.updated_at'),
+            ],
+        ];
+    }
 
     /**
      * On hard-delete, wipe the image file and Files-tab attachments.

@@ -3,6 +3,7 @@
 namespace App\Helpers;
 
 use App\Models\Accessory;
+use App\Models\Asset;
 use App\Models\AssetModel;
 use App\Models\Component;
 use App\Models\Consumable;
@@ -15,11 +16,9 @@ use App\Models\Setting;
 use App\Models\Statuslabel;
 use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
@@ -711,16 +710,23 @@ class Helper
      *
      * @return array
      */
-    public static function statusTypeList()
+    public static function statusTypeList(?string $scope = null)
     {
-        $statuslabel_types =
-              ['' => trans('admin/hardware/form.select_statustype')]
-            + ['deployable' => trans('admin/hardware/general.deployable')]
-            + ['pending' => trans('admin/hardware/general.pending')]
-            + ['undeployable' => trans('admin/hardware/general.undeployable')]
-            + ['archived' => trans('admin/hardware/general.archived')];
+        // Build the list from the StatusLabelType enum so this and the
+        // enum stay in sync. Order mirrors the historical UI ordering
+        // rather than enum declaration order.
+        $types = [
+            \App\Enums\StatusLabelType::Deployable->value => \App\Enums\StatusLabelType::Deployable->label(),
+            \App\Enums\StatusLabelType::Pending->value => \App\Enums\StatusLabelType::Pending->label(),
+            \App\Enums\StatusLabelType::Undeployable->value => \App\Enums\StatusLabelType::Undeployable->label(),
+            \App\Enums\StatusLabelType::Archived->value => \App\Enums\StatusLabelType::Archived->label(),
+        ];
 
-        return $statuslabel_types;
+        if ($scope === 'non_deployable') {
+            unset($types[\App\Enums\StatusLabelType::Deployable->value]);
+        }
+
+        return ['' => trans('admin/hardware/form.select_statustype')] + $types;
     }
 
     /**
@@ -1082,8 +1088,6 @@ class Helper
     {
         $finfo = @finfo_open(FILEINFO_MIME_TYPE); // return mime type ala mimetype extension
         $filetype = @finfo_file($finfo, $file);
-        finfo_close($finfo);
-
         if (($filetype == 'image/jpeg') || ($filetype == 'image/jpg') || ($filetype == 'image/png') || ($filetype == 'image/bmp') || ($filetype == 'image/gif') || ($filetype == 'image/avif') || ($filetype == 'image/webp')) {
             return $filetype;
         }
@@ -1105,8 +1109,6 @@ class Helper
     {
         $finfo = @finfo_open(FILEINFO_MIME_TYPE); // return mime type ala mimetype extension
         $filetype = @finfo_file($finfo, $file);
-        finfo_close($finfo);
-
         if (($filetype == 'video/mp4') || ($filetype == 'video/quicktime') || ($filetype == 'video/mpeg') || ($filetype == 'video/ogg') || ($filetype == 'video/webm') || ($filetype == 'video/x-msvide')) {
             return $filetype;
         }
@@ -1128,8 +1130,6 @@ class Helper
     {
         $finfo = @finfo_open(FILEINFO_MIME_TYPE); // return mime type ala mimetype extension
         $filetype = @finfo_file($finfo, $file);
-        finfo_close($finfo);
-
         if (($filetype == 'audio/mpeg') || ($filetype == 'audio/ogg')) {
             return $filetype;
         }
@@ -1325,33 +1325,6 @@ class Helper
     }
 
     /**
-     * Gracefully handle decrypting encrypted fields (custom fields, etc).
-     *
-     * @todo allow this to handle more than just strings (arrays, etc)
-     *
-     * @author A. Gianotto
-     *
-     * @since 3.6
-     *
-     * @param  string  $string
-     * @return string
-     */
-    public static function gracefulDecrypt(CustomField $field, $string)
-    {
-        if ($field->isFieldDecryptable($string)) {
-            try {
-                Crypt::decrypt($string);
-
-                return Crypt::decrypt($string);
-            } catch (DecryptException $e) {
-                return 'Error Decrypting: '.$e->getMessage();
-            }
-        }
-
-        return $string;
-    }
-
-    /**
      * Resolves the value to render in a custom-field form input for the current
      * request. Encapsulates the "encrypted + no view.encrypted_custom_fields
      * gate" branch so every element type in custom_fields_form.blade.php
@@ -1360,18 +1333,18 @@ class Helper
      *
      * Returns the shared masked-value string when the field is encrypted and
      * the caller cannot view encrypted custom fields. Otherwise returns the
-     * decrypted stored value for the given $item, or the model-scoped default
+     * decrypted stored value for the given $item, or the supplied default
      * value when no $item is present (create form path).
      */
-    public static function customFieldFormValue(CustomField $field, $item, $model)
+    public static function customFieldFormValue(CustomField $field, ?\Illuminate\Database\Eloquent\Model $item, mixed $defaultValue = null): mixed
     {
         if ($field->field_encrypted && ! Gate::allows('assets.view.encrypted_custom_fields')) {
             return strtoupper(trans('admin/custom_fields/general.encrypted'));
         }
 
         $value = isset($item)
-            ? self::gracefulDecrypt($field, $item->{$field->db_column_name()})
-            : $field->defaultValue($model->id);
+            ? $item->{$field->db_column_name()}
+            : $defaultValue;
 
         // DATE / DATETIME custom fields can hold non-YYYY-MM-DD strings
         // in the DB (e.g. `3/28/2025` from a historic CSV import that
@@ -1911,6 +1884,50 @@ class Helper
         $appHost = parse_url(config('app.url'), PHP_URL_HOST);
 
         if ($host !== null && strcasecmp($host, (string) $appHost) !== 0) {
+            return null;
+        }
+
+        return $url;
+    }
+
+    /**
+     * Narrow trust gate for the IdP-initiated SAML SLO response URL.
+     *
+     *
+     * $expectedUrl is the IdP SLO response URL from SP settings
+     * (Auth::getSLOResponseUrl). Null / empty on either input returns
+     * null, same as sameOriginUrl.
+     */
+    public static function sameHostAsConfiguredIdpUrl(?string $url, ?string $expectedUrl): ?string
+    {
+        if ($url === null || $url === '' || $expectedUrl === null || $expectedUrl === '') {
+            return null;
+        }
+
+        $url = str_replace(["\r", "\n"], '', $url);
+
+        $urlParts = parse_url($url);
+        $expectedParts = parse_url($expectedUrl);
+        if ($urlParts === false || $expectedParts === false) {
+            return null;
+        }
+
+        $scheme = isset($urlParts['scheme']) ? strtolower($urlParts['scheme']) : '';
+        if (! in_array($scheme, ['http', 'https'], true)) {
+            return null;
+        }
+
+        if (isset($urlParts['user']) || isset($urlParts['pass'])) {
+            return null;
+        }
+
+        $actualHost = $urlParts['host'] ?? null;
+        $expectedHost = $expectedParts['host'] ?? null;
+        if ($actualHost === null || $expectedHost === null) {
+            return null;
+        }
+
+        if (strcasecmp($actualHost, $expectedHost) !== 0) {
             return null;
         }
 

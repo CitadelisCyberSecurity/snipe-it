@@ -27,12 +27,13 @@ Route::group(['prefix' => 'v1', 'middleware' => ['api', 'api-throttle:api']], fu
     });
 
     Route::withoutMiddleware(['api'])->get('/client', function () {
+        // Mobile is a PKCE/public client, so secret MUST be null.
         $client = Client::firstOrCreate(
             ['redirect' => 'com.grokability.snipeitmobile://home'],
             [
                 'name' => 'Snipe-IT Mobile App',
                 'user_id' => null,
-                'secret' => '',
+                'secret' => null,
                 'personal_access_client' => false,
                 'password_client' => false,
                 'revoked' => false,
@@ -863,6 +864,13 @@ Route::group(['prefix' => 'v1', 'middleware' => ['api', 'api-throttle:api']], fu
     /**
      * Maintenance types API routes
      */
+    Route::get('maintenance-types/selectlist',
+        [
+            Api\MaintenanceTypesController::class,
+            'selectlist',
+        ]
+    )->name('api.maintenance-types.selectlist');
+
     Route::resource('maintenance-types',
         Api\MaintenanceTypesController::class,
         ['names' => [
@@ -1216,6 +1224,27 @@ Route::group(['prefix' => 'v1', 'middleware' => ['api', 'api-throttle:api']], fu
             'parameters' => ['setting' => 'setting_id'],
         ]
     ); // end settings API
+
+    /**
+     * Saved searches API routes. Private-only CRUD for v1. Each
+     * authenticated user manages their own named filter-presets per
+     * listing table.
+     */
+    Route::get('saved-searches',
+        [Api\SavedSearchesController::class, 'index']
+    )->name('api.saved-searches.index');
+
+    Route::post('saved-searches',
+        [Api\SavedSearchesController::class, 'store']
+    )->name('api.saved-searches.store');
+
+    Route::put('saved-searches/{savedSearch}',
+        [Api\SavedSearchesController::class, 'update']
+    )->name('api.saved-searches.update');
+
+    Route::delete('saved-searches/{savedSearch}',
+        [Api\SavedSearchesController::class, 'destroy']
+    )->name('api.saved-searches.destroy');
 
     /**
      * Status labels API routes

@@ -344,15 +344,22 @@ class BreadcrumbsServiceProvider extends ServiceProvider
          * Custom fieldsets Breadcrumbs
          */
         Breadcrumbs::for('fieldsets.create', fn (Trail $trail) => $trail->parent('fields.index', route('fields.index'))
+            ->push(trans('admin/custom_fields/general.fieldsets'), route('fields.index').'#fieldsets')
             ->push(trans('admin/custom_fields/general.create_fieldset'), route('fieldsets.create'))
         );
 
         Breadcrumbs::for('fieldsets.show', fn (Trail $trail, CustomFieldset $fieldset) => $trail->parent('fields.index', route('fields.index'))
-            ->push($fieldset->name, route('fields.index'))
+            ->push(trans('admin/custom_fields/general.fieldsets'), route('fields.index').'#fieldsets')
+            ->push($fieldset->name, route('fieldsets.show', $fieldset))
         );
 
-        Breadcrumbs::for('fieldsets.edit', fn (Trail $trail, CustomFieldset $fieldset) => $trail->parent('fields.index', route('fields.index'))
-            ->push($fieldset->display_name, route('fieldsets.show', $fieldset))
+        // Shim route is named `fieldsets.edit.show`, not `fieldsets.edit`
+        // (see routes/web/fields.php - the shim exists for bootstrap-table
+        // URL compatibility). Breadcrumbs::for keys must match the route
+        // name exactly.
+        Breadcrumbs::for('fieldsets.edit.show', fn (Trail $trail, CustomFieldset $fieldset) => $trail->parent('fields.index', route('fields.index'))
+            ->push(trans('admin/custom_fields/general.fieldsets'), route('fields.index').'#fieldsets')
+            ->push($fieldset->name, route('fieldsets.show', $fieldset))
             ->push(trans('general.update'))
         );
 
@@ -656,21 +663,17 @@ class BreadcrumbsServiceProvider extends ServiceProvider
     }
 
     /**
-     * Append parent -> child location breadcrumbs recursively for a location.
+     * Append root -> location breadcrumbs for a location, built from
+     * Location::ancestors() so a legacy parent_id cycle stops instead of
+     * looping forever.
      */
     private function pushLocationHierarchy(Trail $trail, Location $location): void
     {
-        $ancestorChain = [];
-        $cursor = $location;
-
-        while ($cursor !== null) {
-            array_unshift($ancestorChain, $cursor);
-            $cursor = $cursor->parent;
+        foreach ($location->ancestors()->reverse() as $ancestor) {
+            $trail->push($ancestor->name, route('locations.show', $ancestor));
         }
 
-        foreach ($ancestorChain as $node) {
-            $trail->push($node->name, route('locations.show', $node));
-        }
+        $trail->push($location->name, route('locations.show', $location));
     }
 
     /**
