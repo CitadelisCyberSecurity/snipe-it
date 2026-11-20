@@ -358,7 +358,7 @@ class UsersController extends Controller
             }
 
             // Group sync lives in the post-save block below so
-            // UserObserver::updating() has already written its
+            // Loggable::log_lifecycle_events() has already written its
             // Actionlog row for this edit session, and
             // syncGroupsWithLogging() can merge the group diff into
             // that same row instead of producing two log entries.
@@ -445,7 +445,7 @@ class UsersController extends Controller
 
         if ($user->restore()) {
             // The `restore` action_log entry is written by
-            // UserObserver::restoring - no manual write here.
+            // Loggable during restore - no manual write here.
 
             // Redirect them to the deleted page if there are more, otherwise the section index
             $deleted_users = User::onlyTrashed()->count();
@@ -618,7 +618,7 @@ class UsersController extends Controller
                 trans('admin/licenses/table.deleted_at'),
             ];
 
-            fputcsv($handle, $headers);
+            fputcsv($handle, $headers, escape: '\\', eol: "\r\n");
 
             $users = User::with(
                 'assets',
@@ -700,11 +700,11 @@ class UsersController extends Controller
 
                         // CSV_ESCAPE_FORMULAS is set to false in the .env
                         if (config('app.escape_formulas') === false) {
-                            fputcsv($handle, $values);
+                            fputcsv($handle, $values, escape: '\\', eol: "\r\n");
 
                             // CSV_ESCAPE_FORMULAS is set to true or is not set in the .env
                         } else {
-                            fputcsv($handle, $formatter->escapeRecord($values));
+                            fputcsv($handle, $formatter->escapeRecord($values), escape: '\\', eol: "\r\n");
                         }
                     }
                 });

@@ -836,6 +836,9 @@ $(function () {
                         excludeIds: link.data('exclude-ids'),
                         assignedTo: link.data('assigned-to'),
                         onlyTopLevel: link.data('only-top-level'),
+                        // Opt-in "no value"/id="null" row - mostly for advanced
+                        // search filters for now
+                        includeNull: link.data('include-null'),
                     };
                 },
                 cache: true,
@@ -1067,8 +1070,8 @@ $(function () {
             }
             var $actions = $(
                 '<div class="js-select2-checkboxes-actions">' +
-                '<button type="button" class="btn btn-xs btn-default js-select2-checkboxes-selectall"></button> ' +
-                '<button type="button" class="btn btn-xs btn-default js-select2-checkboxes-clear"></button>' +
+                '<button type="button" class="btn btn-xs btn-theme js-select2-checkboxes-selectall"></button> ' +
+                '<button type="button" class="btn btn-xs btn-theme js-select2-checkboxes-clear"></button>' +
                 '</div>',
             );
             $actions.find('.js-select2-checkboxes-selectall').text(link.data('select-all-label') || 'Select all');
@@ -1171,8 +1174,12 @@ $(function () {
 		var value = searchElement.val();
 		return value;
 	}
-	
-	$(".select2-hidden-accessible").on('select2:selecting', function (e) {
+
+    // Force-select-on-close is for single-value pickers where the user
+    // types exactly what they want and clicks out to commit it. Checkbox
+    // multi-select pickers (js-select2-checkboxes) have their own
+    // explicit check behaviour.
+    $(".select2-hidden-accessible").not('.js-select2-checkboxes').on('select2:selecting', function (e) {
 		var data = e.params.args.data;
 		var isMouseUp = false;
 		var element = $(this);
@@ -1193,8 +1200,8 @@ $(function () {
 			}
 		}
 	});
-	
-	$(".select2-hidden-accessible").on('select2:closing', function (e) {
+
+    $("select.js-data-ajax, select[data-endpoint]").not('.js-select2-checkboxes').on('select2:closing', function (e) {
 		var element = $(this);
 		var value = getSelect2Value(element);
 		var noForceAjax = false;
@@ -1204,9 +1211,12 @@ $(function () {
 		
 		if(value && !noForceAjax && !isMouseUp) {
 			var endpoint = element.data("endpoint");
+			if (!endpoint) { return; }
             var statusType = element.data("asset-status-type");
-			$.ajax({
-                url: baseUrl + 'api/v1/' + endpoint + '/selectlist?search=' + value + '&page=1' + (statusType ? '&statusType=' + statusType : ''),
+			var previous = element.data('selectlist-request');
+			if (previous && previous.readyState !== 4) { previous.abort(); }
+			var request = $.ajax({
+                url: baseUrl + 'api/v1/' + endpoint + '/selectlist?search=' + encodeURIComponent(value) + '&page=1' + (statusType ? '&statusType=' + statusType : ''),
 				dataType: 'json',
 				headers: {
 					"X-Requested-With": 'XMLHttpRequest',
@@ -1246,6 +1256,8 @@ $(function () {
 					});
 				}
 			});
+
+			element.data('selectlist-request', request);
 		}
 	});
 
@@ -1901,6 +1913,13 @@ $(function () {
             var breadcrumbAppendedLeaf = null;
 
             var setBreadcrumbTabLeaf = function (label) {
+                // Treat a label that matches the base leaf as "no
+                // label" to stop the trail from reading
+                // "Custom Fields > Custom Fields" when a page's
+                // primary tab shares the title of the page itself.
+                if (label && label.trim() === breadcrumbBaseText) {
+                    label = null;
+                }
                 if (!label) {
                     if (breadcrumbAppendedLeaf) {
                         breadcrumbAppendedLeaf.remove();
@@ -3081,3 +3100,88 @@ $(function () {
     $pair.on('change', syncMutexState);
     syncMutexState();
 });
+
+// -----------------------------------------------------------------------------
+// Double-submit guard. Disables submit buttons on form submission so an impatient
+// click doesn't fire the same backend action twice.
+// -----------------------------------------------------------------------------
+(function () {
+    var DEFAULT_SAFETY_TIMEOUT_MS = 30000;
+
+    function disableSubmit($btn) {
+        if ($btn.prop('disabled')) {
+            return;
+        }
+        if (typeof $btn.data('allow-double-submit') !== 'undefined') {
+            return;
+        }
+
+        // fa-fw keeps the spinner at the same width as whatever icon the
+        // button rendered before the swap, so icon-only buttons don't jump
+        // size when the magnifying glass (or other icon) is replaced.
+        var spinner = '<i class="fas fa-spinner fa-spin fa-fw" aria-hidden="true"></i>';
+        // Resolution order for the "Processing..." label:
+        //   1. The button's own data-processing-label (lets a specific button
+        //      say something more precise, e.g. "Running backup...").
+        //   2. The layout-provided translated default on window.snipeit.i18n,
+        //      populated by layouts/default.blade.php. Covers every raw
+        //      <button type="submit"> in the app without needing data attrs.
+        //   3. If neither is set, skip the label swap and just disable so we
+        //      never fall back to an English string from this file.
+        var processingLabel = $btn.data('processing-label')
+            || (window.snipeit && window.snipeit.i18n && window.snipeit.i18n.processing);
+
+        $btn.data('original-html', $btn.html());
+        $btn.prop('disabled', true);
+
+        if ($btn.data('processing-icon-only')) {
+            // Icon-only buttons (topbar search, etc) have no room for a
+            // text swap. Replace just the first <i> with the spinner and
+            // leave the rest of the button HTML (sr-only labels, etc)
+            // untouched. restoreSubmit resets via original-html.
+            var $icon = $btn.find('i').first();
+            if ($icon.length) {
+                $icon.attr('class', 'fas fa-spinner fa-spin fa-fw');
+            }
+        } else if (processingLabel) {
+            $btn.html(spinner + ' ' + processingLabel);
+        }
+
+        var timeoutMs = parseInt($btn.data('safety-timeout-ms'), 10);
+        if (!timeoutMs || timeoutMs < 0) {
+            timeoutMs = DEFAULT_SAFETY_TIMEOUT_MS;
+        }
+
+        var timer = setTimeout(function () {
+            restoreSubmit($btn);
+        }, timeoutMs);
+
+        $btn.data('restore-timer', timer);
+    }
+
+    function restoreSubmit($btn) {
+        var original = $btn.data('original-html');
+        var timer = $btn.data('restore-timer');
+        if (timer) {
+            clearTimeout(timer);
+            $btn.removeData('restore-timer');
+        }
+        $btn.prop('disabled', false);
+        if (typeof original !== 'undefined') {
+            $btn.html(original);
+            $btn.removeData('original-html');
+        }
+    }
+
+    $(document).on('submit', 'form', function () {
+        $(this).find('button[type="submit"]').each(function () {
+            disableSubmit($(this));
+        });
+    });
+
+    window.enableSubmitsIn = function (selector) {
+        $(selector).find('button[type="submit"]').each(function () {
+            restoreSubmit($(this));
+        });
+    };
+})();

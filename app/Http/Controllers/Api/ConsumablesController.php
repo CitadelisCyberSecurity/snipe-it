@@ -46,8 +46,15 @@ class ConsumablesController extends Controller
         // consumables_users_count feeds the stockroom-remaining math (qty minus total ever
         // distributed, unchanged by mark-consumed). outstanding_assignments_count feeds
         // isDeletable() and the archive guard so neither fires a per-row count query.
+        //
+        // Both counts walk the consumableAssignments hasMany directly (which wraps
+        // consumables_users) rather than the unconstrainedUsers belongsToMany, so the
+        // subquery is a single-table COUNT against consumables_users.consumable_id
+        // instead of INNER JOIN users. The users JOIN was dead weight here anyway
+        // (we only want a count of pivot rows), and dropping it is a measurable win
+        // on hundreds-of-thousands-of-consumables fleets.
         $consumables = Consumable::with('company', 'location', 'category', 'defaultSupplier', 'manufacturer', 'orderItems.order.supplier')
-            ->withCount('unconstrainedUsers as consumables_users_count')
+            ->withCount('consumableAssignments as consumables_users_count')
             ->withCount('outstandingAssignments as outstanding_assignments_count');
 
         // This array is what determines which fields should be allowed to be sorted on ON the table itself.
@@ -615,13 +622,19 @@ class ConsumablesController extends Controller
      */
     public function requestable(Request $request): array
     {
+        $this->authorize('viewRequestable', Consumable::class);
+
         $query = Consumable::with('category', 'location', 'company', 'manufacturer', 'requests')
-            ->withCount('unconstrainedUsers as consumables_users_count')
+            ->withCount('consumableAssignments as consumables_users_count')
             ->withCount('outstandingAssignments as outstanding_assignments_count')
             ->Requestable();
 
         if ($request->filled('search')) {
-            $query->TextSearch($request->input('search'));
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('consumables.name', 'LIKE', '%'.$search.'%')
+                    ->orWhere('consumables.model_number', 'LIKE', '%'.$search.'%');
+            });
         }
 
         $total = $query->count();
@@ -722,6 +735,16 @@ class ConsumablesController extends Controller
 
         if (! $request->filled('ids')) {
             return response()->json(Helper::formatStandardApiResponse('error', null, trans('admin/consumables/message.bulk.no_consumables_selected')), 422);
+        }
+
+        // Only a superuser may null the company_id in bulk. For non-
+        // superusers, Company::getIdForCurrentUser() in the single-item
+        // update path coerces a null submission back to the actor's own
+        // company and never allows the field to be cleared. The bulk
+        // null-out loop below unconditionally wipes company_id AFTER the
+        // FMCS validation runs, so this gate has to come up front.
+        if ($request->boolean('null_company_id') && ! auth()->user()->isSuperUser()) {
+            return response()->json(Helper::formatStandardApiResponse('error', null, trans('general.insufficient_permissions')), 422);
         }
 
         $consumables = Consumable::whereIn('id', $request->input('ids'))->get();
